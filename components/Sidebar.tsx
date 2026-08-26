@@ -127,7 +127,7 @@ export default function Sidebar({
           <AtlasMark className="sidebar__mark-logo" />
           Atlas
         </Link>
-        {hostedDemo && <span className="sidebar__demo" title="Public demo. Archive changes and model calls are disabled.">read only</span>}
+        {hostedDemo && <span className="sidebar__demo" title="Hosted archive. Archive changes and model calls are disabled.">read only</span>}
       </div>
 
       <div className="sidebar__scroll">

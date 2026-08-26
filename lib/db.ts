@@ -2,16 +2,20 @@ import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
-import { IS_HOSTED_DEMO } from "./runtime";
+import { IS_HOSTED_DEMO, IS_PUBLIC_ARCHIVE } from "./runtime";
 
-export const ROOT = process.env.ATLAS_DATA_DIR
-  ? path.resolve(process.env.ATLAS_DATA_DIR)
-  : IS_HOSTED_DEMO
-    ? path.join(os.tmpdir(), "image-archivist")
-    : process.cwd();
+export const ROOT = IS_PUBLIC_ARCHIVE
+  ? process.cwd()
+  : process.env.ATLAS_DATA_DIR
+    ? path.resolve(process.env.ATLAS_DATA_DIR)
+    : IS_HOSTED_DEMO
+      ? path.join(os.tmpdir(), "image-archivist")
+      : process.cwd();
 export const LIBRARY_DIR = path.join(ROOT, "library");
 export const THUMB_DIR = path.join(ROOT, ".cache", "thumbs");
-export const DB_PATH = path.join(ROOT, "atlas.db");
+export const DB_PATH = IS_PUBLIC_ARCHIVE
+  ? path.join(process.cwd(), "data", "atlas-public.db")
+  : path.join(ROOT, "atlas.db");
 
 let _db: DatabaseSync | null = null;
 
@@ -27,6 +31,18 @@ export function db(): DatabaseSync {
   const g = globalThis as unknown as { __atlasDb?: DatabaseSync };
   if (g.__atlasDb) return g.__atlasDb;
   if (_db) return _db;
+
+  if (IS_PUBLIC_ARCHIVE) {
+    if (!fs.existsSync(DB_PATH)) {
+      throw new Error("The bundled public archive database is missing");
+    }
+    const conn = new DatabaseSync(DB_PATH, { readOnly: true });
+    conn.exec("PRAGMA query_only = ON");
+    _db = conn;
+    g.__atlasDb = conn;
+    return conn;
+  }
+
   for (const d of [ROOT, LIBRARY_DIR, THUMB_DIR]) fs.mkdirSync(d, { recursive: true });
   const conn = new DatabaseSync(DB_PATH);
   conn.exec("PRAGMA journal_mode = WAL");

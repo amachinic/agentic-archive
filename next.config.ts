@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     "/*": ["./library/**/*", "./.cache/**/*", "./atlas.db*", "./.env*"],
   },
+  // The sanitized public database is opened dynamically by path at runtime,
+  // so every server route that may query it needs the file in its trace.
+  outputFileTracingIncludes: {
+    "/*": ["./data/atlas-public.db"],
+  },
   experimental: {
     // Full-resolution originals stream through a route handler; allow big bodies.
     proxyTimeout: 120_000,

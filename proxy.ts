@@ -11,8 +11,10 @@ const SAFE_DEMO_GET = [
 ];
 
 export function proxy(request: NextRequest) {
-  const hostedDemo = process.env.ATLAS_DEMO === "1" || process.env.VERCEL === "1";
-  if (!hostedDemo) return NextResponse.next();
+  const publicArchive = process.env.ATLAS_ARCHIVE_MODE === "public";
+  const hostedDemo = !publicArchive
+    && (process.env.ATLAS_DEMO === "1" || process.env.VERCEL === "1");
+  if (!publicArchive && !hostedDemo) return NextResponse.next();
 
   const safeGet = (request.method === "GET" || request.method === "HEAD")
     && SAFE_DEMO_GET.some((pattern) => pattern.test(request.nextUrl.pathname));
@@ -20,7 +22,7 @@ export function proxy(request: NextRequest) {
 
   return NextResponse.json(
     {
-      error: "The public Image Archivist demo is read-only. Run the project locally to use archive and agent actions.",
+      error: "The hosted Image Archivist archive is read-only. Run the project locally to use archive and agent actions.",
       code: "SHOWCASE_READ_ONLY",
     },
     { status: 403, headers: { "Cache-Control": "no-store" } },

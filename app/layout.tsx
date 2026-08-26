@@ -3,7 +3,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import DialogProvider from "@/components/DialogProvider";
 import { collectionTree, libraryStats } from "@/lib/queries";
-import { IS_HOSTED_DEMO } from "@/lib/runtime";
+import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
 
 export const metadata: Metadata = {
   title: "Image Archivist",
@@ -46,10 +46,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script id="atlas-boot" dangerouslySetInnerHTML={{ __html: bootScript }} />
         <noscript><style>{noScriptStyle}</style></noscript>
       </head>
-      <body data-hosted-demo={IS_HOSTED_DEMO ? "true" : undefined}>
+      <body data-hosted-demo={IS_HOSTED_READ_ONLY ? "true" : undefined}>
         <DialogProvider>
           <div className="app">
-            <Sidebar tree={tree} stats={stats} hostedDemo={IS_HOSTED_DEMO} />
+            <Sidebar tree={tree} stats={stats} hostedDemo={IS_HOSTED_READ_ONLY} />
             <div className="workspace">{children}</div>
           </div>
         </DialogProvider>

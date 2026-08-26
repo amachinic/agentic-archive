@@ -10,7 +10,7 @@ Image Archivist helps designers, art directors, photographers, and visual resear
 
 > Image Archivist is the workspace. Atlas is the agent inside it.
 
-[Open the read-only showcase](https://image-archivist.vercel.app)
+[Open the public read-only archive](https://image-archivist.vercel.app)
 
 ![Image Archivist Network dashboard](docs/network-showcase.png)
 
@@ -131,13 +131,13 @@ Network / Gallery / Analyze / Collections
 Groq language or vision model
 ```
 
-## Public showcase
+## Public archive
 
-The Vercel deployment is deliberately read-only. It uses 12 synthetic, project-owned demo references and static metadata so the product surfaces can be explored without publishing the private image library or enabling public model spend, uploads, exports, or archive mutations.
+The Vercel deployment is a read-only snapshot of the full visual catalog. It keeps the reviewed titles, descriptions, artists, controlled keyterms, collections, palettes, perceptual fingerprints, similarity graph, and analysis briefs available across Network, Gallery, and Analyze.
 
-The demo references were generated specifically for this repository with OpenAI image generation, then split into individual WebP assets. They do not reuse files from the private archive or the user's Downloads folder.
+Public image delivery uses metadata-free WebP derivatives in Vercel Blob. The deployment catalog is generated from a transactionally consistent SQLite snapshot, with local source paths, original filenames, hashes, embedded generation metadata, raw OCR, notes, and file timestamps removed before upload. Source originals and the writable `atlas.db` remain local.
 
-The full persistent product runs locally because its SQLite database, managed images, Windows OCR, and disk export workflow depend on durable host storage.
+Uploads, exports, model calls, and archive mutations stay disabled on the public deployment. The persistent working product continues to run locally because ingest, Windows OCR, disk export, and source-file management require durable host storage.
 
 ## Run locally
 
@@ -165,7 +165,7 @@ npm run refine-tags
 
 Requires Node.js 22 or newer because the catalog uses `node:sqlite`. Windows OCR is used when available and skipped on other platforms.
 
-To run the hosted showcase behavior locally:
+To run the synthetic hosted fallback locally:
 
 ```bash
 ATLAS_DEMO=1 npm run dev
@@ -189,4 +189,4 @@ npm run build
 
 ## Repository boundary
 
-The private image library and `atlas.db` are intentionally excluded from Git and Vercel. The repository contains the application, agent behavior, taxonomy, archive tooling, and synthetic showcase assets, not the personal collection.
+The private source library and writable `atlas.db` are intentionally excluded from Git. The repository contains the application, agent behavior, taxonomy, archive tooling, and synthetic fallback assets. Public releases are generated with `scripts/publish-public-archive.mjs`, stored in Vercel Blob, and fetched into the deployment during the build.
