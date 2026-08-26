@@ -4,10 +4,11 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import DialogProvider from "@/components/DialogProvider";
 import { collectionTree, libraryStats } from "@/lib/queries";
+import { IS_HOSTED_DEMO } from "@/lib/runtime";
 
 export const metadata: Metadata = {
-  title: "Atlas",
-  description: "Image curation, analysis and connection.",
+  title: "Image Archivist",
+  description: "A multi-agentic dashboard for art direction, visual search, image sorting, curation, and archiving.",
 };
 
 // Every route reads the library live; nothing here is static.
@@ -35,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <body data-hosted-demo={IS_HOSTED_DEMO ? "true" : undefined}>
         {/* beforeInteractive: injected into the initial HTML ahead of any
             Next.js code, so both run before first paint — no dashboard
             flash before the boot redirect, no theme flash. */}
@@ -43,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="atlas-theme" strategy="beforeInteractive">{themeScript}</Script>
         <DialogProvider>
           <div className="app">
-            <Sidebar tree={tree} stats={stats} />
+            <Sidebar tree={tree} stats={stats} hostedDemo={IS_HOSTED_DEMO} />
             <div className="workspace">{children}</div>
           </div>
         </DialogProvider>

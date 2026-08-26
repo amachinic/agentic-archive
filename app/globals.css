@@ -17,6 +17,10 @@
 @font-face { font-family: "Input Mono"; src: url("/fonts/InputMono-Medium.ttf")  format("truetype"); font-weight: 500; font-style: normal; font-display: swap; }
 
 :root {
+  /* The rail floats over the canvas on a tighter gutter than the chrome
+     around it. The topbar has to borrow it for its right end, or the theme
+     toggle floats inboard of the help button sitting directly beneath. */
+  --rail-gutter: 10px;
   --font-sans: "Neue Haas Unica", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "Input Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --weight-light: 300;
@@ -195,6 +199,16 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-primary);
 }
 .sidebar__mark-logo { width: 18px; height: 18px; flex: none; }
+.sidebar__demo {
+  flex: none;
+  padding: 3px 5px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1;
+  text-transform: uppercase;
+}
 .sidebar__meta { display: inline-flex; align-items: center; gap: 8px; }
 .sidebar__scroll {
   flex: 1; min-height: 0; overflow-y: auto;
@@ -215,11 +229,16 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 .sidebar.is-collapsed .sidebar__foot { display: none; }
 
 /* ---- Sidebar rhythm ----
-   ONE system: every group is inset --space-2, every row inside it a further
-   --space-1, groups are separated by --space-3, and every group title is the
-   same 22px-tall row whether or not it carries a control. Counts right-align
-   on the same column everywhere. */
-.nav-group { padding: 0 var(--space-2); margin-bottom: var(--space-3); }
+   ONE system, two rails. Hover chips and cards sit on the outer rail at
+   --space-1; the text inside them lands --space-1 further in, at --space-2 --
+   which is exactly where the brand's wordmark starts. So every label in the
+   sidebar reads down a single edge with the logo, and the chip still has room
+   to breathe around it. (Group and row insets used to add up to --space-2 +
+   --space-1, which pushed every label 8px right of the mark.) Groups are
+   separated by --space-3, every group title is the same 22px-tall row whether
+   or not it carries a control, and counts right-align on the same column
+   everywhere. Collapsed and mobile set their own padding and are unaffected. */
+.nav-group { padding: 0 var(--space-1); margin-bottom: var(--space-3); }
 .nav-group__title {
   display: flex; align-items: center; justify-content: space-between;
   min-height: 22px;
@@ -243,8 +262,13 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 }
 .nav-item:hover { background: var(--surface-raised); color: var(--text-primary); }
 [data-theme="dark"] .nav-item:hover { background: rgba(255,255,255,0.05); }
-.nav-item.is-active { background: var(--accent-wash-solid); color: var(--text-primary); }
-.nav-item.is-active .nav-item__icon { color: var(--accent); }
+.nav-item.is-active,
+.nav-item.is-active:hover,
+[data-theme="dark"] .nav-item.is-active:hover { background: var(--accent); color: var(--on-accent); }
+.nav-item.is-active .nav-item__icon,
+.nav-item.is-active .nav-item__count { color: var(--on-accent); }
+.nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.nav-item.is-active:focus-visible { outline-color: var(--on-accent); }
 .nav-item__icon { flex: none; width: 15px; height: 15px; color: var(--text-muted); }
 .nav-item__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-item__count {
@@ -416,13 +440,16 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   transition: border-color var(--motion-duration) var(--motion-ease), background-color var(--motion-duration) var(--motion-ease), color var(--motion-duration) var(--motion-ease);
 }
 .term:hover { border-color: var(--accent); color: var(--text-primary); }
-.term.is-active { background: var(--accent-wash-solid); border-color: var(--accent); color: var(--text-primary); }
 .term__n { font-size: var(--font-input-2xs); color: var(--text-muted); }
-/* the +n / less unfolders: green dashed stroke, every section */
+/* the +n / less unfolders use the interaction accent, every section */
 .term--more { border-style: dashed; border-color: var(--accent); color: var(--text-secondary); }
 .term--more:hover { border-color: var(--accent); background: var(--accent-wash); color: var(--text-primary); }
 .term.is-medium { border-color: var(--border-strong); color: var(--text-primary); }
 .term.is-soft { border-style: dashed; }
+.term.is-active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.term.is-active .term__n { color: color-mix(in srgb, var(--on-accent) 72%, transparent); }
+.term:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.term.is-active:focus-visible { outline-color: var(--on-accent); }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 4px; }
 .chips .term { cursor: default; }
 
@@ -438,9 +465,10 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 
 .tree-row { display: flex; align-items: center; }
 /* Folder row actions: zero-width at rest so the count sits flush right like
-   the keyterm counts; hovering the row slides them open (the count shifts
-   left to make room). Each icon rides a light grey rounded chip so it reads
-   as a control, not decoration. */
+   the keyterm counts; hovering the row slides them open. The row's right end
+   belongs to one thing at a time -- at rest the count, on hover the three
+   controls -- because sharing it clipped the third icon. Each icon rides a
+   light grey rounded chip so it reads as a control, not decoration. */
 .tree-actions {
   display: inline-flex; gap: 3px;
   max-width: 0;
@@ -448,8 +476,11 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   overflow: hidden;
   transition: max-width var(--motion-duration) var(--motion-ease), opacity var(--motion-duration) var(--motion-ease);
 }
+/* 3 x 22px chip + 2 x 3px gap = 72; anything less clips the last one */
 .nav-item:hover .tree-actions,
-.nav-item:focus-within .tree-actions { max-width: 60px; opacity: 1; }
+.nav-item:focus-within .tree-actions { max-width: 72px; opacity: 1; }
+.tree-row .nav-item:hover .nav-item__count,
+.tree-row .nav-item:focus-within .nav-item__count { display: none; }
 .tree-actions .tree-caret {
   flex: none;
   width: 22px; height: 22px;
@@ -460,9 +491,22 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   transition: background-color var(--motion-duration) var(--motion-ease), color var(--motion-duration) var(--motion-ease);
 }
 .tree-actions .tree-caret:hover { background: color-mix(in oklab, var(--text-primary) 14%, transparent); }
+/* Focus says the same thing as hover here. Keyboard users reach these the
+   only way they can, and :hover answers nothing but a real pointer -- so
+   without this the remove control lit up as a bare white default ring
+   instead of reading as the destructive action it is. */
 .tree-actions .tree-caret.is-add:hover,
-.tree-actions .tree-caret.is-save:hover { color: var(--accent); }
-.tree-actions .tree-caret.is-danger:hover { color: #dc2626; }
+.tree-actions .tree-caret.is-save:hover,
+.tree-actions .tree-caret.is-add:focus-visible,
+.tree-actions .tree-caret.is-save:focus-visible { color: var(--accent); }
+.tree-actions .tree-caret.is-danger:hover,
+.tree-actions .tree-caret.is-danger:focus-visible {
+  color: #dc2626;
+  background: color-mix(in oklab, #dc2626 18%, transparent);
+}
+/* the app's own ring convention: 2px accent, danger overrides to red */
+.tree-actions .tree-caret:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tree-actions .tree-caret.is-danger:focus-visible { outline-color: #dc2626; }
 .tree-row .nav-item { padding-left: calc(var(--space-1) + var(--depth, 0) * 14px); }
 .tree-caret {
   flex: none; width: 14px; height: 14px; display: grid; place-items: center;
@@ -479,7 +523,15 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   gap: var(--space-2);
   height: var(--topbar-h);
   flex: none;
-  padding: 0 var(--space-3);
+  /* Asymmetric on purpose, and both halves are measured, not guessed.
+     LEFT --space-3: puts the title on x=268, exactly where the first rail
+     control's label starts, so the two rows share a text edge.
+     RIGHT: align on what the eye sees, which is not the boxes. The help
+     button below pads its glyph by 10px inside a 1px border, so its box
+     reaches 11px past the mark it appears to end on; the theme switch has
+     no such inset -- its border IS its edge. Adding that 11px back puts the
+     switch flush with the glyph rather than 11px proud of it. */
+  padding: 0 calc(var(--rail-gutter) + 11px) 0 var(--space-3);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
@@ -515,7 +567,7 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   line-height: 1;
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: var(--font-input-xs);
+  font-size: var(--font-input-label); /* the size .graph-rail__cat reads at, beside it */
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--text-muted);
@@ -524,9 +576,11 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 .viewswitch a:hover,
 .viewswitch button:hover { color: var(--text-primary); }
 .viewswitch a.is-active,
-.viewswitch button.is-active { background: var(--surface); color: var(--text-primary); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
-[data-theme="dark"] .viewswitch a.is-active,
-[data-theme="dark"] .viewswitch button.is-active { background: var(--surface-raised); }
+.viewswitch button.is-active { background: var(--accent); color: var(--on-accent); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+.viewswitch a:focus-visible,
+.viewswitch button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.viewswitch a.is-active:focus-visible,
+.viewswitch button.is-active:focus-visible { outline-color: var(--on-accent); }
 
 .field {
   display: flex; align-items: center; gap: 9px;
@@ -568,16 +622,19 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   transition: background-color var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease), color var(--motion-duration) var(--motion-ease);
 }
 .btn svg, .btn .spin { flex: none; }
-/* Focus rings match the button's intent: neutral by default, green only on
-   primary actions, red on destructive ones. A remove action never wears the
-   accent. */
+/* Focus rings match the button's intent: neutral by default, accent on primary
+   actions, red on destructive ones. A remove action never wears the accent. */
 .btn:focus-visible { outline: 2px solid var(--border-strong); outline-offset: 2px; }
 .btn.is-primary:focus-visible { outline-color: var(--accent); }
 .btn.is-danger:focus-visible { outline-color: #dc2626; }
 .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text-primary); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn.is-primary { background: var(--accent); border-color: var(--accent); color: var(--neutral-950); }
-.btn.is-primary:hover:not(:disabled) { filter: brightness(1.07); }
+.btn.is-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.is-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 88%, var(--surface));
+  color: var(--on-accent);
+}
 .btn.is-ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
 .btn.is-ghost:hover:not(:disabled) { background: var(--surface-raised); color: var(--text-primary); }
 .btn--icon { width: var(--control-h); padding: 1px 0 0; justify-content: center; }
@@ -586,7 +643,7 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
    Compact chip: Input Mono 11px uppercase, surface ground, system radius.
      rest   -> --surface · 1px --border · text-secondary
      hover  -> border-strong · text-primary
-     active -> accent border + green wash */
+     active -> inverted accent surface */
 .pill {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
   /* fixed box + flex centering + 1px optical nudge: the glyphs sit dead
@@ -612,7 +669,7 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 .pill:hover { color: var(--text-primary); border-color: var(--border-strong); }
 .pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pill.is-active,
-.pill[aria-pressed="true"] { color: var(--text-primary); border-color: var(--accent); background: var(--accent-wash); }
+.pill[aria-pressed="true"] { color: var(--on-accent); border-color: var(--accent); background: var(--accent); }
 /* data chip variant: informational, not a control */
 .pill--static { cursor: default; font-variant-numeric: tabular-nums; }
 .pill--static:hover { color: var(--text-secondary); border-color: var(--border); }
@@ -687,6 +744,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius
 .select__opt.is-hi { background: var(--surface-raised); color: var(--text-primary); }
 [data-theme="dark"] .select__opt.is-hi { background: rgba(255, 255, 255, 0.06); }
 .select__opt.is-active { color: var(--text-primary); }
+.select__opt:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 @media (prefers-reduced-motion: reduce) { .select__menu { animation: none; } }
 
 /* ---- Work area ---- */
@@ -742,9 +800,10 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius
     grid-template-rows: auto 1fr;
   }
   .sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     width: 100% !important;
     height: 50px;
-    flex-direction: row;
     align-items: center;
     border-right: 0;
     border-bottom: 1px solid var(--border);
@@ -757,21 +816,28 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius
     border-bottom: 0;
     padding: 0 12px;
     flex: none;
+    justify-self: start;
   }
+  .sidebar__demo { display: none; }
   .sidebar__scroll {
-    flex: 1;
+    flex: none;
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: center; /* the three views sit dead centre */
+    justify-content: center;
+    justify-self: center;
+    gap: 2px;
+    width: max-content;
+    min-width: 0;
     padding: 0;
     overflow: visible;
   }
-  .sidebar__mtoggle { display: inline-flex; align-items: center; flex: none; padding-right: 12px; }
+  .sidebar__mtoggle { display: inline-flex; align-items: center; flex: none; justify-self: end; padding-right: 12px; }
   /* the per-view title row steps back entirely on mobile */
   .topbar { display: none; }
   /* the views ride as an icon row whatever the stored collapse state says */
-  .sidebar .nav-group[aria-label="Library"] {
+  .sidebar .nav-group[aria-label="Library"],
+  .sidebar .nav-group[aria-label="Agents"] {
     display: flex !important;
     flex-direction: row;
     gap: 2px;

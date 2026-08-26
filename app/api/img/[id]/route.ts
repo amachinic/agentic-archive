@@ -3,6 +3,8 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { db, LIBRARY_DIR, THUMB_DIR } from "@/lib/db";
 import { makeThumb } from "@/lib/ingest";
+import { demoAssetPath } from "@/lib/demo";
+import { IS_HOSTED_DEMO } from "@/lib/runtime";
 
 const MIME: Record<string, string> = {
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
@@ -20,6 +22,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const id = Number(idRaw);
   if (!Number.isInteger(id)) return new Response("bad id", { status: 400 });
 
+  if (IS_HOSTED_DEMO) {
+    const asset = demoAssetPath(id);
+    if (!asset) return new Response("not found", { status: 404 });
+    return Response.redirect(new URL(asset, req.url), 307);
+  }
+
   const row = db().prepare("SELECT rel_path FROM images WHERE id = ?").get(id) as { rel_path: string } | undefined;
   if (!row) return new Response("not found", { status: 404 });
 
@@ -36,7 +44,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   } else if (small) {
     filePath = path.join(THUMB_DIR, id + "_" + small + ".webp");
     type = "image/webp";
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
       try {
         const sharp = (await import("sharp")).default;
         await sharp(libAbs, { failOn: "none" })
@@ -46,7 +54,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
           .toFile(filePath);
       } catch {
         filePath = path.join(THUMB_DIR, id + ".webp");
-        if (!fs.existsSync(filePath)) {
+        if (!fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
           try { await makeThumb(libAbs, id); } catch { filePath = libAbs; type = MIME[path.extname(libAbs).toLowerCase()] ?? "application/octet-stream"; }
         }
       }
@@ -54,14 +62,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   } else {
     filePath = path.join(THUMB_DIR, id + ".webp");
     type = "image/webp";
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
       try { await makeThumb(libAbs, id); }
       catch { filePath = libAbs; type = MIME[path.extname(libAbs).toLowerCase()] ?? "application/octet-stream"; }
     }
   }
 
   try {
-    const buf = await fsp.readFile(filePath);
+    const buf = await fsp.readFile(/*turbopackIgnore: true*/ filePath);
     const body = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     return new Response(body, {
       headers: {

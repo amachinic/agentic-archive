@@ -106,6 +106,39 @@ const KIND_ORDER = ["artist", "style", "subject", "mood", "color", "format", "me
 const KIND_LABEL: Record<string, string> = {
   artist: "Artist", style: "Style", subject: "Subject", mood: "Mood", color: "Color", format: "Format", medium: "Medium", tag: "Manual",
 };
+const TERM_COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+
+function alphabetizeTerms(items: Keyterm[]) {
+  return [...items].sort((a, b) => TERM_COLLATOR.compare(a.name, b.name) || a.id - b.id);
+}
+
+function FilterCheckboxRow({
+  term,
+  checked,
+  onToggle,
+  tabIndex,
+}: {
+  term: Keyterm;
+  checked: boolean;
+  onToggle: (name: string) => void;
+  tabIndex?: number;
+}) {
+  return (
+    <button
+      type="button"
+      className={"frow" + (checked ? " is-on" : "")}
+      onClick={() => onToggle(term.name)}
+      role="checkbox"
+      aria-checked={checked}
+      tabIndex={tabIndex}
+      title={checked ? "Deselect " + term.name : "Also require " + term.name}
+    >
+      <span className="frow__check" aria-hidden>{checked && <IconCheck width={10} height={10} />}</span>
+      <span className="frow__name">{term.name}</span>
+      <span className="frow__n">{term.count}</span>
+    </button>
+  );
+}
 
 type GNode = {
   id: number; label: string; hex: string; w: number | null; h: number | null;
@@ -281,12 +314,17 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
   const [draft, setDraft] = useState("");
   const [promptBusy, setPromptBusy] = useState(false);
   const [filterTags, setFilterTags] = useState<string[]>([]);
+  const toggleFilterTag = useCallback((name: string) => {
+    setFilterTags((current) => current.includes(name)
+      ? current.filter((item) => item !== name)
+      : [...current, name]);
+  }, []);
   const [searchQ, setSearchQ] = useState("");
   const [appliedQ, setAppliedQ] = useState("");
   const [openKind, setOpenKind] = useState<string | null>(null);
   /* a category with hundreds of terms (artist is 200+) needs a way in */
   const [termQ, setTermQ] = useState("");
-  const TERM_SEARCH_AT = 24;
+  const TERM_SEARCH_AT = 12;
   const [simBusy, setSimBusy] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false); // mobile: the search/prompt bottom drawer
   const [filterSheetOpen, setFilterSheetOpen] = useState(false); // mobile: the filter drawer
@@ -388,7 +426,11 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
     const away = (e: PointerEvent) => {
       if (!(e.target as Element).closest?.(".graph-catwrap")) setOpenKind(null);
     };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpenKind(null); };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      document.getElementById("graph-filter-trigger-" + openKind)?.focus();
+      setOpenKind(null);
+    };
     window.addEventListener("pointerdown", away);
     window.addEventListener("keydown", esc);
     return () => {
@@ -584,7 +626,10 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
     ro.observe(wrap);
 
     const css = getComputedStyle(document.documentElement);
-    const colAccent = () => css.getPropertyValue("--accent").trim() || "#7ebb1c";
+    const colAccent = () =>
+      css.getPropertyValue("--accent").trim() ||
+      css.getPropertyValue("--text-primary").trim() ||
+      "#ffffff";
     const colBg = () => css.getPropertyValue("--bg").trim() || "#020202";
     const colSurface = () => css.getPropertyValue("--surface").trim() || "#0d0d0d";
     const colStrong = () => css.getPropertyValue("--border-strong").trim() || "#555";
@@ -683,7 +728,7 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
         ctx.beginPath();
         ctx.moveTo(ax, ay);
         ctx.bezierCurveTo(ax + dir * k, ay, bx - dir * k, by, bx, by);
-        /* the wire under the cursor answers in accent green */
+        /* the wire under the cursor answers in the active interaction color */
         ctx.lineWidth = (isHover ? 1.8 : 1) / Math.max(0.6, s.scale);
         ctx.strokeStyle = isHover ? accent : lineCol;
         ctx.globalAlpha = isHover ? 0.95 : (0.3 + e.score * 0.3) * Math.min(fa, fb);
@@ -1331,7 +1376,7 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: history, field: fieldIds() }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "the agent failed");
@@ -1339,7 +1384,9 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
         await playToolRow(t.tool, fmtDetail(t.tool, t.args), fmtResult(t.result));
         logLedger("curator", t.tool + " " + fmtDetail(t.tool, t.args));
       }
-      if (d.ids) setPromptIds(d.ids);
+      /* [] means the agent narrowed to nothing, not "show nothing": the
+         field it found nothing in is the field worth keeping on screen */
+      if (Array.isArray(d.ids) && d.ids.length) setPromptIds(d.ids);
       if (d.sort) {
         setFieldSort(d.sort.by === "colour" ? "colour" : "light");
         logLedger("curator", "sorted the field by " + d.sort.by + " · grid");
@@ -1396,9 +1443,13 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
     pushNext(["find", "sort", "save"]);
   }
 
+  /* Clear undoes the conversation AND what the conversation did to the
+     field. Releasing the ids but leaving the grid behind meant "Clear" left
+     the canvas in a state only the cleared conversation had asked for. */
   function clearPrompt() {
     setThread([]);
     setPromptIds(null);
+    setFieldSort(null);
     stepsRef.current = [];
     setSteps(0);
   }
@@ -1660,7 +1711,7 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
                   <button className={panel === "search" ? "is-active" : ""} onClick={() => { setPanel("search"); clearPrompt(); setSheetOpen(true); }}>Search</button>
                 </div>
                 <button
-                  className="graph-rail__cat graph-filterbtn"
+                  className={"graph-rail__cat graph-filterbtn" + (filterTags.length > 0 ? " has-active" : "")}
                   onClick={() => { setFilterSheetOpen(true); setSheetOpen(false); }}
                 >
                   Filter
@@ -1669,22 +1720,33 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
                 <div className="graph-rail__cats">
                   {kinds.map((g) => {
                     const selCount = g.items.filter((t) => filterTags.includes(t.name)).length;
+                    const visibleTerms = alphabetizeTerms(narrowTerms(g.items));
+                    const filterPanelId = "graph-filter-panel-" + g.kind;
                     return (
-                      <span key={g.kind} className="graph-catwrap">
+                      <span key={g.kind} className="graph-catwrap" data-filter-kind={g.kind}>
                         <button
+                          type="button"
+                          id={"graph-filter-trigger-" + g.kind}
                           className={
                             "graph-rail__cat" +
                             (openKind === g.kind ? " is-open" : "") +
                             (selCount > 0 ? " has-active" : "")
                           }
                           onClick={() => setOpenKind(openKind === g.kind ? null : g.kind)}
+                          aria-expanded={openKind === g.kind}
+                          aria-controls={filterPanelId}
                         >
                           {KIND_LABEL[g.kind] ?? g.kind}
                           {selCount > 0 && <span className="cat-count">{selCount}</span>}
                           {" "}<i>▾</i>
                         </button>
                         {openKind === g.kind && (
-                          <div className="graph-drop">
+                          <div
+                            id={filterPanelId}
+                            className="graph-drop graph-drop--terms"
+                            role="group"
+                            aria-label={(KIND_LABEL[g.kind] ?? g.kind) + " filters"}
+                          >
                             {g.items.length > TERM_SEARCH_AT && (
                               <div className="drop-find">
                                 <input
@@ -1694,24 +1756,22 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
                                   onChange={(e) => setTermQ(e.target.value)}
                                   aria-label={"Narrow the " + g.kind + " list"}
                                 />
-                                {termQ && <span className="drop-find__n">{narrowTerms(g.items).length} of {g.items.length}</span>}
+                                {termQ && <span className="drop-find__n" role="status" aria-live="polite">{visibleTerms.length} of {g.items.length}</span>}
                               </div>
                             )}
-                            {narrowTerms(g.items).length === 0 && (
-                              <span className="drop-find__none">nothing matches &ldquo;{termQ}&rdquo;</span>
-                            )}
-                            {narrowTerms(g.items).map((t) => (
-                              <button
-                                key={t.id}
-                                className={"term" + (filterTags.includes(t.name) ? " is-active" : "")}
-                                onClick={() => setFilterTags(filterTags.includes(t.name)
-                                  ? filterTags.filter((x) => x !== t.name)
-                                  : [...filterTags, t.name])}
-                                title={filterTags.includes(t.name) ? "Deselect " + t.name : "Also require " + t.name}
-                              >
-                                {t.name}<span className="term__n">{t.count}</span>
-                              </button>
-                            ))}
+                            <div className="graph-drop__list">
+                              {visibleTerms.length === 0 && (
+                                <span className="drop-find__none">nothing matches &ldquo;{termQ}&rdquo;</span>
+                              )}
+                              {visibleTerms.map((t) => (
+                                <FilterCheckboxRow
+                                  key={t.id}
+                                  term={t}
+                                  checked={filterTags.includes(t.name)}
+                                  onToggle={toggleFilterTag}
+                                />
+                              ))}
+                            </div>
                           </div>
                         )}
                       </span>
@@ -1730,26 +1790,34 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
                 <div className="graph-rail__spacer" />
                 <span className="graph-catwrap graph-tunewrap">
                   <button
+                    type="button"
+                    id="graph-filter-trigger-tune"
                     className={"graph-rail__cat" + (openKind === "tune" ? " is-open" : "")}
                     onClick={() => setOpenKind(openKind === "tune" ? null : "tune")}
+                    aria-expanded={openKind === "tune"}
+                    aria-controls="graph-filter-panel-tune"
                   >
                     Settings <i>▾</i>
                   </button>
                   {openKind === "tune" && (
-                    <div className="graph-drop graph-drop--tune">{tuneControls}</div>
+                    <div id="graph-filter-panel-tune" className="graph-drop graph-drop--tune">{tuneControls}</div>
                   )}
                 </span>
                 <span className="graph-catwrap graph-helpwrap">
                   <button
+                    type="button"
+                    id="graph-filter-trigger-help"
                     className={"graph-rail__cat" + (openKind === "help" ? " is-open" : "")}
                     onClick={() => setOpenKind(openKind === "help" ? null : "help")}
                     aria-label="How the field works"
                     title="How the field works"
+                    aria-expanded={openKind === "help"}
+                    aria-controls="graph-filter-panel-help"
                   >
                     <i className="info-i" aria-hidden />
                   </button>
                   {openKind === "help" && (
-                    <div className="graph-drop graph-drop--help">
+                    <div id="graph-filter-panel-help" className="graph-drop graph-drop--help">
                       <div className="help-row">
                         <svg viewBox="0 0 16 16" aria-hidden><path d="M8 1.5v13M1.5 8h13M8 1.5 6 3.5M8 1.5l2 2M8 14.5l-2-2M8 14.5l2-2M1.5 8l2-2M1.5 8l2 2M14.5 8l-2-2M14.5 8l-2 2" /></svg>
                         <span className="mono-xs">pan to spawn more of the field</span>
@@ -1831,20 +1899,13 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
                             {narrowTerms(g.items).map((t) => {
                               const on = filterTags.includes(t.name);
                               return (
-                                <button
+                                <FilterCheckboxRow
                                   key={t.id}
-                                  className={"frow" + (on ? " is-on" : "")}
-                                  onClick={() => setFilterTags(on
-                                    ? filterTags.filter((x) => x !== t.name)
-                                    : [...filterTags, t.name])}
-                                  role="checkbox"
-                                  aria-checked={on}
+                                  term={t}
+                                  checked={on}
+                                  onToggle={toggleFilterTag}
                                   tabIndex={open ? 0 : -1}
-                                >
-                                  <span className="frow__check">{on && <IconCheck width={10} height={10} />}</span>
-                                  <span className="frow__name">{t.name}</span>
-                                  <span className="frow__n">{t.count}</span>
-                                </button>
+                                />
                               );
                             })}
                           </div>

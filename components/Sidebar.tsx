@@ -18,10 +18,11 @@ const VIEWS = [
 ];
 
 export default function Sidebar({
-  tree, stats,
+  tree, stats, hostedDemo = false,
 }: {
   tree: CollectionNode[];
   stats: Stats;
+  hostedDemo?: boolean;
 }) {
   const pathname = usePathname();
   const params = useSearchParams();
@@ -126,6 +127,7 @@ export default function Sidebar({
           <AtlasMark className="sidebar__mark-logo" />
           Atlas
         </Link>
+        {hostedDemo && <span className="sidebar__demo" title="Public demo. Archive changes and model calls are disabled.">read only</span>}
       </div>
 
       <div className="sidebar__scroll">
@@ -134,7 +136,14 @@ export default function Sidebar({
           {VIEWS.map((v) => {
             const active = pathname === v.href && !activeCollection && !activeTag;
             return (
-              <Link key={v.href} href={v.href} className={"nav-item" + (active ? " is-active" : "")} title={v.label}>
+              <Link
+                key={v.href}
+                href={v.href}
+                className={"nav-item" + (active ? " is-active" : "")}
+                title={v.label}
+                aria-label={v.label}
+                aria-current={active ? "page" : undefined}
+              >
                 <v.icon className="nav-item__icon" />
                 <span className="nav-item__label">{v.label}</span>
               </Link>
@@ -161,7 +170,13 @@ export default function Sidebar({
 
         <nav className="nav-group" aria-label="Agents">
           <div className="nav-group__title"><span className="mono-label">Agents</span></div>
-          <Link href="/agents" className={"nav-item" + (pathname === "/agents" ? " is-active" : "")} title="Agents">
+          <Link
+            href="/agents"
+            className={"nav-item" + (pathname === "/agents" ? " is-active" : "")}
+            title="Agent settings"
+            aria-label="Agent settings"
+            aria-current={pathname === "/agents" ? "page" : undefined}
+          >
             <IconAgent className="nav-item__icon" />
             <span className="nav-item__label">Settings</span>
           </Link>
@@ -173,8 +188,8 @@ export default function Sidebar({
 
       {/* stats live pinned to the sidebar's bottom edge, outside the scroll */}
       <div className="sidebar__foot">
-        <div className="nav-group" aria-label="Library stats">
-          <div className="nav-group__title"><span className="mono-label">Stats</span></div>
+        <div className="nav-group" aria-label="Database">
+          <div className="nav-group__title"><span className="mono-label">Database</span></div>
           <div className="stat-card">
             <StatRow label="analyzed" value={stats.analyzed + " / " + stats.images} />
             <StatRow label="connections" value={String(stats.pairs)} />

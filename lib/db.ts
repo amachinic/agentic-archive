@@ -1,13 +1,17 @@
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
+import { IS_HOSTED_DEMO } from "./runtime";
 
-export const ROOT = process.cwd();
+export const ROOT = process.env.ATLAS_DATA_DIR
+  ? path.resolve(process.env.ATLAS_DATA_DIR)
+  : IS_HOSTED_DEMO
+    ? path.join(os.tmpdir(), "image-archivist")
+    : process.cwd();
 export const LIBRARY_DIR = path.join(ROOT, "library");
 export const THUMB_DIR = path.join(ROOT, ".cache", "thumbs");
 export const DB_PATH = path.join(ROOT, "atlas.db");
-
-for (const d of [LIBRARY_DIR, THUMB_DIR]) fs.mkdirSync(d, { recursive: true });
 
 let _db: DatabaseSync | null = null;
 
@@ -17,9 +21,13 @@ let _db: DatabaseSync | null = null;
  * otherwise fight the first for the write lock on every hot reload.
  */
 export function db(): DatabaseSync {
+  if (IS_HOSTED_DEMO) {
+    throw new Error("SQLite is disabled in the hosted read-only demo");
+  }
   const g = globalThis as unknown as { __atlasDb?: DatabaseSync };
   if (g.__atlasDb) return g.__atlasDb;
   if (_db) return _db;
+  for (const d of [ROOT, LIBRARY_DIR, THUMB_DIR]) fs.mkdirSync(d, { recursive: true });
   const conn = new DatabaseSync(DB_PATH);
   conn.exec("PRAGMA journal_mode = WAL");
   conn.exec("PRAGMA foreign_keys = ON");

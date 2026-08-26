@@ -14,10 +14,11 @@
     "refine-tags": "tsx scripts/refine-tags.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.121.0",
     "next": "^16.3.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "sharp": "^0.34.2"
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@types/node": "^22",

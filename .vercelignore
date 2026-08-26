@@ -1,0 +1,17 @@
+# Private local archive and derived data
+/library
+/.cache
+*.db*
+.env*
+
+# Local build, logs, and capture output
+/.next
+/node_modules
+*.log
+/.film
+/run*.mp4
+/run*.webm
+/scripts/film-run.mjs
+
+# Development-only interaction sandboxes
+/public/*-sandbox.html

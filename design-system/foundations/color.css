@@ -24,9 +24,10 @@
   --neutral-900: #0d0d0d;  /* dark card surface     */
   --neutral-950: #020202;  /* dark page bg (true black) */
 
-  /* ---- Primitive: accent (the only hue) ---- */
+  /* ---- Legacy green primitives retained for archived case-study visuals ---- */
   --green-500: #7ebb1c;
   --green-200: #cfe8a6;  /* soft / light green (code strings, soft accent) */
+  --processing-accent: var(--green-500); /* animated agent work only */
 
   /* ---- Brand-green fill ramp — 7 progressively lighter, gently desaturated tints of the
      accent, for SEQUENTIAL fills (e.g. the release-timeline periods). Lightest → most
@@ -55,18 +56,10 @@
   --journey-6: #5c46a0;  /* blue-violet */
   --journey-7: #7a3b9a;  /* violet */
 
-  /* ---- Accent (same in both themes) ---- */
-  --accent:      var(--green-500);          /* #7ebb1c */
-  --accent-soft: var(--green-200);          /* #cfe8a6 — code strings / soft accent */
-  --accent-wash: rgba(126, 187, 28, 0.15);  /* 15% green — CTA hover fill */
-
-  /* ---- Feature surface — the Feature Card's lime ground. FIXED across themes
-     (built on --accent, which doesn't theme-swap), with DARK ink for contrast on
-     the bright green in either theme. Previously undefined → the card fell back to
-     the page background (off-white in light, black in dark) and never showed lime. ---- */
-  --surface-feature:  var(--accent);                                            /* #7ebb1c lime ground */
-  --on-feature:       var(--neutral-950);                                       /* dark ink — headings */
-  --on-feature-muted: color-mix(in oklab, var(--neutral-950) 66%, transparent); /* softened ink — body */
+  /* ---- Feature surface follows the monochrome interaction contract. ---- */
+  --surface-feature:  var(--accent);
+  --on-feature:       var(--on-accent);
+  --on-feature-muted: color-mix(in oklab, var(--on-accent) 66%, transparent);
 
   /* ---- Legacy aliases (original token names) — hand-written CSS using the
      earlier names keeps resolving, and they follow the active theme. ---- */
@@ -82,6 +75,11 @@
 /* ---- Semantic: LIGHT (default) ---- */
 :root,
 [data-theme="light"] {
+  /* Black ink is the interaction signal on a light canvas. */
+  --accent:          var(--neutral-950);
+  --accent-soft:     var(--neutral-600);
+  --on-accent:       var(--white);
+  --accent-wash:     color-mix(in srgb, var(--accent) 8%, transparent);
   --text-primary:   var(--neutral-800);  /* #1a1a1a */
   --text-secondary: var(--neutral-600);  /* #555    */
   --text-muted:     var(--neutral-500);  /* #7b7b7b  lighter — case-study body */
@@ -95,11 +93,16 @@
   --border:         var(--neutral-200);  /* #e8e8e8  subtle hairline */
   --border-strong:  var(--neutral-300);  /* #c0c0c0  control outline */
   --network-line:   var(--neutral-600);  /* #555    node-network threads — darker so they read on the light page */
-  --accent-wash-solid: #e6efd7;          /* OPAQUE pill highlight (vs --accent-wash) — no threads showing through */
+  --accent-wash-solid: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 
 /* ---- Semantic: DARK ---- */
 [data-theme="dark"] {
+  /* White inversion is the sole active-state signal on the dark dashboard. */
+  --accent:          var(--white);
+  --accent-soft:     var(--neutral-300);
+  --on-accent:       var(--neutral-950);
+  --accent-wash:     color-mix(in srgb, var(--accent) 8%, transparent);
   --text-primary:   var(--neutral-100);  /* #f0f0f0 */
   /* A restrained lift from neutral-400 toward neutral-300 keeps supporting copy secondary while
      giving small body text a little more clarity against the near-black page. */
@@ -112,7 +115,7 @@
   --border:         rgba(255, 255, 255, 0.10);
   --border-strong:  var(--neutral-600);  /* #555    */
   --network-line:   var(--neutral-300);  /* #c0c0c0  node-network threads — soft grey on the black page */
-  --accent-wash-solid: #1e270f;          /* OPAQUE pill highlight — solid dark-green on the black page */
+  --accent-wash-solid: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
 
 /* Theme cross-fade — useTheme.ts flips data-theme inside a View Transition, so the whole page

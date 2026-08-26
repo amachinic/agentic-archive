@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from "react";
 import ArchetypePix, { type PixMode } from "./ArchetypePix";
+import GlyphLoader from "./GlyphLoader";
 import { IconCaret } from "./icons";
 
 type Archetype = {
@@ -76,7 +77,7 @@ export default function AgentsView() {
     <div className="agents">
       <div className="agents__hero">
         <div className="agentcard__top">
-          <span className="agentcard__pix"><ArchetypePix mode="atlas" size={30} /></span>
+          <span className="agentcard__pix"><GlyphLoader size={30} /></span>
           <span className="agentcard__name">Atlas</span>
           <span className="agentcard__auto is-proposes">proposes</span>
         </div>

@@ -66,7 +66,7 @@ export default function ToolCheck({ running, size = 14 }: { running: boolean; si
   }, [running]);
 
   return (
-    <svg ref={ref} viewBox="0 0 100 100" width={size} height={size} style={{ color: "var(--accent)", flex: "none" }} aria-hidden>
+    <svg ref={ref} viewBox="0 0 100 100" width={size} height={size} style={{ color: "var(--processing-accent)", flex: "none" }} aria-hidden>
       {Array.from({ length: 25 }, (_, i) => {
         const r = Math.floor(i / 5), c = i % 5;
         return (

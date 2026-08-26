@@ -78,7 +78,7 @@ export default function GlyphLoader({ size = 16, className }: { size?: number; c
       width={size}
       height={size}
       className={className}
-      style={{ color: "var(--accent)", flex: "none" }}
+      style={{ color: "var(--processing-accent)", flex: "none" }}
       aria-hidden
     >
       {Array.from({ length: 25 }, (_, i) => {

@@ -112,7 +112,7 @@ export async function ingestOne(sourcePath: string, collectionId: number | null)
     return { status: "skipped" as const, id: dupe.id };
   }
 
-  let meta: sharp.Metadata;
+  let meta: { format?: string; width?: number; height?: number };
   try {
     meta = await sharp(buf, { failOn: "none" }).metadata();
   } catch {

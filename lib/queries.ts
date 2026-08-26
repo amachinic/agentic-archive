@@ -1,6 +1,15 @@
 import { db } from "./db";
 import { hammingHex, histDistance } from "./imaging";
 import type { Swatch } from "./imaging";
+import { IS_HOSTED_DEMO } from "./runtime";
+import {
+  demoCollectionTree,
+  demoGetImage,
+  demoGraphData,
+  demoLibraryStats,
+  demoListImages,
+  demoListTags,
+} from "./demo";
 
 /* Read-side queries shared by pages and API routes. */
 
@@ -47,6 +56,7 @@ export type LibraryFilter = {
 };
 
 export function listImages(f: LibraryFilter = {}): { rows: ImageRow[]; total: number } {
+  if (IS_HOSTED_DEMO) return demoListImages(f);
   const conn = db();
   const where: string[] = [];
   const params: (string | number)[] = [];
@@ -100,6 +110,7 @@ export function listImages(f: LibraryFilter = {}): { rows: ImageRow[]; total: nu
 }
 
 export function getImage(id: number) {
+  if (IS_HOSTED_DEMO) return demoGetImage(id);
   const conn = db();
   const raw = conn.prepare(
     "SELECT " + IMG_COLS + ", source_path, sha256, gen_meta, ai_analysis, ai_model, ai_at FROM images WHERE id = ?"
@@ -159,6 +170,7 @@ export type CollectionNode = {
 };
 
 export function collectionTree(): CollectionNode[] {
+  if (IS_HOSTED_DEMO) return demoCollectionTree();
   const conn = db();
   const rows = conn.prepare(
     "SELECT c.id, c.name, c.parent_id, c.note, " +
@@ -176,6 +188,7 @@ export function collectionTree(): CollectionNode[] {
 }
 
 export function listTags() {
+  if (IS_HOSTED_DEMO) return demoListTags();
   const rows = db().prepare(
     "SELECT t.id, t.name, t.kind, COUNT(it.image_id) AS count FROM tags t " +
     "LEFT JOIN image_tags it ON it.tag_id = t.id GROUP BY t.id HAVING count > 0 ORDER BY count DESC, t.name"
@@ -186,6 +199,7 @@ export function listTags() {
 }
 
 export function libraryStats() {
+  if (IS_HOSTED_DEMO) return demoLibraryStats();
   const conn = db();
   const n = (conn.prepare("SELECT COUNT(*) AS n FROM images").get() as { n: number }).n;
   const analyzed = (conn.prepare("SELECT COUNT(*) AS n FROM images WHERE ai_at IS NOT NULL").get() as { n: number }).n;
@@ -205,6 +219,7 @@ export function libraryStats() {
 export type SimilarityMode = "blend" | "structure" | "color" | "aesthetic";
 
 export function graphData(minScore = 0.8, maxEdgesPerNode = 6, collectionId?: number, mode: SimilarityMode = "blend") {
+  if (IS_HOSTED_DEMO) return demoGraphData(minScore, maxEdgesPerNode, collectionId, mode);
   const conn = db();
 
   const imgFilter = collectionId

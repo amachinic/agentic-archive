@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { listImages } from "@/lib/queries";
 import type { ChatMsg } from "@/lib/vision";
@@ -6,6 +7,24 @@ export const maxDuration = 120;
 
 const ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-120b";
+const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+
+/*
+  Two backs for the same agent. Groq is the house model; Claude is here for
+  when Groq's free tier is spent, which on a busy day it is. The tool list,
+  the vocabulary gate and the WORKING SET below belong to neither -- only
+  the shape of one model call differs, so the agent behaves the same either
+  way and nothing downstream knows which one answered.
+
+  Pick with ATLAS_AGENT_PROVIDER=anthropic|groq; with it unset, whichever
+  key is present wins, Groq first.
+*/
+type Provider = "anthropic" | "groq";
+function provider(): Provider {
+  const want = (process.env.ATLAS_AGENT_PROVIDER || "").toLowerCase();
+  if (want === "anthropic" || want === "groq") return want;
+  return process.env.GROQ_API_KEY ? "groq" : "anthropic";
+}
 
 /*
   The Discovery agent: a small tool-calling loop over the library's own
@@ -144,15 +163,35 @@ const SYSTEM = [
 type ToolLogRow = { tool: string; args: Record<string, unknown>; result: string };
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null) as { messages?: ChatMsg[] } | null;
+  const body = await req.json().catch(() => null) as { messages?: ChatMsg[]; field?: number[] } | null;
   if (!Array.isArray(body?.messages) || !body.messages.length) {
     return Response.json({ error: "messages required" }, { status: 400 });
   }
   const key = process.env.GROQ_API_KEY;
-  if (!key) return Response.json({ error: "GROQ_API_KEY is not set" }, { status: 500 });
+  if (provider() === "groq" && !key) return Response.json({ error: "GROQ_API_KEY is not set" }, { status: 500 });
+  if (provider() === "anthropic" && !process.env.ANTHROPIC_API_KEY) {
+    return Response.json({ error: "ANTHROPIC_API_KEY is not set" }, { status: 500 });
+  }
 
   const conn = db();
+
+  /* The working set is rebuilt per request, so it has to arrive with the
+     request: the field the human is looking at IS the set that "these",
+     "them" and "what is showing" refer to. Before this, only a turn that
+     searched had a set at all, and "file these" staged a folder of nothing. */
   let ws: { id: number; title: string }[] = [];
+  const seed = Array.isArray(body.field)
+    ? body.field.map(Number).filter(Number.isInteger).slice(0, 500)
+    : [];
+  if (seed.length) {
+    const ph = seed.map(() => "?").join(",");
+    const rows = conn.prepare(
+      "SELECT id, ai_title, filename FROM images WHERE id IN (" + ph + ")"
+    ).all(...seed) as { id: number; ai_title: string | null; filename: string }[];
+    const title = new Map(rows.map((r) => [r.id, (r.ai_title || r.filename).slice(0, 40)]));
+    // the field's own order is the set's order
+    ws = seed.filter((id) => title.has(id)).map((id) => ({ id, title: title.get(id)! }));
+  }
   const out: { shownIds: number[] | null; proposal: { name: string; note: string; ids: number[] } | null; sort: { by: "colour" | "light" } | null } = { shownIds: null, proposal: null, sort: null };
   const toolLog: ToolLogRow[] = [];
 
@@ -235,6 +274,10 @@ export async function POST(req: Request) {
         return JSON.stringify({ sorted: out.sort.by });
       }
       case "propose_folder": {
+        /* staging an empty folder wastes the human's one accept */
+        if (!ws.length) {
+          return JSON.stringify({ staged: false, count: 0, note: "the working set is empty, so there is nothing to file. Search or show a set first, then propose." });
+        }
         out.proposal = {
           name: String(args.name ?? "Untitled").slice(0, 60),
           note: String(args.note ?? "").slice(0, 160),
@@ -252,13 +295,106 @@ export async function POST(req: Request) {
     | { role: "assistant"; content: string | null; tool_calls: unknown[] }
     | { role: "tool"; tool_call_id: string; content: string };
 
-  const msgs: LoopMsg[] = [
-    { role: "system", content: SYSTEM + "\n\nKEYTERM VOCABULARY (term(count)):\n" + vocabulary() },
-    ...body.messages.filter((m) => m.role === "user" || m.role === "assistant").slice(-10)
-      .map((m) => ({ role: m.role, content: m.content })),
-  ];
+  /* without this the model searches from scratch every turn and throws away
+     the very set the human just asked it to act on */
+  const holding = ws.length
+    ? "\n\nThe human is looking at a field of " + ws.length + " image" + (ws.length === 1 ? "" : "s") +
+      ", and that field IS your working set already. \"these\", \"them\", \"what is showing\" and \"the current set\" all mean exactly those images: filter, sort, show or propose over them directly. Search again only if they are plainly asking for something new."
+    : "";
+
+  const system = SYSTEM + holding + "\n\nKEYTERM VOCABULARY (term(count)):\n" + vocabulary();
+  const turns = body.messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .slice(-10)
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  const msgs: LoopMsg[] = [{ role: "system", content: system }, ...turns];
+
+  /*
+    The same loop against the Messages API. The tool schemas are the ones
+    above, re-shaped: OpenAI nests them under .function, Anthropic takes
+    name/description/input_schema flat. Results come back as tool_result
+    blocks in a user turn rather than as their own role.
+  */
+  async function runClaude(): Promise<string> {
+    const client = new Anthropic({ timeout: 90_000 });
+    const tools: Anthropic.Tool[] = TOOLS.map((t) => ({
+      name: t.function.name,
+      description: t.function.description,
+      input_schema: t.function.parameters as Anthropic.Tool.InputSchema,
+    }));
+    const messages: Anthropic.MessageParam[] = turns.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
+
+    for (let round = 0; round < 6; round++) {
+      const res = await client.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: 8000,
+        system,
+        tools,
+        /* the job is picking two or three tools off a list of six, so the
+           cheap, fast end of the effort scale is the right one here */
+        thinking: { type: "adaptive" },
+        output_config: { effort: "low" },
+        messages,
+      });
+
+      if (res.stop_reason === "refusal") {
+        throw new Error("the model declined this request" + (res.stop_details && "explanation" in res.stop_details ? ": " + res.stop_details.explanation : ""));
+      }
+
+      const calls = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+      if (!calls.length) {
+        return res.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join(" ")
+          .trim();
+      }
+
+      /* the whole assistant turn goes back, thinking blocks included:
+         dropping them breaks multi-turn continuity on the same model */
+      messages.push({ role: "assistant", content: res.content });
+
+      const results: Anthropic.ToolResultBlockParam[] = [];
+      for (const c of calls) {
+        const args = (c.input ?? {}) as Record<string, unknown>;
+        let result: string;
+        try {
+          result = runTool(c.name, args);
+        } catch (err) {
+          result = JSON.stringify({ error: (err instanceof Error ? err.message : "tool failed").slice(0, 120) });
+        }
+        toolLog.push({ tool: c.name, args, result });
+        results.push({ type: "tool_result", tool_use_id: c.id, content: result });
+      }
+      /* every result rides in ONE user turn: splitting them teaches the
+         model to stop calling tools in parallel */
+      messages.push({ role: "user", content: results });
+    }
+    return "";
+  }
 
   try {
+    if (provider() === "anthropic") {
+      const reply = await runClaude();
+      if (out.shownIds === null && !out.proposal && ws.length) {
+        out.shownIds = ws.slice(0, 200).map((r) => r.id);
+        toolLog.push({ tool: "show_field", args: {}, result: JSON.stringify({ shown: out.shownIds.length, auto: true }) });
+      }
+      return Response.json({
+        reply: reply || (out.shownIds?.length
+          ? "I hit my step limit, but the " + out.shownIds.length + " I gathered are on the field."
+          : "I hit my step limit before finding anything worth showing. Try different words."),
+        toolLog,
+        ids: out.shownIds ?? out.proposal?.ids ?? null,
+        proposal: out.proposal,
+        sort: out.sort,
+      });
+    }
+
     let reply = "";
     for (let round = 0; round < 6; round++) {
       const res = await fetch(ENDPOINT, {
@@ -266,7 +402,7 @@ export async function POST(req: Request) {
         headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 450, // Groq bills the RESERVATION against TPM; the reply is 2 sentences
+          max_tokens: 200, // Groq bills the RESERVATION against TPM; the reply is 2 sentences
           temperature: 0.2,
           reasoning_format: "hidden",
           tools: TOOLS,
