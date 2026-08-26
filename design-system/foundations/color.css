@@ -1,0 +1,131 @@
+/* ============================================================
+   COLOR — Orchard design system
+   Neutral ramp (anchored on true-black #020202 → #0d0d0d) + accent + semantics.
+   Theming via the data-theme attribute on <html>:
+     light = :root / [data-theme="light"]   ·   dark = [data-theme="dark"]
+   A nested element can force a theme, e.g. <div data-theme="dark"> … </div>.
+   Planes:  --bg (page)  ·  --surface (cards)  ·  --surface-raised (controls).
+            Insets/wells inside cards use --bg.
+   Components consume SEMANTIC tokens only, never --neutral-* directly.
+   ============================================================ */
+
+:root {
+  /* ---- Primitives: neutral ramp (light → dark) ---- */
+  --white:       #ffffff;
+  --neutral-50:  #f8f8f8;
+  --neutral-100: #f0f0f0;
+  --neutral-200: #e8e8e8;
+  --neutral-300: #c0c0c0;
+  --neutral-400: #999999;
+  --neutral-500: #7b7b7b;
+  --neutral-600: #555555;
+  --neutral-700: #3a3a3a;
+  --neutral-800: #1a1a1a;  /* dark elevated surface */
+  --neutral-900: #0d0d0d;  /* dark card surface     */
+  --neutral-950: #020202;  /* dark page bg (true black) */
+
+  /* ---- Primitive: accent (the only hue) ---- */
+  --green-500: #7ebb1c;
+  --green-200: #cfe8a6;  /* soft / light green (code strings, soft accent) */
+
+  /* ---- Brand-green fill ramp — 7 progressively lighter, gently desaturated tints of the
+     accent, for SEQUENTIAL fills (e.g. the release-timeline periods). Lightest → most
+     saturated; the solid accent (--green-500 #7ebb1c) sits just beyond ramp-700 and is used
+     as the fixed OUTLINE so the fill can lighten while the border stays brand green. ---- */
+  --green-ramp-100: #f3f9e9;  /* lightest */
+  --green-ramp-200: #e5f1d2;
+  --green-ramp-300: #d9ebbb;
+  --green-ramp-400: #cbe4a4;
+  --green-ramp-500: #bfdd8e;
+  --green-ramp-600: #b2d677;
+  --green-ramp-700: #a5d061;  /* most saturated tint */
+
+  /* ---- Categorical / journey palette — up to 7 perceptually distinct hues, one per
+     column/phase (e.g. the Experience × Analytics journey map, which has 7 phases). These
+     are CATEGORICAL (identity), not a progression. The scope-&-architecture timeline uses
+     the first 4. Applied as a coloured outline + transparent fill so they hold in both themes. ---- */
+  /* Analogous / harmonious walk — adjacent hues green → teal → blue → indigo → violet, so
+     columns/phases relate to each other instead of jumping. Ordered, so it also reads as a
+     progression (the scope timeline uses the first 4; the journey map uses all 7). */
+  --journey-1: #3aa657;  /* green */
+  --journey-2: #2f9e93;  /* teal */
+  --journey-3: #2589b5;  /* cyan-blue */
+  --journey-4: #1d71b8;  /* blue */
+  --journey-5: #3f5bad;  /* indigo */
+  --journey-6: #5c46a0;  /* blue-violet */
+  --journey-7: #7a3b9a;  /* violet */
+
+  /* ---- Accent (same in both themes) ---- */
+  --accent:      var(--green-500);          /* #7ebb1c */
+  --accent-soft: var(--green-200);          /* #cfe8a6 — code strings / soft accent */
+  --accent-wash: rgba(126, 187, 28, 0.15);  /* 15% green — CTA hover fill */
+
+  /* ---- Feature surface — the Feature Card's lime ground. FIXED across themes
+     (built on --accent, which doesn't theme-swap), with DARK ink for contrast on
+     the bright green in either theme. Previously undefined → the card fell back to
+     the page background (off-white in light, black in dark) and never showed lime. ---- */
+  --surface-feature:  var(--accent);                                            /* #7ebb1c lime ground */
+  --on-feature:       var(--neutral-950);                                       /* dark ink — headings */
+  --on-feature-muted: color-mix(in oklab, var(--neutral-950) 66%, transparent); /* softened ink — body */
+
+  /* ---- Legacy aliases (original token names) — hand-written CSS using the
+     earlier names keeps resolving, and they follow the active theme. ---- */
+  --primary-text:   var(--text-primary);
+  --secondary-text: var(--text-secondary);
+  --background:     var(--bg);
+  --card-bg:        var(--surface);
+  --icon-bg:        var(--surface-raised);
+  --icon-border:    var(--border-strong);
+  --hair:           var(--border);
+}
+
+/* ---- Semantic: LIGHT (default) ---- */
+:root,
+[data-theme="light"] {
+  --text-primary:   var(--neutral-800);  /* #1a1a1a */
+  --text-secondary: var(--neutral-600);  /* #555    */
+  --text-muted:     var(--neutral-500);  /* #7b7b7b  lighter — case-study body */
+  --bg:             var(--neutral-50);   /* #f8f8f8  page */
+  --surface:        var(--white);        /* #ffffff  cards */
+  --surface-raised: var(--white);        /* #ffffff  controls (elevation via border) */
+  /* The ground inside a bordered data panel: friction-table rows, architecture chips. Level with
+     the card in light; lifted off it in dark, where a panel on the same near-black as the card
+     around it has nothing to separate the two. One token, so the two components cannot drift. */
+  --surface-panel:  var(--surface);
+  --border:         var(--neutral-200);  /* #e8e8e8  subtle hairline */
+  --border-strong:  var(--neutral-300);  /* #c0c0c0  control outline */
+  --network-line:   var(--neutral-600);  /* #555    node-network threads — darker so they read on the light page */
+  --accent-wash-solid: #e6efd7;          /* OPAQUE pill highlight (vs --accent-wash) — no threads showing through */
+}
+
+/* ---- Semantic: DARK ---- */
+[data-theme="dark"] {
+  --text-primary:   var(--neutral-100);  /* #f0f0f0 */
+  /* A restrained lift from neutral-400 toward neutral-300 keeps supporting copy secondary while
+     giving small body text a little more clarity against the near-black page. */
+  --text-secondary: color-mix(in srgb, var(--neutral-400) 75%, var(--neutral-300)); /* #a3a3a3 */
+  --text-muted:     var(--neutral-300);  /* #c0c0c0  lighter — case-study body */
+  --bg:             var(--neutral-950);  /* #020202  page (true black) */
+  --surface:        var(--neutral-900);  /* #0d0d0d  cards */
+  --surface-raised: var(--neutral-800);  /* #1a1a1a  controls (elevated) */
+  --surface-panel:  color-mix(in oklab, var(--text-primary) 6%, var(--surface));
+  --border:         rgba(255, 255, 255, 0.10);
+  --border-strong:  var(--neutral-600);  /* #555    */
+  --network-line:   var(--neutral-300);  /* #c0c0c0  node-network threads — soft grey on the black page */
+  --accent-wash-solid: #1e270f;          /* OPAQUE pill highlight — solid dark-green on the black page */
+}
+
+/* Theme cross-fade — useTheme.ts flips data-theme inside a View Transition, so the whole page
+   cross-fades between the old and new theme as ONE GPU-composited snapshot. Buttery smooth: no
+   per-element colour transitions (those lagged + flickered will-change elements like the hero words).
+   Tune the duration here. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.45s;
+  animation-timing-function: ease;
+}
+/* both snapshots sit still and simply cross-fade (the default root slide isn't wanted for a recolour) */
+::view-transition-old(root) { animation-name: theme-fade-out; }
+::view-transition-new(root) { animation-name: theme-fade-in; }
+@keyframes theme-fade-out { to { opacity: 0; } }
+@keyframes theme-fade-in { from { opacity: 0; } }

@@ -1,0 +1,55 @@
+/* ============================================================
+   TYPE SCALE — fluid sizes. clamp(mobile-min, vw, desktop-max).
+   Applies to Neue Haas Unica; samples shown at weight 300 (Light).
+   Tiers:  display-* = hero / big statements
+           heading-* = section + sub headings (NHU 400 in practice)
+           body-*    = copy, captions, metadata (NHU 300)
+   Units: REM (16px = 1rem) so every size responds to the user's browser
+   font-size / zoom setting (WCAG 1.4.4 Resize Text). DESIGN-SYSTEM RULE:
+   font sizes use these tokens (or a clamp() with rem anchors), never raw px.
+   ============================================================ */
+
+:root {
+  /* Fluid tiers: clamp(min-rem, vw, max-rem). Anchors in REM so they scale with the user's font-size;
+     the vw middle keeps them viewport-fluid. Strictly incremental (72 -> 52 -> ... -> 12px at 16px root).
+     px equivalents (at the 16px root) shown on the right. */
+  --font-display-xl: clamp(2.5rem,    6vw,    4.5rem);   /*  40 ->  72 */
+  --font-display-lg: clamp(2rem,      4.5vw,  3.25rem);  /*  32 ->  52 */
+  --font-display-md: clamp(1.75rem,   3.6vw,  2.75rem);  /*  28 ->  44 */
+
+  --font-heading-xl: clamp(1.5rem,    3vw,    2.25rem);  /*  24 ->  36 */
+  --font-heading-lg: clamp(1.25rem,   2.5vw,  1.75rem);  /*  20 ->  28 (case-study section H2) */
+  --font-heading-md: clamp(1.125rem,  2vw,    1.5rem);   /*  18 ->  24 */
+  --font-heading-sm: clamp(1rem,      1.5vw,  1.25rem);  /*  16 ->  20 */
+
+  --font-body-lg:    clamp(0.9375rem, 1.25vw, 1.125rem); /*  15 ->  18 */
+  --font-body-md:    clamp(0.875rem,  1.1vw,  1rem);     /*  14 ->  16 */
+  --font-body-sm:    clamp(0.8125rem, 1vw,    0.875rem); /*  13 ->  14 */
+  --font-body-xs:    clamp(0.6875rem, 0.9vw,  0.75rem);  /*  11 ->  12 */
+
+  /* Input / UI / CTA / footer / micro-label scale. Fixed (non-fluid) but in REM so it still respects the
+     user's font-size. Use these for small mono labels, chips, hints and eyebrows instead of raw px. */
+  --font-input-lg:   1.125rem;  /* 18 */
+  --font-input-md:   1rem;      /* 16 */
+  --font-input-base: 0.875rem;  /* 14 (primary) */
+  --font-input-sm:   0.75rem;   /* 12 */
+  /* 11. The gap CLAUDE.md names, and by a distance the most-used size in the chrome: mono eyebrows,
+     chips, meta rows and stat labels. A tier of its own rather than snapping 42 rules to 10 or 12,
+     both of which change how those labels sit against the copy beside them. */
+  --font-input-label: 0.6875rem; /* 11 */
+  --font-input-xs:   0.625rem;  /* 10 */
+  --font-input-2xs:  0.5rem;    /*  8 */
+
+  /* Leading — additive defaults; tune freely. */
+  --leading-display: 1.04;
+  --leading-heading: 1.15;
+  --leading-body:    1.5;
+
+  /* Letter-spacing (kerning) — adopted from the prior system: NHU tightens as it
+     grows; Input/mono labels track wider. */
+  --tracking-display: -0.03em;  /* large display / h1 */
+  --tracking-heading: -0.02em;  /* headings */
+  --tracking-body:    -0.01em;  /* body + small headings */
+  --tracking-label:    0.06em;  /* mono UI labels */
+  --tracking-eyebrow:  0.16em;  /* eyebrows / wide labels */
+}

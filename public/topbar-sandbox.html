@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atlas — top bar sandbox</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+<style>
+  @font-face { font-family: "Neue Haas Unica"; src: url("/fonts/NHU-Lite.ttf") format("truetype"); font-weight: 300; }
+  @font-face { font-family: "Neue Haas Unica"; src: url("/fonts/NHU-Reg.ttf") format("truetype"); font-weight: 400; }
+  @font-face { font-family: "Input Mono"; src: url("/fonts/InputMono-Regular.ttf") format("truetype"); font-weight: 400; }
+
+  :root {
+    --bg: #020202;
+    --surface: #0d0d0d;
+    --surface-2: #161616;
+    --border: #262626;
+    --border-strong: #555;
+    --text: #f0f0f0;
+    --text-2: #9a9a9a;
+    --text-3: #6b6b6b;
+    --accent: #7ebb1c;
+    --accent-wash: rgba(126, 187, 28, 0.12);
+    --r: 8px;
+    --mono: "Input Mono", ui-monospace, Consolas, monospace;
+    --sans: "Neue Haas Unica", system-ui, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--sans); font-weight: 300; }
+  body { padding: 48px 0 120px; }
+
+  .intro { max-width: 720px; margin: 0 auto 56px; padding: 0 24px; }
+  .intro h1 { font-size: 20px; font-weight: 400; margin-bottom: 8px; }
+  .intro p { color: var(--text-2); font-size: 13.5px; line-height: 1.6; }
+  .mono-label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .mono-xs { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em; }
+
+  .variant { margin: 0 auto 64px; }
+  .variant__head { max-width: 1500px; margin: 0 auto 10px; padding: 0 24px; display: flex; align-items: baseline; gap: 14px; }
+  .variant__head .v { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .variant__head h2 { font-size: 14.5px; font-weight: 400; }
+  .variant__head p { color: var(--text-3); font-size: 12.5px; }
+
+  /* mock canvas beneath every bar */
+  .stagebox {
+    max-width: 1500px; margin: 0 auto; border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; position: relative; background: var(--bg);
+  }
+  .mockfield { position: relative; height: 300px; }
+  .mockfield svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .mcard {
+    position: absolute; border: 1px solid #2e2e2e; background: #101010; border-radius: 4px;
+  }
+  .mcard::before {
+    content: ""; position: absolute; left: 0; right: 0; top: 0; height: 12px;
+    border-bottom: 1px solid #232323; background: #151515; border-radius: 4px 4px 0 0;
+  }
+
+  /* ---------- shared bar chrome ---------- */
+  .bar {
+    display: flex; align-items: center; gap: 8px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 10px;
+    backdrop-filter: blur(10px);
+  }
+  .seg {
+    display: flex; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; flex: none;
+  }
+  .seg button {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    background: transparent; color: var(--text-2); border: 0; padding: 8px 14px; cursor: pointer;
+  }
+  .seg button.on { background: var(--surface-2); color: var(--text); }
+  .inp {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid var(--border); border-radius: var(--r); background: var(--bg);
+    padding: 0 12px; height: 38px;
+  }
+  .inp input {
+    background: transparent; border: 0; outline: 0; color: var(--text);
+    font-family: var(--sans); font-size: 13.5px; width: 100%;
+  }
+  .inp input::placeholder { color: var(--text-3); }
+  .inp:focus-within { border-color: var(--accent); }
+  .go {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    background: var(--accent); color: #0a0f04; border: 0; border-radius: var(--r);
+    padding: 0 16px; height: 38px; cursor: pointer; flex: none;
+  }
+  .chip {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-2); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: var(--r);
+    padding: 6px 11px 5px; cursor: pointer; white-space: nowrap; flex: none;
+    transition: border-color 160ms, color 160ms;
+  }
+  .chip small { color: var(--text-3); font-size: 10px; margin-left: 5px; }
+  .chip:hover { border-color: var(--accent); color: var(--text); }
+  .chip.on { background: var(--accent-wash); border-color: var(--accent); color: var(--text); }
+  .kindcap { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--text-3); text-transform: uppercase; flex: none; margin: 0 2px 0 8px; }
+
+  /* ---------- V1: category rail + dropdown sheet ---------- */
+  .v1 .cats { display: flex; gap: 6px; margin-left: auto; }
+  .v1 .cat {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    background: transparent; border: 1px solid transparent; border-radius: var(--r);
+    color: var(--text-2); padding: 8px 10px; cursor: pointer; display: flex; gap: 6px; align-items: center;
+  }
+  .v1 .cat:hover { color: var(--text); border-color: var(--border); }
+  .v1 .cat.open { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+  .v1 .cat i { font-style: normal; font-size: 9px; color: var(--text-3); transform: translateY(-1px); }
+  .v1 .sheet {
+    display: none; position: absolute; left: 0; right: 0; top: 100%;
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 14px; backdrop-filter: blur(12px);
+    flex-wrap: wrap; gap: 6px; z-index: 5;
+  }
+  .v1 .sheet.open { display: flex; }
+  .v1 .barwrap { position: relative; }
+
+  /* ---------- V2: chip river ---------- */
+  .v2 .river {
+    display: flex; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: none;
+    padding: 8px 10px; border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: blur(10px);
+  }
+  .v2 .river::-webkit-scrollbar { display: none; }
+
+  /* ---------- V3: command bar ---------- */
+  .v3 .inp { flex: 1; }
+  .v3 .hintchips { display: flex; gap: 6px; align-items: center; overflow: hidden; }
+
+  /* ---------- V4: kind tabs + one wrapped row ---------- */
+  .v4 .tabs { display: flex; gap: 2px; margin-left: auto; }
+  .v4 .tab {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    background: transparent; border: 0; border-bottom: 2px solid transparent;
+    color: var(--text-3); padding: 10px 10px 8px; cursor: pointer;
+  }
+  .v4 .tab:hover { color: var(--text-2); }
+  .v4 .tab.on { color: var(--text); border-bottom-color: var(--accent); }
+  .v4 .row2 {
+    display: flex; gap: 6px; flex-wrap: wrap; max-height: 66px; overflow: hidden;
+    padding: 8px 10px; border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+  }
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <h1>Top bar sandbox</h1>
+  <p>Four ways to merge the prompt component and the keyterm filter into one landscape strip at the very top of the field, cosmos-style. Everything below each bar is a stand-in for the canvas. All four are wired enough to feel: open the categories, scroll the river, type in the command bar, switch the tabs.</p>
+</div>
+
+<!-- ============ V1 ============ -->
+<div class="variant v1">
+  <div class="variant__head"><span class="v">V1</span><h2>Category rail</h2><p>closest to cosmos.so · categories in the bar, terms drop as a sheet</p></div>
+  <div class="stagebox">
+    <div class="barwrap">
+      <div class="bar">
+        <div class="seg"><button class="on">Field</button><button>Prompt</button></div>
+        <div class="inp" style="flex:1"><input placeholder="Describe what you are hunting for — or pick a category…" /></div>
+        <div class="cats">
+          <button class="cat" data-kind="artist">Artist <i>▾</i></button>
+          <button class="cat" data-kind="style">Style <i>▾</i></button>
+          <button class="cat" data-kind="subject">Subject <i>▾</i></button>
+          <button class="cat" data-kind="mood">Mood <i>▾</i></button>
+          <button class="cat" data-kind="color">Color <i>▾</i></button>
+        </div>
+      </div>
+      <div class="sheet" id="v1sheet"></div>
+    </div>
+    <div class="mockfield" data-mock></div>
+  </div>
+</div>
+
+<!-- ============ V2 ============ -->
+<div class="variant v2">
+  <div class="variant__head"><span class="v">V2</span><h2>Chip river</h2><p>every keyterm in one horizontally-scrolling row under a slim prompt bar</p></div>
+  <div class="stagebox">
+    <div class="bar">
+      <div class="seg"><button class="on">Field</button><button>Prompt</button></div>
+      <div class="inp" style="flex:1"><input placeholder="lonely brutalist structures at dusk…" /></div>
+      <button class="go">Send</button>
+    </div>
+    <div class="river" id="v2river"></div>
+    <div class="mockfield" data-mock></div>
+  </div>
+</div>
+
+<!-- ============ V3 ============ -->
+<div class="variant v3">
+  <div class="variant__head"><span class="v">V3</span><h2>Command bar</h2><p>one input does both: typing surfaces matching keyterms inline, Enter prompts</p></div>
+  <div class="stagebox">
+    <div class="bar">
+      <div class="inp">
+        <span class="mono-xs" style="color:var(--accent)">⌕</span>
+        <input id="v3input" placeholder="Type to filter keyterms · press Enter to ask the field…" />
+      </div>
+      <div class="hintchips" id="v3chips"></div>
+    </div>
+    <div class="mockfield" data-mock></div>
+  </div>
+</div>
+
+<!-- ============ V4 ============ -->
+<div class="variant v4">
+  <div class="variant__head"><span class="v">V4</span><h2>Kind tabs</h2><p>prompt on the left, kinds as tabs on the right; the chosen kind flows in one wrapped row</p></div>
+  <div class="stagebox">
+    <div class="bar" style="padding-bottom:0; border-bottom:0">
+      <div class="inp" style="flex:1; max-width: 480px"><input placeholder="Describe what you are hunting for…" /></div>
+      <div class="tabs" id="v4tabs"></div>
+    </div>
+    <div class="row2" id="v4row"></div>
+    <div class="mockfield" data-mock></div>
+  </div>
+</div>
+
+<script>
+/* real vocabulary from the library */
+const TERMS = {
+  artist: [["kasper florio",14],["rainer maria rilke",13],["maurice blanchot",8],["simone weil",8],["john martin",7],["auguste rodin",5],["corentin corneau",5],["henri cartier-bresson",5],["jacques derrida",5],["sophie calle",5],["man ray",4],["satoji kashimoto",4]],
+  style: [["monochrome",508],["bright",188],["minimalist",188],["high contrast",131],["colorful",78],["grainy",9],["archival",5],["documentary",4],["editorial",4],["graphic design",4],["brutalist",3],["lo-fi",3]],
+  subject: [["portrait",381],["label",88],["philosophy",47],["poster text",48],["quote",25],["journal",22],["essay",18],["poem",11],["typography",8],["text",5]],
+  mood: [["contemplative",121],["melancholic",96],["serene",64],["nostalgic",41],["dreamlike",33],["stark",21],["intimate",17],["unsettling",9]],
+  color: [["black",412],["white",397],["grey",203],["red",88],["beige",61],["blue",44],["green",29],["yellow",18]],
+};
+const ALL = Object.entries(TERMS).flatMap(([k, arr]) => arr.map(([n, c]) => ({ kind: k, name: n, count: c })));
+
+function chip(t, cls) {
+  const b = document.createElement("button");
+  b.className = "chip" + (cls ? " " + cls : "");
+  b.innerHTML = t.name + "<small>" + t.count + "</small>";
+  b.onclick = () => b.classList.toggle("on");
+  return b;
+}
+
+/* V1: dropdown sheet per category */
+const v1sheet = document.getElementById("v1sheet");
+document.querySelectorAll(".v1 .cat").forEach((c) => {
+  c.onclick = () => {
+    const was = c.classList.contains("open");
+    document.querySelectorAll(".v1 .cat").forEach((x) => x.classList.remove("open"));
+    if (was) { v1sheet.classList.remove("open"); return; }
+    c.classList.add("open");
+    v1sheet.innerHTML = "";
+    TERMS[c.dataset.kind].forEach(([n, cnt]) => v1sheet.appendChild(chip({ name: n, count: cnt })));
+    v1sheet.classList.add("open");
+  };
+});
+
+/* V2: one river of everything, ranked, with kind captions */
+const river = document.getElementById("v2river");
+for (const [kind, arr] of Object.entries(TERMS)) {
+  const cap = document.createElement("span");
+  cap.className = "kindcap";
+  cap.textContent = kind;
+  river.appendChild(cap);
+  arr.forEach(([n, c]) => river.appendChild(chip({ name: n, count: c })));
+}
+river.addEventListener("wheel", (e) => { river.scrollLeft += e.deltaY; e.preventDefault(); }, { passive: false });
+
+/* V3: inline suggestions while typing */
+const v3input = document.getElementById("v3input");
+const v3chips = document.getElementById("v3chips");
+function v3render(q) {
+  v3chips.innerHTML = "";
+  const hits = q
+    ? ALL.filter((t) => t.name.includes(q)).slice(0, 6)
+    : ALL.slice().sort((a, b) => b.count - a.count).slice(0, 6);
+  hits.forEach((t) => v3chips.appendChild(chip(t)));
+}
+v3input.addEventListener("input", () => v3render(v3input.value.trim().toLowerCase()));
+v3render("");
+
+/* V4: kind tabs feeding one wrapped row */
+const v4tabs = document.getElementById("v4tabs");
+const v4row = document.getElementById("v4row");
+Object.keys(TERMS).forEach((k, i) => {
+  const t = document.createElement("button");
+  t.className = "tab" + (i === 0 ? " on" : "");
+  t.textContent = k;
+  t.onclick = () => {
+    document.querySelectorAll(".v4 .tab").forEach((x) => x.classList.remove("on"));
+    t.classList.add("on");
+    v4fill(k);
+  };
+  v4tabs.appendChild(t);
+});
+function v4fill(kind) {
+  v4row.innerHTML = "";
+  TERMS[kind].forEach(([n, c]) => v4row.appendChild(chip({ name: n, count: c })));
+}
+v4fill("artist");
+
+/* mock field backdrops: faint cards + wires */
+document.querySelectorAll("[data-mock]").forEach((m, mi) => {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const W = 1500, H = 300;
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(97 + mi * 13);
+  const pts = [];
+  for (let i = 0; i < 14; i++) {
+    const x = 40 + rnd() * (W - 140), y = 20 + rnd() * (H - 110);
+    const w = 54 + rnd() * 40, h = w * (1.1 + rnd() * 0.4);
+    pts.push({ x: x + w / 2, y: y + h / 2 });
+    const d = document.createElement("div");
+    d.className = "mcard";
+    d.style.cssText = "left:" + (x / W * 100) + "%;top:" + (y / H * 100) + "%;width:" + w + "px;height:" + Math.min(h, 120) + "px";
+    m.appendChild(d);
+  }
+  for (let i = 0; i < 10; i++) {
+    const a = pts[Math.floor(rnd() * pts.length)], b = pts[Math.floor(rnd() * pts.length)];
+    if (a === b) continue;
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const k = Math.max(40, Math.abs(b.x - a.x) / 2);
+    p.setAttribute("d", "M" + a.x + " " + a.y + " C" + (a.x + k) + " " + a.y + " " + (b.x - k) + " " + b.y + " " + b.x + " " + b.y);
+    p.setAttribute("stroke", "rgba(190,190,190,0.16)");
+    p.setAttribute("fill", "none");
+    svg.appendChild(p);
+  }
+  m.prepend(svg);
+});
+</script>
+</body>
+</html>

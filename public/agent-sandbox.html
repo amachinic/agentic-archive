@@ -1,0 +1,1947 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atlas — agent sandbox</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+<style>
+  @font-face { font-family: "Neue Haas Unica"; src: url("/fonts/NHU-Lite.ttf") format("truetype"); font-weight: 300; }
+  @font-face { font-family: "Neue Haas Unica"; src: url("/fonts/NHU-Reg.ttf") format("truetype"); font-weight: 400; }
+  @font-face { font-family: "Input Mono"; src: url("/fonts/InputMono-Regular.ttf") format("truetype"); font-weight: 400; }
+  :root {
+    --bg: #020202; --surface: #0d0d0d; --surface-2: #161616;
+    --border: #262626; --border-strong: #555;
+    --text: #f0f0f0; --text-2: #9a9a9a; --text-3: #6b6b6b;
+    --accent: #7ebb1c; --accent-wash: rgba(126,187,28,0.12);
+    --red: #dc2626;
+    --r: 8px;
+    --mono: "Input Mono", ui-monospace, Consolas, monospace;
+    --sans: "Neue Haas Unica", system-ui, sans-serif;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--sans); font-weight: 300; }
+  body { padding: 48px 0 140px; }
+  .intro { max-width: 780px; margin: 0 auto 60px; padding: 0 24px; }
+  .intro h1 { font-size: 20px; font-weight: 400; margin-bottom: 8px; }
+  .intro p { color: var(--text-2); font-size: 13.5px; line-height: 1.6; }
+  .mono-label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+  .mono-xs { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em; }
+
+  .section { max-width: 1240px; margin: 0 auto 72px; padding: 0 24px; }
+  .section__head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; }
+  .section__head .v { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .section__head h2 { font-size: 15px; font-weight: 400; }
+  .section__head p { color: var(--text-3); font-size: 12.5px; }
+
+  /* ============ 1 · the agent conversation ============ */
+  .demo {
+    display: grid; grid-template-columns: 430px 1fr; gap: 0;
+    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    min-height: 560px; background: var(--bg);
+  }
+  .chatcol {
+    border-right: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    display: flex; flex-direction: column;
+    padding: 14px; gap: 12px;
+  }
+  .chatcol__head { display: flex; align-items: center; justify-content: space-between; }
+  .chatcol__head .topic { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+  .replay {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    background: color-mix(in srgb, var(--text) 7%, var(--surface));
+    color: var(--text-2); border: 0; border-radius: 6px; padding: 7px 10px 6px; cursor: pointer;
+  }
+  .replay:hover { color: var(--text); background: color-mix(in srgb, var(--text) 14%, var(--surface)); }
+  .thread { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+
+  .msg {
+    max-width: 88%; border: 1px solid var(--border); border-radius: var(--r);
+    padding: 10px 12px; font-size: 13px; line-height: 1.5;
+    animation: rise 240ms var(--ease) both;
+  }
+  .msg .who { display: block; font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); margin-bottom: 4px; }
+  .msg.user { align-self: flex-end; background: var(--accent-wash); border-color: transparent; }
+  .msg.agent { align-self: flex-start; background: var(--surface); }
+  @keyframes rise { from { opacity: 0; transform: translateY(7px); } }
+
+  /* tool activity rows inside the thread */
+  .tool {
+    align-self: stretch;
+    display: flex; align-items: center; gap: 9px;
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    border-left: 2px solid var(--accent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--surface) 60%, transparent);
+    padding: 7px 10px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.03em;
+    color: var(--text-2);
+    animation: rise 220ms var(--ease) both;
+  }
+  .tool b { color: var(--text); font-weight: 400; }
+  .tool .res { margin-left: auto; color: var(--accent); white-space: nowrap; }
+  .tool.running .res { color: var(--text-3); }
+  .tool svg { width: 12px; height: 12px; flex: none; stroke: var(--text-3); fill: none; stroke-width: 1.4; stroke-linecap: round; }
+
+  /* proposal card */
+  .proposal {
+    align-self: stretch;
+    border: 1px dashed var(--accent);
+    border-radius: var(--r);
+    background: var(--accent-wash);
+    padding: 11px 12px;
+    animation: rise 240ms var(--ease) both;
+  }
+  .proposal .t { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--accent); margin-bottom: 6px; }
+  .proposal p { font-size: 12.5px; color: var(--text); line-height: 1.5; margin-bottom: 9px; }
+  .proposal .row { display: flex; gap: 8px; }
+  .pbtn {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    border-radius: 6px; padding: 7px 12px 6px; cursor: pointer; border: 1px solid transparent;
+  }
+  .pbtn.yes { background: var(--accent); color: #0a0f04; }
+  .pbtn.no { background: transparent; color: var(--text-2); border-color: var(--border-strong); }
+  .pbtn.no:hover { color: var(--red); border-color: var(--red); }
+
+  .composer {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 5px;
+  }
+  .composer input { flex: 1; background: transparent; border: 0; outline: 0; color: var(--text); font-size: 13px; padding: 6px 6px; }
+  .composer input::placeholder { color: var(--text-3); }
+  .composer .send { width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--accent); color: #0a0f04; display: grid; place-items: center; cursor: pointer; }
+
+  /* mock field on the right */
+  .fieldcol { position: relative; overflow: hidden; }
+  .fieldcol__hud {
+    position: absolute; top: 10px; left: 12px; z-index: 3;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .pill { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-2); border: 1px solid var(--border); border-radius: 99px; padding: 5px 11px 4px; background: color-mix(in srgb, var(--surface) 80%, transparent); }
+  .pill b { color: var(--accent); font-weight: 400; }
+  .mcard {
+    position: absolute; border: 1px solid #2e2e2e; background: #101010; border-radius: 4px;
+    transition: opacity 600ms var(--ease), transform 700ms var(--ease), border-color 400ms var(--ease);
+  }
+  .mcard.gone { opacity: 0.08; }
+  .mcard.kept { border-color: var(--accent); }
+  .agentcursor {
+    position: absolute; width: 14px; height: 14px; z-index: 4; pointer-events: none;
+    border: 1.5px solid var(--accent); border-radius: 50%;
+    box-shadow: 0 0 14px rgba(126,187,28,0.5);
+    transition: left 800ms var(--ease), top 800ms var(--ease), opacity 300ms;
+    opacity: 0;
+  }
+
+  /* ============ 2 · agent library ============ */
+  .roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
+  .acard {
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+    padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .acard__top { display: flex; align-items: center; gap: 11px; }
+  .acard__glyph {
+    width: 34px; height: 34px; flex: none;
+    border: 1px solid var(--border-strong); border-radius: 9px;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 14px; color: var(--accent);
+  }
+  .acard__name { font-size: 14.5px; font-weight: 400; }
+  .acard__auto {
+    margin-left: auto;
+    font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em;
+    padding: 4px 8px 3px; border-radius: 5px;
+  }
+  .auto-acts { background: var(--accent-wash); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+  .auto-proposes { background: rgba(217,119,6,0.1); color: #d97706; border: 1px solid rgba(217,119,6,0.4); }
+  .auto-read { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text-2); border: 1px solid var(--border); }
+  .acard__desc { font-size: 12.5px; color: var(--text-2); line-height: 1.55; }
+  .acard__tools { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tchip { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.04em; color: var(--text-3); border: 1px solid var(--border); border-radius: 5px; padding: 4px 7px 3px; }
+  .acard__foot { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 2px; }
+  .status { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border-strong); }
+  .dot.on { background: var(--accent); box-shadow: 0 0 8px rgba(126,187,28,0.6); animation: pulse 2s infinite; }
+  .dot.sched { background: #d97706; }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+  .budget { margin-left: auto; font-family: var(--mono); font-size: 9.5px; color: var(--text-3); }
+  .aswitch {
+    width: 34px; height: 19px; border-radius: 99px; border: 1px solid var(--border-strong);
+    background: var(--bg); position: relative; cursor: pointer; flex: none;
+  }
+  .aswitch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--border-strong); transition: transform 200ms var(--ease), background 200ms; }
+  .aswitch.on::after { transform: translateX(15px); background: var(--accent); }
+
+  /* ============ 3 · proposals + activity ============ */
+  .twocol { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
+  .panel { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
+  .panel__head { display: flex; align-items: center; justify-content: space-between; padding: 13px 15px; border-bottom: 1px solid var(--border); }
+  .prow { display: flex; align-items: center; gap: 11px; padding: 12px 15px; border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); transition: opacity 300ms; }
+  .prow:last-child { border-bottom: 0; }
+  .prow__from { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); width: 86px; flex: none; }
+  .prow__what { flex: 1; font-size: 12.5px; color: var(--text); line-height: 1.45; }
+  .prow__what small { display: block; color: var(--text-3); font-size: 11px; margin-top: 2px; }
+  .prow .pbtn { padding: 6px 10px 5px; }
+  .prow.done { opacity: 0.35; }
+  .prow.done .pbtn { visibility: hidden; }
+  .prow__stamp { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; color: var(--accent); display: none; }
+  .prow.accepted .prow__stamp.a { display: block; }
+  .prow.rejected .prow__stamp.r { display: block; color: var(--red); }
+  .feed { padding: 6px 0; max-height: 330px; overflow-y: auto; }
+  .frow2 { display: flex; gap: 12px; padding: 7px 15px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.03em; color: var(--text-2); }
+  .frow2 time { color: var(--text-3); flex: none; }
+  .frow2 b { color: var(--accent); font-weight: 400; }
+
+  /* ============ tabs ============ */
+  .tabs {
+    max-width: 1240px; margin: 0 auto 40px; padding: 0 24px;
+    display: flex; gap: 2px;
+  }
+  .tabbtn {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    background: transparent; color: var(--text-3);
+    border: 1px solid var(--border); border-radius: var(--r);
+    padding: 10px 16px 9px; cursor: pointer;
+    transition: color 200ms var(--ease), background 200ms var(--ease);
+  }
+  .tabbtn.on { background: var(--surface-2); color: var(--text); }
+  .tabview { display: none; }
+  .tabview.on { display: block; }
+
+  /* ============ 2nd tab: the dashboard, simulated ============ */
+  .dash { max-width: 1400px; margin: 0 auto; padding: 0 24px; }
+  .dash__frame {
+    display: grid; grid-template-columns: 232px 1fr;
+    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    height: 760px; background: var(--bg);
+  }
+  .dsb { border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; }
+  .dsb__brand { display: flex; align-items: center; gap: 9px; height: 52px; padding: 0 14px; border-bottom: 1px solid var(--border); font-weight: 400; font-size: 14px; }
+  .dsb__brand img { width: 17px; height: 17px; }
+  .dsb__scroll { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 18px; }
+  .dsb__title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); padding: 0 6px 6px; }
+  .dnav { display: flex; flex-direction: column; gap: 2px; }
+  .dnav a { display: flex; align-items: center; gap: 10px; padding: 8px 9px; border-radius: var(--r); font-size: 13px; color: var(--text-2); }
+  .dnav a.on { background: var(--accent-wash); color: var(--text); }
+  .dnav a.on svg { stroke: var(--accent); }
+  .dnav svg { width: 15px; height: 15px; fill: none; stroke: var(--text-3); stroke-width: 1.4; }
+  .dfolder { display: flex; align-items: center; gap: 9px; padding: 8px 9px; font-size: 12.5px; color: var(--text-2); border-radius: var(--r); }
+  .dfolder .n { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--text-3); }
+  .dfolder.new { background: var(--accent-wash); color: var(--text); animation: rise 400ms var(--ease) both; }
+  .dfolder.new .n { color: var(--accent); }
+  .dsb__foot { border-top: 1px solid var(--border); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .dstat { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); }
+  .dstat b { color: var(--text-2); font-weight: 400; }
+
+  .dwork { display: flex; flex-direction: column; min-width: 0; }
+  .dtopbar { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .dtopbar h3 { font-size: 14px; font-weight: 400; }
+  .dtopbar .spacer { flex: 1; }
+  .dswitch { width: 44px; height: 24px; border-radius: 99px; border: 1px solid var(--border-strong); background: var(--bg); position: relative; }
+  .dswitch::after { content: "\263E"; position: absolute; top: 2.5px; left: 22px; width: 17px; height: 17px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border-strong); font-size: 9px; display: grid; place-items: center; color: var(--text-2); }
+  .drail { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 94%, transparent); }
+  .dseg { display: flex; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+  .dseg span { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 9px 14px 8px; color: var(--text-2); }
+  .dseg span.on { background: var(--surface-2); color: var(--text); }
+  .dcat { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); padding: 8px 9px; }
+  .dcat i { font-style: normal; font-size: 9px; color: var(--text-3); }
+  .dinfo { margin-left: auto; width: 15px; height: 15px; border: 1px solid var(--text-2); border-radius: 50%; display: grid; place-items: center; font-family: "Times New Roman", serif; font-size: 10px; color: var(--text-2); }
+
+  .dstage { position: relative; flex: 1; overflow: hidden; background: var(--bg); }
+  .dwires { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .dwires path { fill: none; stroke: rgba(190,190,190,0.28); stroke-width: 1; transition: opacity 600ms var(--ease); }
+  .dwires path.faded { opacity: 0.06; }
+  .dwires path.drawn { stroke: var(--accent); stroke-width: 1.6; opacity: 0.9; stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw 900ms var(--ease) forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+
+  .dcard {
+    position: absolute; width: 92px;
+    border: 1px solid var(--border-strong); border-radius: 5px; overflow: hidden;
+    background: var(--surface);
+    transition: opacity 700ms var(--ease), border-color 400ms var(--ease), box-shadow 400ms var(--ease), transform 700ms var(--ease);
+  }
+  .dcard__head { display: flex; align-items: center; height: 14px; padding: 0 5px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-family: var(--mono); font-size: 6.5px; letter-spacing: 0.04em; color: var(--text-2); text-transform: uppercase; white-space: nowrap; overflow: hidden; }
+  .dcard img { display: block; width: 100%; height: auto; }
+  .dcard::before, .dcard::after {
+    content: ""; position: absolute; top: 50%; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--surface); border: 1px solid var(--border-strong); transform: translateY(-50%); z-index: 2;
+  }
+  .dcard::before { left: -3px; } .dcard::after { right: -3px; }
+  .dcard.gone { opacity: 0.07; }
+  .dcard.kept { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 22px rgba(126,187,28,0.25); transform: scale(1.04); }
+
+  .dcursor {
+    position: absolute; width: 15px; height: 15px; z-index: 6; pointer-events: none;
+    border: 1.5px solid var(--accent); border-radius: 50%;
+    box-shadow: 0 0 16px rgba(126,187,28,0.55);
+    transition: left 800ms var(--ease), top 800ms var(--ease), opacity 300ms;
+    opacity: 0;
+  }
+
+  .dpanel {
+    position: absolute; top: 0; left: 0; z-index: 5;
+    width: 400px; max-height: calc(100% - 8px);
+    display: flex; flex-direction: column; gap: 12px;
+    background: color-mix(in srgb, var(--surface) 95%, transparent);
+    border: 1px solid var(--border); border-top: 0; border-left: 0;
+    border-radius: 0 0 var(--r) 0;
+    padding: 13px; backdrop-filter: blur(10px);
+    overflow-y: auto;
+  }
+  .dpanel__head { display: flex; align-items: center; justify-content: space-between; }
+  .dpanel__topic { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  .dpanel__topic.hot { color: var(--accent); }
+  .dcomposer { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 5px; }
+  .dcomposer .plus { width: 26px; height: 26px; display: grid; place-items: center; color: var(--text-2); font-size: 14px; }
+  .dcomposer .txt { flex: 1; font-size: 13px; color: var(--text); min-height: 19px; }
+  .dcomposer .txt .ph { color: var(--text-3); }
+  .dcomposer .up { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #0a0f04; display: grid; place-items: center; }
+  .caret { display: inline-block; width: 1px; height: 13px; background: var(--text); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .glyph { width: 15px; height: 15px; flex: none; display: inline-block; }
+  .thinkrow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); }
+
+
+  /* ============ 3rd tab: the crew, each agent its own screen ============ */
+  .crew { max-width: 1400px; margin: 0 auto; padding: 0 24px; display: grid; grid-template-columns: 1fr 320px; gap: 12px; }
+  .crew__left { border: 1px solid var(--border); border-radius: 12px; background: var(--bg); overflow: hidden; display: flex; flex-direction: column; min-height: 640px; }
+  .crew__tabs { display: flex; gap: 2px; padding: 10px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
+  .ctab {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    background: transparent; color: var(--text-3); border: 1px solid transparent; border-radius: 6px;
+    padding: 8px 11px 7px; cursor: pointer; display: inline-flex; gap: 7px; align-items: center;
+  }
+  .ctab:hover { color: var(--text); }
+  .ctab.on { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+  .ctab .g { color: var(--accent); font-size: 11px; }
+  .screen { display: none; flex: 1; flex-direction: column; }
+  .screen.on { display: flex; }
+  .screen__head { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
+  .screen__pix { width: 40px; height: 40px; flex: none; border: 1px solid var(--border-strong); border-radius: 9px; display: grid; place-items: center; padding: 5px; }
+  .screen__pix svg { width: 100%; height: 100%; }
+  .screen__title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 400; }
+  .screen__sub { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+  .screen__tasks { margin-left: auto; display: flex; flex-direction: column; gap: 4px; text-align: right; }
+  .screen__tasks span { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); }
+  .screen__tasks span b { color: var(--text-2); font-weight: 400; }
+  .screen__stage { position: relative; flex: 1; padding: 18px; overflow: hidden; }
+  .screen__foot { padding: 10px 18px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .screen__foot .note { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); }
+
+  /* shared timeline column */
+  .crew__right { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; display: flex; flex-direction: column; }
+  .crew__right .panel__head { flex: none; }
+  .tl { flex: 1; overflow-y: auto; padding: 6px 0; }
+  .tlrow { display: flex; gap: 10px; padding: 7px 15px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.03em; color: var(--text-2); animation: rise 240ms var(--ease) both; }
+  .tlrow time { color: var(--text-3); flex: none; width: 38px; }
+  .tlrow b { font-weight: 400; flex: none; width: 92px; overflow: hidden; text-overflow: ellipsis; }
+  .tlrow .c-librarian { color: #d9a406; } .tlrow .c-scout { color: #48a4dc; }
+  .tlrow .c-choreographer { color: #b06ee0; } .tlrow .c-archivist { color: #dc6a26; }
+  .tlrow .c-taste { color: var(--text-2); } .tlrow .c-courier { color: #4ecb8f; }
+  .tlrow .c-discovery { color: var(--accent); }
+  .tlrow .tok { margin-left: auto; color: var(--text-3); }
+
+  /* stage building blocks */
+  .shelf { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; max-width: 520px; }
+  .book { aspect-ratio: 3/4; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--surface-2); position: relative; transition: border-color 400ms var(--ease), box-shadow 400ms var(--ease), opacity 500ms var(--ease), transform 600ms var(--ease); overflow: hidden; }
+  .book img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .book.tagged { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .book.dying { opacity: 0.12; transform: scale(0.92); }
+  .book .scanpix { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(2,2,2,0.55); }
+  .book .scanpix svg { width: 60%; height: 60%; }
+
+  .prompt-card {
+    border: 1px dashed var(--accent); border-radius: var(--r); background: var(--accent-wash);
+    padding: 12px 13px; max-width: 460px; margin-top: 16px; animation: rise 240ms var(--ease) both;
+  }
+  .prompt-card .t { font-family: var(--mono); font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+  .prompt-card p { font-size: 12.5px; line-height: 1.5; margin-bottom: 10px; }
+  .prompt-card .row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .filechip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 8px 11px; font-family: var(--mono); font-size: 10px; color: var(--text-2); animation: rise 300ms var(--ease) both; }
+  .filechip.pass { border-color: var(--accent); color: var(--text); }
+  .filechip.fail { opacity: 0.35; text-decoration: line-through; }
+  .filechip .fpix { width: 13px; height: 13px; }
+
+  .folderchip { display: inline-flex; align-items: center; gap: 9px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-wash); padding: 10px 13px; font-size: 12.5px; color: var(--text); animation: rise 300ms var(--ease) both; }
+  .folderchip small { font-family: var(--mono); font-size: 9.5px; color: var(--accent); }
+  .pathnote { font-family: var(--mono); font-size: 9.5px; color: var(--text-3); margin-top: 8px; }
+
+  .minicanvas { position: relative; height: 300px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); overflow: hidden; }
+  .mini { position: absolute; width: 52px; border-radius: 4px; border: 1px solid var(--border-strong); overflow: hidden; transition: left 900ms var(--ease), top 900ms var(--ease), border-color 400ms; }
+  .mini img { width: 100%; display: block; }
+  .mini.wired { border-color: var(--accent); }
+  .miniwires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .miniwires path { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: 0.85; stroke-dasharray: 400; stroke-dashoffset: 400; animation: draw 800ms var(--ease) forwards; }
+
+  .duo { display: flex; gap: 26px; align-items: center; }
+  .duo .pixbox { width: 74px; height: 74px; border: 1px solid var(--border-strong); border-radius: 10px; padding: 8px; }
+  .duo .pixbox svg { width: 100%; height: 100%; }
+  .verdict { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+  .verdict b { color: #dc6a26; font-weight: 400; }
+
+  .rankrow { display: flex; gap: 12px; align-items: flex-end; margin-top: 8px; }
+  .rankcell { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+  .rankcell img { width: 58px; height: 58px; object-fit: cover; border-radius: 5px; border: 1px solid var(--border-strong); }
+  .rankcell .meter { width: 20px; height: 20px; }
+  .rankcell .score { font-family: var(--mono); font-size: 9px; color: var(--text-3); }
+  .rankcell.top img { border-color: var(--accent); }
+  .rankcell.top .score { color: var(--accent); }
+
+
+  /* ============ 4th tab: one agent, three archetypes ============ */
+  .arch { max-width: 1400px; margin: 0 auto; padding: 0 24px; display: flex; flex-direction: column; gap: 40px; }
+
+  /* the architecture map */
+  .archmap { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 22px; }
+  .archmap__brain { display: flex; align-items: center; gap: 12px; justify-content: center; margin-bottom: 6px; }
+  .archmap__brain .pixhead { width: 30px; height: 30px; }
+  .archmap__brain b { font-size: 15px; font-weight: 400; }
+  .archmap__brain span { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+  .archmap__route { text-align: center; font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); padding: 10px 0 14px; }
+  .archmap__cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .archcol { border: 1px solid var(--border); border-radius: 10px; background: var(--bg); padding: 14px; }
+  .archcol__head { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+  .archcol__glyph { width: 26px; height: 26px; border: 1px solid var(--border-strong); border-radius: 7px; display: grid; place-items: center; padding: 3px; }
+  .archcol__glyph svg { width: 100%; height: 100%; }
+  .archcol__name { font-size: 13.5px; font-weight: 400; }
+  .archcol__role { font-family: var(--mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); display: block; }
+  .archcol ul { list-style: none; display: flex; flex-wrap: wrap; gap: 5px; }
+  .archcol li { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.04em; color: var(--text-2); border: 1px solid var(--border); border-radius: 5px; padding: 4px 7px 3px; }
+  .archmap__foot { text-align: center; font-family: var(--mono); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); padding-top: 14px; }
+  .archmap__foot b { color: var(--text-2); font-weight: 400; }
+
+  /* the / command experience */
+  .cmdwrap { border: 1px solid var(--border); border-radius: 12px; background: var(--bg); padding: 18px; position: relative; }
+  .cmdbox { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 6px; max-width: 640px; margin: 0 auto; position: relative; }
+  .cmdbox input { flex: 1; background: transparent; border: 0; outline: 0; color: var(--text); font-size: 13.5px; padding: 7px 8px; }
+  .cmdbox input::placeholder { color: var(--text-3); }
+  .cmdbox .up { width: 27px; height: 27px; border-radius: 50%; background: var(--accent); color: #0a0f04; display: grid; place-items: center; flex: none; }
+  .palette {
+    position: absolute; left: 0; right: 0; bottom: calc(100% + 8px);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
+    border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 -14px 40px rgba(0,0,0,0.5);
+    max-height: 320px; overflow-y: auto;
+    display: none;
+  }
+  .palette.open { display: block; }
+  .palette__group { padding: 9px 12px 4px; font-family: var(--mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); }
+  .cmditem { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent; border: 0; padding: 9px 12px; cursor: pointer; border-radius: 6px; }
+  .cmditem:hover, .cmditem.sel { background: color-mix(in srgb, var(--text) 6%, transparent); }
+  .cmditem .ic { width: 15px; height: 15px; flex: none; color: var(--accent); }
+  .cmditem .ic svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .cmditem .cmd { font-family: var(--mono); font-size: 11px; color: var(--text); flex: none; }
+  .cmditem .desc { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmditem .who { margin-left: auto; font-family: var(--mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); flex: none; }
+
+  .edu {
+    max-width: 640px; margin: 14px auto 0;
+    border: 1px dashed var(--accent); border-radius: 10px; background: var(--accent-wash);
+    padding: 13px 14px; display: none; animation: rise 240ms var(--ease) both;
+  }
+  .edu.open { display: block; }
+  .edu__head { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+  .edu__head .ic { width: 16px; height: 16px; color: var(--accent); }
+  .edu__head .ic svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .edu__head b { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); font-weight: 400; }
+  .edu p { font-size: 12.5px; line-height: 1.55; color: var(--text); margin-bottom: 8px; }
+  .edu .eg { font-family: var(--mono); font-size: 10px; color: var(--text-2); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; display: inline-block; }
+
+  /* the hand-off: curator drives the canvas with archivist vocabulary */
+  .handoff { border: 1px solid var(--border); border-radius: 12px; background: var(--bg); overflow: hidden; }
+  .handoff__bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
+  .sortbtn {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    background: transparent; color: var(--text-2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 12px 7px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+  }
+  .sortbtn:hover { color: var(--text); border-color: var(--border-strong); }
+  .sortbtn.on { background: var(--accent-wash); border-color: var(--accent); color: var(--text); }
+  .sortbtn .ic { width: 12px; height: 12px; color: var(--accent); }
+  .sortbtn .ic svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+  .handnote { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); }
+  .handnote .ic { width: 12px; height: 12px; color: var(--accent); }
+  .handnote .ic svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .sortstage { position: relative; height: 380px; }
+  .sortcard { position: absolute; width: 64px; border-radius: 5px; border: 1px solid var(--border-strong); overflow: hidden; transition: left 950ms var(--ease), top 950ms var(--ease); }
+  .sortcard img { width: 100%; height: 64px; object-fit: cover; display: block; }
+  .sortcard i { display: block; height: 4px; }
+  .sortlegend { position: absolute; left: 12px; bottom: 10px; font-family: var(--mono); font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); }
+
+  /* save-a-folder guided flow */
+  .saveflow { border: 1px solid var(--border); border-radius: 12px; background: var(--bg); padding: 18px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+  .savebtns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .savebtn {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    background: var(--surface); color: var(--text-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px 9px; cursor: pointer;
+  }
+  .savebtn:hover { color: var(--text); border-color: var(--accent); }
+  .savebtn .ic { width: 14px; height: 14px; color: var(--accent); }
+  .savebtn .ic svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .saveout { display: flex; flex-direction: column; gap: 9px; }
+  .saverow { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 10.5px; color: var(--text-2); animation: rise 260ms var(--ease) both; }
+  .saverow .ic { width: 15px; height: 15px; color: var(--accent); }
+  .saverow .ic svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .saverow .pixslot { width: 14px; height: 14px; }
+
+
+  /* talk surface */
+  .talkwrap { border: 1px solid var(--border); border-radius: 12px; background: var(--bg); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .talk { max-height: 460px; min-height: 300px; }
+  .cmdbox { position: relative; max-width: none; }
+  .ctarow { display: flex; flex-wrap: wrap; gap: 8px; align-self: stretch; animation: rise 240ms var(--ease) both; }
+  .talkcta {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; cursor: pointer; text-align: left;
+    transition: border-color 180ms var(--ease), opacity 180ms var(--ease), background 180ms var(--ease);
+  }
+  .talkcta:hover { border-color: var(--accent); }
+  .talkcta .ic { width: 16px; height: 16px; color: var(--accent); flex: none; }
+  .talkcta .ic svg, .ic svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .talkcta__body { display: flex; flex-direction: column; gap: 1px; }
+  .talkcta__body b { font-size: 12.5px; font-weight: 400; color: var(--text); }
+  .talkcta__body small { font-family: var(--mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+  .talkcta.dim { opacity: 0.35; pointer-events: none; }
+  .talkcta.picked { border-color: var(--accent); background: var(--accent-wash); opacity: 1; }
+  .ic--13 { width: 13px; height: 13px; display: inline-grid; vertical-align: -2px; }
+  .ic--15 { width: 15px; height: 15px; display: inline-grid; }
+  .ic--16 { width: 16px; height: 16px; display: inline-grid; color: var(--accent); }
+
+  /* timeline panel, rendered inline in the conversation */
+  .tlpanel { align-self: stretch; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 8px 0 4px; animation: rise 240ms var(--ease) both; max-height: 260px; overflow-y: auto; }
+  .tlpanel__filters { display: flex; gap: 5px; padding: 4px 12px 9px; border-bottom: 1px solid var(--border); margin-bottom: 4px; position: sticky; top: 0; background: var(--surface); }
+  .tlchip { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); background: transparent; border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px 4px; cursor: pointer; }
+  .tlchip.on { color: var(--text); background: var(--surface-2); }
+  .c-you { color: var(--text); } .c-mediamanager { color: #4ecb8f; } .c-curator2 { color: #b06ee0; }
+
+  /* option cards: the clean save choice */
+  .optcards { display: flex; gap: 8px; align-self: stretch; animation: rise 240ms var(--ease) both; flex-wrap: wrap; }
+  .optcard {
+    flex: 1; min-width: 150px;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 7px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 14px; cursor: pointer; text-align: left;
+    transition: border-color 180ms var(--ease), opacity 180ms var(--ease), background 180ms var(--ease);
+  }
+  .optcard:hover { border-color: var(--accent); }
+  .optcard .ic { width: 18px; height: 18px; color: var(--accent); }
+  .optcard b { font-size: 12.5px; font-weight: 400; color: var(--text); }
+  .optcard small { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); line-height: 1.5; }
+  .optcard.dim { opacity: 0.35; pointer-events: none; }
+  .optcard.picked { border-color: var(--accent); background: var(--accent-wash); opacity: 1; }
+
+  /* save outcomes: quiet rows, icon + sentence, nothing else */
+  .saveout { display: flex; flex-direction: column; gap: 8px; align-self: stretch; }
+  .saverow { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-2); animation: rise 260ms var(--ease) both; }
+  .saverow .ic { color: var(--accent); flex: none; }
+  .saverow b { color: var(--text); font-weight: 400; }
+
+  /* 04c folder rows */
+  .saveflow { gap: 10px; }
+  .frow2-folder { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 11px 14px; font-size: 13px; align-self: stretch; max-width: 560px; }
+  .frow2-folder .fcount { font-family: var(--mono); font-size: 10px; color: var(--text-3); }
+  .savecta {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    background: transparent; color: var(--text-2); border: 1px solid var(--border); border-radius: 7px;
+    padding: 7px 11px 6px; cursor: pointer;
+  }
+  .savecta:hover { color: var(--text); border-color: var(--accent); }
+  .savecta .ic { color: var(--accent); }
+  #ctxsaveout { display: flex; flex-direction: column; gap: 10px; align-self: stretch; max-width: 560px; }
+
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <h1>Agentic Atlas — sandbox</h1>
+  <p>Three layers of the agentic experience, all runnable mock: the CONVERSATION (an agent that acts on the field with visible tool calls and staged proposals), the AGENT LIBRARY (the roster, what each may touch, and how much autonomy it holds), and the REVIEW LAYER (proposals you accept or reject, plus the activity ledger). Press play on the conversation.</p>
+</div>
+
+<div class="tabs">
+  <button class="tabbtn on" data-tab="high">01 · High-level</button>
+  <button class="tabbtn" data-tab="dash">02 · In the dashboard</button>
+  <button class="tabbtn" data-tab="crew">03 · Agents at work</button>
+  <button class="tabbtn" data-tab="arch">04 · One agent, three archetypes</button>
+</div>
+
+<div class="tabview on" id="tab-high">
+<!-- ================= 1 · conversation ================= -->
+<div class="section">
+  <div class="section__head"><span class="v">01</span><h2>The conversation acts</h2><p>every tool call is visible · the field responds live · changes are staged, not seized</p></div>
+  <div class="demo">
+    <div class="chatcol">
+      <div class="chatcol__head">
+        <span class="topic" id="topic">Discovery</span>
+        <button class="replay" id="replay">▶ Play demo</button>
+      </div>
+      <div class="thread" id="thread"></div>
+      <div class="composer">
+        <input placeholder="Ask the field for anything…" id="composerInput" />
+        <button class="send" aria-label="Send"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg></button>
+      </div>
+    </div>
+    <div class="fieldcol" id="fieldcol">
+      <div class="fieldcol__hud"><span class="pill"><b id="poolN">925</b>&nbsp;media</span><span class="pill" id="fieldstate">field · at rest</span></div>
+      <div class="agentcursor" id="cursor"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 2 · agent library ================= -->
+<div class="section">
+  <div class="section__head"><span class="v">02</span><h2>Agent library</h2><p>the roster · autonomy is a setting, not a default · every agent lists exactly which tools it may touch</p></div>
+  <div class="roster" id="roster"></div>
+</div>
+
+<!-- ================= 3 · proposals + activity ================= -->
+<div class="section">
+  <div class="section__head"><span class="v">03</span><h2>The review layer</h2><p>agents want, you decide · everything they did or proposed is one ledger</p></div>
+  <div class="twocol">
+    <div class="panel">
+      <div class="panel__head"><span class="mono-label" style="color:var(--text-2)">Proposals · overnight</span><span class="mono-xs" style="color:var(--text-3)">4 pending</span></div>
+      <div id="proposals"></div>
+    </div>
+    <div class="panel">
+      <div class="panel__head"><span class="mono-label" style="color:var(--text-2)">Activity ledger</span><span class="mono-xs" style="color:var(--text-3)">last 24h</span></div>
+      <div class="feed" id="feed"></div>
+    </div>
+  </div>
+</div>
+
+
+</div><!-- /tab-high -->
+
+<div class="tabview" id="tab-dash">
+  <div class="dash">
+    <div class="section__head" style="max-width:1400px;margin:0 auto 14px;">
+      <span class="v">02</span><h2>The agent at work, in the real dashboard</h2>
+      <p>real chrome, real images from the library</p>
+      <button class="replay" id="dreplay" style="margin-left:auto">▶ Play</button>
+    </div>
+    <div class="dash__frame">
+      <aside class="dsb">
+        <div class="dsb__brand"><img src="/icon.svg" alt="" />Atlas</div>
+        <div class="dsb__scroll">
+          <div>
+            <div class="dsb__title">Library</div>
+            <nav class="dnav">
+              <a class="on"><svg viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.8"/><circle cx="3.5" cy="12" r="1.8"/><circle cx="12.5" cy="12" r="1.8"/><path d="M7 5 4.5 10.3M9 5l2.5 5.3M5.3 12h5.4"/></svg>Network</a>
+              <a><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>Gallery</a>
+              <a><svg viewBox="0 0 16 16"><path d="M8 1.5 9.5 6 14 8l-4.5 2L8 14.5 6.5 10 2 8l4.5-2Z"/></svg>Analyze</a>
+            </nav>
+          </div>
+          <div>
+            <div class="dsb__title">Folders</div>
+            <div class="dfolder">□ Culture Is Our Busin…<span class="n">925</span></div>
+            <div id="dnewfolder"></div>
+          </div>
+        </div>
+        <div class="dsb__foot">
+          <div class="dstat"><span>analyzed</span><b>22 / 925</b></div>
+          <div class="dstat"><span>connections</span><b>4133</b></div>
+          <div class="dstat"><span>size</span><b>0.47 GB</b></div>
+        </div>
+      </aside>
+      <div class="dwork">
+        <header class="dtopbar">
+          <h3>Network</h3><span class="pill"><b id="dpool">925</b>&nbsp;media</span>
+          <span class="pill" id="dagentstate" style="display:none;align-items:center;gap:7px"><span class="glyph" id="railglyph"></span>agent working</span>
+          <div class="spacer"></div><div class="dswitch"></div>
+        </header>
+        <div class="drail">
+          <div class="dseg"><span class="on">Search</span><span>Prompt</span></div>
+          <span class="dcat">Artist <i>▾</i></span><span class="dcat">Style <i>▾</i></span>
+          <span class="dcat">Subject <i>▾</i></span><span class="dcat">Mood <i>▾</i></span>
+          <span class="dcat">Color <i>▾</i></span><span class="dcat">Tune <i>▾</i></span>
+          <span class="dinfo">i</span>
+        </div>
+        <div class="dstage" id="dstage">
+          <svg class="dwires" id="dwires"></svg>
+          <div class="dcursor" id="dcursor"></div>
+          <div class="dpanel" id="dpanel" style="display:none">
+            <div class="dpanel__head">
+              <span class="dpanel__topic" id="dtopic">Conversation</span>
+              <button class="replay" style="padding:5px 8px 4px">Close</button>
+            </div>
+            <div class="thread" id="dthread" style="max-height:330px"></div>
+            <div class="dcomposer">
+              <span class="plus">+</span>
+              <div class="txt" id="dtxt"><span class="ph">Describe what you are hunting for…</span></div>
+              <span class="up"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- /tab-dash -->
+
+
+<div class="tabview" id="tab-crew">
+  <div class="section" style="max-width:1400px">
+    <div class="section__head">
+      <span class="v">03</span><h2>Each agent, its own screen</h2>
+      <p>separate subtasks, one shared timeline · press play on any screen</p>
+    </div>
+  </div>
+  <div class="crew">
+    <div class="crew__left">
+      <div class="crew__tabs" id="crewtabs"></div>
+      <div id="crewscreens" style="display:flex;flex-direction:column;flex:1"></div>
+    </div>
+    <div class="crew__right">
+      <div class="panel__head"><span class="mono-label" style="color:var(--text-2)">Timeline</span><span class="mono-xs" style="color:var(--text-3)" id="tlclock">03:00</span></div>
+      <div class="tl" id="tl"></div>
+    </div>
+  </div>
+</div>
+
+
+<div class="tabview" id="tab-arch">
+  <div class="section" style="max-width:1400px">
+    <div class="section__head">
+      <span class="v">04</span><h2>One agent, three archetypes</h2>
+      <p>one brain routes intent · talk to it, tap a CTA, or type "/" — same registry</p>
+    </div>
+  </div>
+  <div class="arch">
+
+    <div class="archmap">
+      <div class="archmap__brain"><span class="pixhead" data-brainpix></span><b>Atlas</b><span>one loop · one working set · one ledger</span></div>
+      <div class="archmap__route">conversation · CTAs · "/" commands · contextual triggers — four doors, one registry</div>
+      <div class="archmap__cols">
+        <div class="archcol">
+          <div class="archcol__head"><span class="archcol__glyph" data-pix="scan"></span><div><div class="archcol__name">Archivist</div><span class="archcol__role">knows what things are · proposes</span></div></div>
+          <ul><li>tag_image</li><li>categorize</li><li>mint_keyword</li><li>meta_tags</li><li>dedupe</li><li>timeline</li></ul>
+        </div>
+        <div class="archcol">
+          <div class="archcol__head"><span class="archcol__glyph" data-pix="swap"></span><div><div class="archcol__name">Curator</div><span class="archcol__role">decides what belongs together · acts on canvas</span></div></div>
+          <ul><li>find</li><li>sort_by</li><li>filter</li><li>sequence</li><li>build_collection</li></ul>
+        </div>
+        <div class="archcol">
+          <div class="archcol__head"><span class="archcol__glyph" data-pix="drop"></span><div><div class="archcol__name">Media Manager</div><span class="archcol__role">puts things where they live · proposes</span></div></div>
+          <ul><li>save_folder</li><li>create_folder</li><li>export_local</li><li>collect_source</li><li>report_paths</li></ul>
+        </div>
+      </div>
+      <div class="archmap__foot">hand-off = <b>shared data</b>: the Archivist writes the vocabulary · the Curator sorts with it · the Manager files what the Curator built</div>
+    </div>
+
+    <div>
+      <div class="section__head" style="margin-bottom:10px"><span class="v">04a</span><h2>Talk to Atlas</h2><p>conversational and guided · CTAs for everyone, "/" for the fast hands</p></div>
+      <div class="talkwrap">
+        <div class="thread talk" id="talkthread"></div>
+        <div class="cmdbox">
+          <div class="palette" id="palette"></div>
+          <input id="cmdinput" placeholder='Ask anything — or type "/" for commands…' autocomplete="off" />
+          <span class="up"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg></span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section__head" style="margin-bottom:10px"><span class="v">04b</span><h2>The hand-off: Curator sorts with the Archivist's vocabulary</h2><p>real images, real palettes · also reachable from the conversation above</p></div>
+      <div class="handoff">
+        <div class="handoff__bar" id="sortbar">
+          <span class="mono-xs" style="color:var(--text-3)">/curate sort_by</span>
+        </div>
+        <div class="sortstage" id="sortstage"><span class="sortlegend" id="sortlegend">scattered · as found</span></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section__head" style="margin-bottom:10px"><span class="v">04c</span><h2>Contextual trigger</h2><p>a folder's own save button opens the same guided flow — no commands to learn</p></div>
+      <div class="saveflow">
+        <div class="frow2-folder">
+          <span class="ic ic--16" data-ic="folder"></span>
+          <span>Solitude</span><span class="fcount">5</span>
+          <button class="savecta" data-ctxsave="Solitude|5"><span class="ic ic--13" data-ic="save"></span>Save…</button>
+        </div>
+        <div class="frow2-folder">
+          <span class="ic ic--16" data-ic="folder"></span>
+          <span>Philosophy</span><span class="fcount">47</span>
+          <button class="savecta" data-ctxsave="Philosophy|47"><span class="ic ic--13" data-ic="save"></span>Save…</button>
+        </div>
+        <div id="ctxsaveout"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<script>
+/* ---------------- 1 · scripted conversation ---------------- */
+const thread = document.getElementById("thread");
+const poolN = document.getElementById("poolN");
+const fieldstate = document.getElementById("fieldstate");
+const fieldcol = document.getElementById("fieldcol");
+const cursor = document.getElementById("cursor");
+const topicEl = document.getElementById("topic");
+
+/* mock field cards */
+const cards = [];
+(function seedField() {
+  const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(1234);
+  for (let i = 0; i < 26; i++) {
+    const d = document.createElement("div");
+    d.className = "mcard";
+    const w = 44 + rnd() * 40;
+    d.style.left = (4 + rnd() * 86) + "%";
+    d.style.top = (8 + rnd() * 78) + "%";
+    d.style.width = w + "px";
+    d.style.height = w * (1.15 + rnd() * 0.4) + "px";
+    fieldcol.appendChild(d);
+    cards.push(d);
+  }
+})();
+
+function el(html) {
+  const t = document.createElement("template");
+  t.innerHTML = html.trim();
+  return t.content.firstChild;
+}
+function push(node) { thread.appendChild(node); thread.scrollTop = thread.scrollHeight; return node; }
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const gearSvg = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6 11 5M5 11l-1.4 1.4"/></svg>';
+
+async function tool(label, detail, work, result) {
+  const row = push(el('<div class="tool running">' + gearSvg + '<span><b>' + label + '</b>(' + detail + ')</span><span class="res">running…</span></div>'));
+  await wait(work);
+  row.classList.remove("running");
+  row.querySelector(".res").textContent = result;
+  return row;
+}
+
+async function agentSays(text, ms = 500) {
+  await wait(ms);
+  push(el('<div class="msg agent"><span class="who">atlas</span>' + text + '</div>'));
+}
+
+async function moveCursor(pct) {
+  cursor.style.opacity = "1";
+  cursor.style.left = pct[0] + "%";
+  cursor.style.top = pct[1] + "%";
+  await wait(820);
+}
+
+let playing = false;
+async function playDemo() {
+  if (playing) return;
+  playing = true;
+  thread.innerHTML = "";
+  topicEl.textContent = "Discovery";
+  poolN.textContent = "925";
+  fieldstate.textContent = "field · at rest";
+  cards.forEach((c) => { c.classList.remove("gone", "kept"); });
+  cursor.style.opacity = "0";
+
+  push(el('<div class="msg user"><span class="who">you</span>gather the loneliest images in the archive and file the best of them</div>'));
+  topicEl.textContent = "the loneliest images";
+
+  await agentSays("Hunting through solitude, isolation and empty space, then ranking what carries your taste. Watch the field.", 800);
+
+  await tool("search_library", "“lonely, solitary, isolated, empty”", 1100, "47 hits · local, 0 tokens");
+  await tool("filter_by_terms", "mood: solitary · isolated", 900, "21 remain");
+  fieldstate.textContent = "field · re-forming";
+  await tool("set_field", "21 ids", 700, "field re-formed");
+  poolN.textContent = "21";
+  cards.forEach((c, i) => { if (i % 5 !== 0) c.classList.add("gone"); });
+
+  await tool("rank_by_taste", "21 candidates", 1200, "top 14 · fingerprints only");
+  await moveCursor([22, 30]);
+  cards[0].classList.add("kept");
+  await moveCursor([64, 52]);
+  cards[5].classList.add("kept");
+  await moveCursor([40, 74]);
+  cards[10].classList.add("kept");
+  cursor.style.opacity = "0";
+  poolN.textContent = "14";
+
+  await wait(400);
+  const prop = push(el(
+    '<div class="proposal"><div class="t">proposal · needs you</div>' +
+    '<p>Create the folder <b>Solitude</b> and file these 14 images into it. Nothing is written until you say so.</p>' +
+    '<div class="row"><button class="pbtn yes">Accept</button><button class="pbtn no">Reject</button></div></div>'
+  ));
+  prop.querySelector(".yes").onclick = async () => {
+    prop.querySelector(".row").innerHTML = '<span class="mono-xs" style="color:var(--accent)">accepted</span>';
+    await tool("create_collection", "“Solitude”", 600, "created");
+    await tool("add_to_collection", "14 ids → Solitude", 700, "filed · 14");
+    await agentSays("Filed. Two more sat just under the line — a night road and an empty chair. Want to see them?", 500);
+    playing = false;
+  };
+  prop.querySelector(".no").onclick = async () => {
+    prop.querySelector(".row").innerHTML = '<span class="mono-xs" style="color:var(--red)">rejected</span>';
+    await agentSays("Left everything untouched. The 14 are still on the field if you change your mind.", 400);
+    playing = false;
+  };
+}
+document.getElementById("replay").onclick = playDemo;
+document.getElementById("composerInput").addEventListener("keydown", (e) => { if (e.key === "Enter") playDemo(); });
+
+/* ---------------- 2 · agent library ---------------- */
+const AGENTS = [
+  {
+    glyph: "◍", name: "Discovery", auto: ["acts", "auto-acts"],
+    desc: "The conversation itself. Plans multi-step hunts, re-forms the field as it works, and stages anything that would change the library.",
+    tools: ["search_library", "filter_by_terms", "find_similar", "rank_by_taste", "set_field", "propose"],
+    status: ["on", "live · in this panel"], budget: "per-turn · ~2k tok", enabled: true,
+  },
+  {
+    glyph: "▤", name: "Librarian", auto: ["proposes", "auto-proposes"],
+    desc: "The overnight pass. Analyzes the un-analyzed, refines OCR classes, drafts folder structures and reasoned wires. Everything lands as proposals.",
+    tools: ["analyze_image", "classify_text", "propose", "tag_local"],
+    status: ["sched", "scheduled · 03:00"], budget: "40k tok/night", enabled: true,
+  },
+  {
+    glyph: "⌖", name: "Scout", auto: ["proposes", "auto-proposes"],
+    desc: "Watches sources you point it at — a folder, a URL list. Fingerprints arrivals, checks them against your taste, and proposes only what clears the bar.",
+    tools: ["ingest_file", "find_similar", "rank_by_taste", "propose"],
+    status: ["", "idle · no sources"], budget: "0 tok (local)", enabled: false,
+  },
+  {
+    glyph: "☍", name: "Choreographer", auto: ["acts", "auto-acts"],
+    desc: "Arranges the canvas. Clusters by lineage, draws wires that carry written reasons, and leaves an undo for every gesture it makes.",
+    tools: ["set_field", "arrange", "create_link", "annotate_link"],
+    status: ["", "idle · on demand"], budget: "~5k tok/run", enabled: true,
+  },
+  {
+    glyph: "▦", name: "Archivist", auto: ["proposes", "auto-proposes"],
+    desc: "Integrity. Finds true duplicates, broken files, orphaned tags and stale fingerprints; proposes the cleanup and never deletes on its own.",
+    tools: ["dedupe", "reindex", "propose"],
+    status: ["sched", "weekly · sunday"], budget: "0 tok (local)", enabled: true,
+  },
+  {
+    glyph: "◐", name: "Taste", auto: ["read-only", "auto-read"],
+    desc: "Learns your eye from keeps, removals and hand-drawn links. Never touches anything — it only ranks, and the other agents borrow its judgement.",
+    tools: ["rank_by_taste", "taste_report"],
+    status: ["on", "always on · passive"], budget: "0 tok (local)", enabled: true,
+  },
+];
+const roster = document.getElementById("roster");
+for (const a of AGENTS) {
+  const card = el(
+    '<div class="acard">' +
+      '<div class="acard__top"><div class="acard__glyph">' + a.glyph + '</div>' +
+      '<div class="acard__name">' + a.name + '</div>' +
+      '<span class="acard__auto ' + a.auto[1] + '">' + a.auto[0] + '</span></div>' +
+      '<div class="acard__desc">' + a.desc + '</div>' +
+      '<div class="acard__tools">' + a.tools.map((t) => '<span class="tchip">' + t + '</span>').join("") + '</div>' +
+      '<div class="acard__foot">' +
+        '<span class="status"><span class="dot ' + a.status[0] + '"></span>' + a.status[1] + '</span>' +
+        '<span class="budget">' + a.budget + '</span>' +
+        '<button class="aswitch' + (a.enabled ? " on" : "") + '" role="switch" aria-checked="' + a.enabled + '" aria-label="Enable ' + a.name + '"></button>' +
+      '</div>' +
+    '</div>'
+  );
+  card.querySelector(".aswitch").onclick = (e) => e.currentTarget.classList.toggle("on");
+  roster.appendChild(card);
+}
+
+/* ---------------- 3 · proposals + ledger ---------------- */
+const PROPOSALS = [
+  ["librarian", "Create <b>Philosophy</b> and file 47 scattered text images", "quotes · essays · Weil, Blanchot, Rilke among them"],
+  ["librarian", "Merge folders <b>Type</b> and <b>Typography</b>", "9 images overlap · names collide"],
+  ["archivist", "Remove 3 true duplicates", "byte-identical · originals stay untouched"],
+  ["librarian", "Sever 6 weak wires", "similarity under 74% · all unreviewed"],
+];
+const propWrap = document.getElementById("proposals");
+for (const [from, what, sub] of PROPOSALS) {
+  const row = el(
+    '<div class="prow"><span class="prow__from">' + from + '</span>' +
+    '<span class="prow__what">' + what + '<small>' + sub + '</small></span>' +
+    '<span class="prow__stamp a">done</span><span class="prow__stamp r">dismissed</span>' +
+    '<button class="pbtn yes">Accept</button><button class="pbtn no">Reject</button></div>'
+  );
+  row.querySelector(".yes").onclick = () => row.classList.add("done", "accepted");
+  row.querySelector(".no").onclick = () => row.classList.add("done", "rejected");
+  propWrap.appendChild(row);
+}
+
+const FEED = [
+  ["03:00", "librarian", "woke · budget 40k tokens"],
+  ["03:04", "librarian", "analyzed 22 images · 9.1k tok"],
+  ["03:11", "librarian", "classified 31 OCR texts · 4.2k tok"],
+  ["03:19", "taste", "re-ranked archive · 0 tok"],
+  ["03:20", "librarian", "staged 4 proposals · slept"],
+  ["09:12", "you", "accepted · merge Type + Typography"],
+  ["12:40", "discovery", "filed 14 → <b>Solitude</b> (accepted live)"],
+  ["14:02", "choreographer", "arranged 60 cards by lineage · undo kept"],
+  ["18:55", "archivist", "weekly integrity pass · clean"],
+];
+const feed = document.getElementById("feed");
+for (const [t, who, what] of FEED) {
+  feed.appendChild(el('<div class="frow2"><time>' + t + '</time><b>' + who + '</b><span>' + what + '</span></div>'));
+}
+
+/* ---------------- tabs ---------------- */
+document.querySelectorAll(".tabbtn").forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll(".tabbtn").forEach((x) => x.classList.toggle("on", x === b));
+    document.getElementById("tab-high").classList.toggle("on", b.dataset.tab === "high");
+    document.getElementById("tab-dash").classList.toggle("on", b.dataset.tab === "dash");
+    document.getElementById("tab-crew").classList.toggle("on", b.dataset.tab === "crew");
+    document.getElementById("tab-arch").classList.toggle("on", b.dataset.tab === "arch");
+  };
+});
+
+/* ---------------- the dither micro-animation (GlyphLoader port) ---------------- */
+const GLYPH = [[0,0,1,0,0],[0,1,1,1,0],[1,1,1,1,1],[0,1,1,1,0],[0,0,1,0,0]];
+function ghash(a, b) {
+  let h = (a * 374761393 + b * 668265263) >>> 0;
+  h = (h ^ (h >>> 13)) * 1274126177;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+const easeIO = (x) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
+function mountGlyph(host) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.style.cssText = "width:100%;height:100%;color:var(--accent)";
+  const rects = [];
+  const CELL = 17, PAD = (100 - CELL * 5) / 2;
+  for (let i = 0; i < 25; i++) {
+    const r = document.createElementNS(NS, "rect");
+    r.setAttribute("x", PAD + (i % 5) * CELL + 1.4);
+    r.setAttribute("y", PAD + Math.floor(i / 5) * CELL + 1.4);
+    r.setAttribute("width", CELL - 2.8);
+    r.setAttribute("height", CELL - 2.8);
+    r.setAttribute("rx", 2.6);
+    r.setAttribute("fill", "currentColor");
+    r.setAttribute("fill-opacity", "0.06");
+    svg.appendChild(r);
+    rects.push(r);
+  }
+  host.appendChild(svg);
+  const t0 = performance.now();
+  let raf = 0;
+  (function tick(now) {
+    raf = requestAnimationFrame(tick);
+    const t = now - t0;
+    const ph = (t % 2300) / 2300;
+    const tri = ph < 0.5 ? ph * 2 : (1 - ph) * 2;
+    const rp = easeIO(Math.min(1, Math.max(0, (tri - 0.12) / 0.72)));
+    const step = Math.floor(t / 95);
+    rects.forEach((r, i) => {
+      const on = GLYPH[Math.floor(i / 5)][i % 5] === 1;
+      const noise = 0.06 + ghash(i, step) * 0.86;
+      const target = on ? 1 : 0.05;
+      r.setAttribute("fill-opacity", (noise + (target - noise) * rp).toFixed(3));
+    });
+  })(t0);
+  return () => cancelAnimationFrame(raf);
+}
+
+/* ---------------- dashboard simulation ---------------- */
+const IDS = [50, 279, 524, 503, 100, 290, 458, 877, 96, 291, 618, 763, 538, 380, 97, 424, 214, 129];
+const KEEP = [0, 4, 7, 11, 14];
+const dstage = document.getElementById("dstage");
+const dwires = document.getElementById("dwires");
+const dcursor = document.getElementById("dcursor");
+const dpool = document.getElementById("dpool");
+const dpanel = document.getElementById("dpanel");
+const dthread = document.getElementById("dthread");
+const dtxt = document.getElementById("dtxt");
+const dtopic = document.getElementById("dtopic");
+const dagentstate = document.getElementById("dagentstate");
+const dcards = [];
+let dReady = false;
+
+function buildDash() {
+  if (dReady) return;
+  dReady = true;
+  const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(77);
+  const W = dstage.clientWidth, H = dstage.clientHeight;
+  const pts = [];
+  IDS.forEach((id, i) => {
+    const card = document.createElement("div");
+    card.className = "dcard";
+    const x = 430 + rnd() * (W - 560), y = 20 + rnd() * (H - 200);
+    if (i % 3 === 0 && i > 2) { card.style.left = (40 + rnd() * 330) + "px"; card.style.top = (330 + rnd() * (H - 480)) + "px"; }
+    else { card.style.left = x + "px"; card.style.top = y + "px"; }
+    card.innerHTML = '<div class="dcard__head">' + String(id).padStart(8, "0") + '.JPG</div><img src="/api/img/' + id + '" alt="" loading="lazy" />';
+    dstage.appendChild(card);
+    dcards.push(card);
+  });
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      const centers = dcards.map((c) => {
+        const b = c.getBoundingClientRect(), s = dstage.getBoundingClientRect();
+        return { x: b.left - s.left + b.width / 2, y: b.top - s.top + b.height / 2 };
+      });
+      const rnd2 = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(31);
+      for (let i = 0; i < 16; i++) {
+        const a = centers[Math.floor(rnd2() * centers.length)];
+        const b = centers[Math.floor(rnd2() * centers.length)];
+        if (a === b) continue;
+        const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        const k = Math.max(40, Math.abs(b.x - a.x) / 2);
+        p.setAttribute("d", "M" + a.x + " " + a.y + " C" + (a.x + k) + " " + a.y + " " + (b.x - k) + " " + b.y + " " + b.x + " " + b.y);
+        dwires.appendChild(p);
+      }
+    }, 900);
+  });
+}
+
+function delEl(html) {
+  const t = document.createElement("template");
+  t.innerHTML = html.trim();
+  return t.content.firstChild;
+}
+function dpush(node) { dthread.appendChild(node); dthread.scrollTop = dthread.scrollHeight; return node; }
+const dwait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function dtool(label, detail, work, result) {
+  const row = dpush(delEl('<div class="tool running"><span class="glyph"></span><span><b>' + label + '</b>(' + detail + ')</span><span class="res">running\u2026</span></div>'));
+  const stop = mountGlyph(row.querySelector(".glyph"));
+  await dwait(work);
+  stop();
+  row.querySelector(".glyph").innerHTML = "\u2713";
+  row.querySelector(".glyph").style.cssText = "color:var(--accent);font-family:var(--mono);font-size:11px;width:15px;text-align:center";
+  row.classList.remove("running");
+  row.querySelector(".res").textContent = result;
+}
+
+async function dcursorTo(card) {
+  const b = card.getBoundingClientRect(), s = dstage.getBoundingClientRect();
+  dcursor.style.opacity = "1";
+  dcursor.style.left = (b.left - s.left + b.width / 2 - 8) + "px";
+  dcursor.style.top = (b.top - s.top + b.height / 2 - 8) + "px";
+  await dwait(830);
+}
+
+let dPlaying = false;
+async function playDash() {
+  if (dPlaying) return;
+  dPlaying = true;
+  buildDash();
+  dthread.innerHTML = "";
+  document.getElementById("dnewfolder").innerHTML = "";
+  dtopic.textContent = "Conversation";
+  dtopic.classList.remove("hot");
+  dpool.textContent = "925";
+  dcards.forEach((c) => c.classList.remove("gone", "kept"));
+  dwires.querySelectorAll("path").forEach((p) => { p.classList.remove("faded", "drawn"); });
+  dcursor.style.opacity = "0";
+  dpanel.style.display = "flex";
+
+  /* type the ask */
+  const ask = "gather the loneliest images and file the best of them";
+  dtxt.innerHTML = '<span class="caret"></span>';
+  for (let i = 1; i <= ask.length; i++) {
+    dtxt.innerHTML = ask.slice(0, i) + '<span class="caret"></span>';
+    await dwait(26);
+  }
+  await dwait(350);
+  dtxt.innerHTML = '<span class="ph">Describe what you are hunting for\u2026</span>';
+  dpush(delEl('<div class="msg user"><span class="who">you</span>' + ask + '</div>'));
+  dtopic.textContent = "the loneliest images";
+  dtopic.classList.add("hot");
+
+  /* thinking with the micro-animation */
+  dagentstate.style.display = "inline-flex";
+  const railStop = mountGlyph(document.getElementById("railglyph"));
+  const think = dpush(delEl('<div class="msg agent"><span class="who">atlas</span><span class="thinkrow"><span class="glyph"></span>sifting the archive</span></div>'));
+  const thinkStop = mountGlyph(think.querySelector(".glyph"));
+  await dwait(2200);
+  thinkStop();
+  think.remove();
+  dpush(delEl('<div class="msg agent"><span class="who">atlas</span>Hunting through solitude and empty space, then keeping what carries your taste.</div>'));
+
+  await dtool("search_library", "\u201clonely, solitary, empty\u201d", 1300, "47 hits \u00b7 0 tok");
+  await dtool("filter_by_terms", "mood: solitary", 1000, "21 remain");
+
+  /* the field responds */
+  dwires.querySelectorAll("path").forEach((p) => p.classList.add("faded"));
+  dcards.forEach((c, i) => { if (!KEEP.includes(i)) c.classList.add("gone"); });
+  dpool.textContent = "21";
+  await dtool("rank_by_taste", "21 candidates", 1300, "top 5 \u00b7 local");
+  dpool.textContent = "5";
+
+  /* the agent visits its picks and wires them */
+  const kept = KEEP.map((i) => dcards[i]);
+  for (const c of kept.slice(0, 3)) { await dcursorTo(c); c.classList.add("kept"); }
+  kept.slice(3).forEach((c) => c.classList.add("kept"));
+  /* draw reasoned wires between kept cards */
+  const s = dstage.getBoundingClientRect();
+  for (let i = 0; i < kept.length - 1; i++) {
+    const a = kept[i].getBoundingClientRect(), b = kept[i + 1].getBoundingClientRect();
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const ax = a.left - s.left + a.width / 2, ay = a.top - s.top + a.height / 2;
+    const bx = b.left - s.left + b.width / 2, by = b.top - s.top + b.height / 2;
+    const k = Math.max(40, Math.abs(bx - ax) / 2);
+    p.setAttribute("d", "M" + ax + " " + ay + " C" + (ax + k) + " " + ay + " " + (bx - k) + " " + by + " " + bx + " " + by);
+    p.classList.add("drawn");
+    dwires.appendChild(p);
+    await dwait(280);
+  }
+  dcursor.style.opacity = "0";
+  railStop();
+  dagentstate.style.display = "none";
+
+  /* proposal */
+  const prop = dpush(delEl(
+    '<div class="proposal"><div class="t">proposal \u00b7 needs you</div>' +
+    '<p>Create <b>Solitude</b> and file these 5. The wires I drew carry my reasons \u2014 hover them any time.</p>' +
+    '<div class="row"><button class="pbtn yes">Accept</button><button class="pbtn no">Reject</button></div></div>'
+  ));
+  prop.querySelector(".yes").onclick = async () => {
+    prop.querySelector(".row").innerHTML = '<span class="mono-xs" style="color:var(--accent)">accepted</span>';
+    await dtool("create_collection", "\u201cSolitude\u201d", 700, "created");
+    await dtool("add_to_collection", "5 ids \u2192 Solitude", 800, "filed \u00b7 5");
+    document.getElementById("dnewfolder").innerHTML = '<div class="dfolder new">\u25a1 Solitude<span class="n">5</span></div>';
+    dpush(delEl('<div class="msg agent"><span class="who">atlas</span>Filed. Solitude is in your folders \u2014 the field keeps the five until you release it.</div>'));
+    dPlaying = false;
+  };
+  prop.querySelector(".no").onclick = () => {
+    prop.querySelector(".row").innerHTML = '<span class="mono-xs" style="color:var(--red)">rejected</span>';
+    dpush(delEl('<div class="msg agent"><span class="who">atlas</span>Left untouched.</div>'));
+    dPlaying = false;
+  };
+}
+document.getElementById("dreplay").onclick = playDash;
+
+
+/* ================= 3rd tab: the crew ================= */
+
+/* generic 5x5 pixel engine: mount a grid, drive it with a tick(rects, now, step) */
+function mountPix(host, tick) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.style.cssText = "width:100%;height:100%;color:var(--accent)";
+  const rects = [];
+  const CELL = 17, PAD = (100 - CELL * 5) / 2;
+  for (let i = 0; i < 25; i++) {
+    const r = document.createElementNS(NS, "rect");
+    r.setAttribute("x", PAD + (i % 5) * CELL + 1.4);
+    r.setAttribute("y", PAD + Math.floor(i / 5) * CELL + 1.4);
+    r.setAttribute("width", CELL - 2.8); r.setAttribute("height", CELL - 2.8);
+    r.setAttribute("rx", 2.6); r.setAttribute("fill", "currentColor"); r.setAttribute("fill-opacity", "0.06");
+    svg.appendChild(r); rects.push(r);
+  }
+  host.appendChild(svg);
+  let raf = 0;
+  const t0 = performance.now();
+  (function loop(now) {
+    raf = requestAnimationFrame(loop);
+    tick(rects, now - t0, Math.floor(now / 95));
+  })(t0);
+  return () => { cancelAnimationFrame(raf); svg.remove(); };
+}
+const px = (i) => ({ r: Math.floor(i / 5), c: i % 5 });
+const setop = (rect, v) => rect.setAttribute("fill-opacity", Math.max(0.03, Math.min(1, v)).toFixed(3));
+
+/* the Curator's three forms: plus -> filled diamond -> checkerboard */
+const PIX_FORMS = (() => {
+  const mk = (f) => Array.from({ length: 25 }, (_, i) => f(Math.floor(i / 5), i % 5));
+  return [
+    mk((r, c) => r === 2 || c === 2),
+    mk((r, c) => Math.abs(r - 2) + Math.abs(c - 2) <= 2),
+    mk((r, c) => (r + c) % 2 === 0),
+  ];
+})();
+
+/* micro-animation vocabulary — one verb per agent */
+const PIXMODES = {
+  /* librarian: a scan line sweeps the page, rows resolve behind it */
+  scan(rects, t, step) {
+    const sweep = (t % 1900) / 1900 * 7 - 1;
+    rects.forEach((r, i) => {
+      const { r: row } = px(i);
+      const behind = row < sweep;
+      const isLine = Math.abs(row - sweep) < 0.6;
+      const noise = 0.05 + ghash(i, step) * 0.5;
+      setop(r, isLine ? 1 : behind ? 0.75 : noise);
+    });
+  },
+  /* scout: a radar sweep around the perimeter, blips inside */
+  radar(rects, t, step) {
+    const ang = (t % 2200) / 2200 * Math.PI * 2;
+    rects.forEach((r, i) => {
+      const { r: row, c } = px(i);
+      const dx = c - 2, dy = row - 2;
+      const a = Math.atan2(dy, dx);
+      let d = a - ang; while (d < -Math.PI) d += Math.PI * 2; while (d > Math.PI) d -= Math.PI * 2;
+      const beam = Math.abs(d) < 0.5 && (dx || dy);
+      const blip = ghash(i, Math.floor(t / 700)) > 0.93;
+      setop(r, (dx === 0 && dy === 0) ? 0.9 : beam ? 0.85 : blip ? 0.7 : 0.07);
+    });
+  },
+  /* curator: FORMS — plus sign, filled diamond, checkerboard. Each shape
+     holds crisp, then migrates pixel-by-pixel into the next. */
+  swap(rects, t, step) {
+    const F = PIX_FORMS;
+    const T = 1600, u = (t % T) / T, k = Math.floor(t / T) % 3;
+    rects.forEach((r, i) => {
+      const cur = F[k][i], nxt = F[(k + 1) % 3][i];
+      let on = cur;
+      if (u >= 0.62 && cur !== nxt) {
+        const m = (u - 0.62) / 0.38;
+        on = m > ghash(i, k * 31 + 7) ? nxt : cur;
+      }
+      setop(r, on ? 0.95 : 0.05 + ghash(i, step) * 0.14);
+    });
+  },
+  /* archivist: two overlapping squares; the duplicate dissolves */
+  dedupe(rects, t, step) {
+    const ph = (t % 2400) / 2400;
+    const S1 = [0, 1, 5, 6], S2 = [18, 19, 23, 24], MID = [12];
+    rects.forEach((r, i) => {
+      const noise = 0.05 + ghash(i, step) * 0.3;
+      if (S1.includes(i)) setop(r, 0.95);
+      else if (S2.includes(i)) setop(r, ph < 0.5 ? 0.95 : Math.max(0.06, 0.95 - (ph - 0.5) * 2));
+      else if (MID.includes(i)) setop(r, ph < 0.5 ? 0.3 + ghash(i, step) * 0.5 : 0.06);
+      else setop(r, noise);
+    });
+  },
+  /* taste: a meter fills bottom-up, settles, empties */
+  meter(rects, t, step) {
+    const ph = (t % 2400) / 2400;
+    const fill = ph < 0.6 ? ph / 0.6 : 1;
+    const fade = ph > 0.85 ? (ph - 0.85) / 0.15 : 0;
+    rects.forEach((r, i) => {
+      const { r: row, c } = px(i);
+      if (c !== 2 && c !== 1 && c !== 3) { setop(r, 0.04 + ghash(i, step) * 0.08); return; }
+      const lit = (4 - row) < fill * 5;
+      setop(r, lit ? (0.9 - fade * 0.8) : 0.07 + ghash(i, step) * 0.2);
+    });
+  },
+  /* courier: a payload drops into a tray, again and again */
+  drop(rects, t, step) {
+    const ph = (t % 1600) / 1600;
+    const y = ph * 5.4 - 0.7;
+    const TRAY = [20, 21, 22, 23, 24, 15, 19];
+    rects.forEach((r, i) => {
+      const { r: row, c } = px(i);
+      const noise = 0.04 + ghash(i, step) * 0.15;
+      if (TRAY.includes(i)) { setop(r, 0.8); return; }
+      const isPayload = c === 2 && Math.abs(row - y) < 0.6 && row < 4;
+      setop(r, isPayload ? 1 : noise);
+    });
+  },
+};
+
+/* ---- crew data: division of labour, one screen each ---- */
+const CREW = [
+  { key: "librarian", glyph: "\u25a4", name: "Librarian", mode: "scan",
+    sub: "the overnight pass \u00b7 proposes only",
+    tasks: [["analyze", "the un-analyzed"], ["classify", "text into classes"], ["structure", "draft folders"]] },
+  { key: "scout", glyph: "\u2316", name: "Scout", mode: "radar",
+    sub: "watches sources \u00b7 proposes only",
+    tasks: [["watch", "folders and urls"], ["fingerprint", "every arrival"], ["gate", "by your taste"]] },
+  { key: "choreographer", glyph: "\u260d", name: "Choreographer", mode: "swap",
+    sub: "arranges the canvas \u00b7 acts, with undo",
+    tasks: [["cluster", "by lineage"], ["wire", "with reasons"], ["undo", "kept for all"]] },
+  { key: "archivist", glyph: "\u25a6", name: "Archivist", mode: "dedupe",
+    sub: "integrity \u00b7 proposes only",
+    tasks: [["dedupe", "true duplicates"], ["verify", "files and tags"], ["reindex", "stale prints"]] },
+  { key: "taste", glyph: "\u25d0", name: "Taste", mode: "meter",
+    sub: "your eye, learned \u00b7 read-only",
+    tasks: [["learn", "keeps and removals"], ["rank", "everything"], ["lend", "judgement to others"]] },
+  { key: "courier", glyph: "\u2913", name: "Courier", mode: "drop",
+    sub: "saves folders \u00b7 asks digital, local, or both",
+    tasks: [["mirror", "atlas folders"], ["export", "to disk"], ["report", "where things live"]] },
+];
+
+const IMGIDS = [50, 279, 524, 503, 100, 290, 458, 877, 96, 291, 618, 763, 538, 380, 97, 424];
+
+/* ---- timeline ---- */
+const tlEl = document.getElementById("tl");
+const tlClock = document.getElementById("tlclock");
+let tlMin = 180; /* 03:00 */
+function tlog(agent, what, tok) {
+  tlMin += 1 + Math.floor(Math.random ? 0 : 0); /* deterministic-ish */
+  tlMin += 2;
+  const hh = String(Math.floor(tlMin / 60)).padStart(2, "0");
+  const mm = String(tlMin % 60).padStart(2, "0");
+  tlClock.textContent = hh + ":" + mm;
+  const row = document.createElement("div");
+  row.className = "tlrow";
+  row.innerHTML = "<time>" + hh + ":" + mm + "</time><b class='c-" + agent + "'>" + agent + "</b><span>" + what + "</span>" + (tok ? "<span class='tok'>" + tok + "</span>" : "");
+  tlEl.appendChild(row);
+  tlEl.scrollTop = tlEl.scrollHeight;
+}
+
+/* ---- build tabs + screens ---- */
+const crewTabs = document.getElementById("crewtabs");
+const crewScreens = document.getElementById("crewscreens");
+const stopFns = {};
+
+CREW.forEach((a, idx) => {
+  const tab = document.createElement("button");
+  tab.className = "ctab" + (idx === 0 ? " on" : "");
+  tab.innerHTML = "<span class='g'>" + a.glyph + "</span>" + a.name;
+  tab.onclick = () => {
+    document.querySelectorAll(".ctab").forEach((t, i) => t.classList.toggle("on", i === idx));
+    document.querySelectorAll(".screen").forEach((s, i) => s.classList.toggle("on", i === idx));
+  };
+  crewTabs.appendChild(tab);
+
+  const sc = document.createElement("div");
+  sc.className = "screen" + (idx === 0 ? " on" : "");
+  sc.innerHTML =
+    "<div class='screen__head'>" +
+      "<div class='screen__pix' data-pix></div>" +
+      "<div><div class='screen__title'>" + a.name + "</div><div class='screen__sub'>" + a.sub + "</div></div>" +
+      "<div class='screen__tasks'>" + a.tasks.map(([k, v]) => "<span><b>" + k + "</b> \u00b7 " + v + "</span>").join("") + "</div>" +
+    "</div>" +
+    "<div class='screen__stage' data-stage></div>" +
+    "<div class='screen__foot'><button class='replay' data-play>\u25b6 Play " + a.name + "</button><span class='note' data-note>idle</span></div>";
+  crewScreens.appendChild(sc);
+
+  mountPix(sc.querySelector("[data-pix]"), PIXMODES[a.mode]);
+  sc.querySelector("[data-play]").onclick = () => runDemo(a.key, sc);
+});
+
+const dwaitc = (ms) => new Promise((r) => setTimeout(r, ms));
+function note(sc, text) { sc.querySelector("[data-note]").textContent = text; }
+
+/* ---- per-agent demos ---- */
+async function runDemo(key, sc) {
+  const stage = sc.querySelector("[data-stage]");
+  stage.innerHTML = "";
+  if (stopFns[key]) { stopFns[key].forEach((f) => f()); }
+  stopFns[key] = [];
+
+  if (key === "librarian") {
+    note(sc, "03:00 \u00b7 waking \u00b7 budget 40k");
+    const shelf = document.createElement("div");
+    shelf.className = "shelf";
+    const books = IMGIDS.slice(0, 8).map((id) => {
+      const b = document.createElement("div");
+      b.className = "book";
+      b.innerHTML = "<img src='/api/img/" + id + "' alt='' />";
+      shelf.appendChild(b); return b;
+    });
+    stage.appendChild(shelf);
+    tlog("librarian", "woke \u00b7 budget 40k tokens");
+    for (let i = 0; i < 5; i++) {
+      const b = books[i];
+      const veil = document.createElement("div");
+      veil.className = "scanpix";
+      b.appendChild(veil);
+      const stop = mountPix(veil, PIXMODES.scan);
+      note(sc, "analyzing " + (i + 1) + " / 5");
+      await dwaitc(1500);
+      stop(); veil.remove();
+      b.classList.add("tagged");
+      tlog("librarian", "analyzed image \u00b7 tagged", "1.8k tok");
+    }
+    note(sc, "drafting structure");
+    await dwaitc(900);
+    tlog("librarian", "classified 3 ocr texts", "0.9k tok");
+    const prop = document.createElement("div");
+    prop.className = "prompt-card";
+    prop.innerHTML = "<div class='t'>proposal \u00b7 for the morning</div><p>Create <b>Philosophy</b> and file 47 scattered text images \u2014 Weil, Blanchot, Rilke among them.</p><div class='row'><button class='pbtn yes'>Accept</button><button class='pbtn no'>Reject</button></div>";
+    prop.querySelector(".yes").onclick = () => { prop.querySelector(".row").innerHTML = "<span class='mono-xs' style='color:var(--accent)'>accepted \u00b7 filed at 09:12</span>"; tlog("you", "accepted \u00b7 Philosophy \u00b7 47 filed"); };
+    prop.querySelector(".no").onclick = () => { prop.querySelector(".row").innerHTML = "<span class='mono-xs' style='color:var(--red)'>rejected</span>"; tlog("you", "rejected \u00b7 Philosophy"); };
+    stage.appendChild(prop);
+    tlog("librarian", "staged 1 proposal \u00b7 slept");
+    note(sc, "slept \u00b7 4.5k of 40k spent");
+  }
+
+  if (key === "scout") {
+    note(sc, "watching ~/Downloads \u00b7 0 tok");
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;flex-direction:column;gap:10px;max-width:420px";
+    stage.appendChild(wrap);
+    tlog("scout", "watching ~/Downloads");
+    const files = [["IMG_2411.png", true], ["banner_ad_final.jpg", false], ["kishin_scan_04.png", true]];
+    for (const [name, pass] of files) {
+      const chip = document.createElement("div");
+      chip.className = "filechip";
+      chip.innerHTML = "<span class='fpix'></span>" + name + "<span style='margin-left:auto;color:var(--text-3)'>fingerprinting\u2026</span>";
+      wrap.appendChild(chip);
+      const stop = mountPix(chip.querySelector(".fpix"), PIXMODES.radar);
+      await dwaitc(1600);
+      stop(); chip.querySelector(".fpix").remove();
+      chip.classList.add(pass ? "pass" : "fail");
+      chip.querySelector("span[style]").textContent = pass ? "clears your taste" : "not your eye \u00b7 skipped";
+      tlog("scout", (pass ? "cleared " : "skipped ") + name);
+    }
+    const prop = document.createElement("div");
+    prop.className = "prompt-card";
+    prop.innerHTML = "<div class='t'>proposal \u00b7 needs you</div><p>Ingest the 2 that cleared. Originals stay where they are.</p><div class='row'><button class='pbtn yes'>Accept</button><button class='pbtn no'>Reject</button></div>";
+    prop.querySelector(".yes").onclick = () => { prop.querySelector(".row").innerHTML = "<span class='mono-xs' style='color:var(--accent)'>accepted \u00b7 2 ingested</span>"; tlog("you", "accepted \u00b7 2 scouted ingests"); };
+    prop.querySelector(".no").onclick = () => { prop.querySelector(".row").innerHTML = "<span class='mono-xs' style='color:var(--red)'>rejected</span>"; };
+    stage.appendChild(prop);
+    note(sc, "2 staged \u00b7 1 skipped");
+  }
+
+  if (key === "choreographer") {
+    note(sc, "arranging by lineage");
+    const cv = document.createElement("div");
+    cv.className = "minicanvas";
+    cv.innerHTML = "<svg class='miniwires'></svg>";
+    stage.appendChild(cv);
+    const minis = IMGIDS.slice(4, 12).map((id, i) => {
+      const m = document.createElement("div");
+      m.className = "mini";
+      m.innerHTML = "<img src='/api/img/" + id + "' alt='' />";
+      m.style.left = (30 + (i % 4) * 150 + (i * 37) % 60) + "px";
+      m.style.top = (24 + Math.floor(i / 4) * 130 + (i * 53) % 50) + "px";
+      cv.appendChild(m); return m;
+    });
+    tlog("choreographer", "reading 8 cards");
+    await dwaitc(1200);
+    const A = [[40, 40], [110, 66], [60, 128], [128, 150]];
+    const B = [[380, 50], [452, 84], [396, 150], [470, 170]];
+    minis.forEach((m, i) => {
+      const p = i < 4 ? A[i] : B[i - 4];
+      m.style.left = p[0] + "px"; m.style.top = p[1] + "px";
+    });
+    note(sc, "two constellations");
+    tlog("choreographer", "clustered \u00b7 2 groups", "1.1k tok");
+    await dwaitc(1300);
+    const svg = cv.querySelector(".miniwires");
+    const wire = (a, b) => {
+      const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const k = Math.max(30, Math.abs(b[0] - a[0]) / 2);
+      p.setAttribute("d", "M" + (a[0] + 26) + " " + (a[1] + 30) + " C" + (a[0] + 26 + k) + " " + (a[1] + 30) + " " + (b[0] + 26 - k) + " " + (b[1] + 30) + " " + (b[0] + 26) + " " + (b[1] + 30));
+      svg.appendChild(p);
+    };
+    wire(A[0], A[3]); wire(B[0], B[2]);
+    minis[0].classList.add("wired"); minis[3].classList.add("wired");
+    minis[4].classList.add("wired"); minis[6].classList.add("wired");
+    tlog("choreographer", "drew 2 reasoned wires");
+    const undo = document.createElement("div");
+    undo.className = "pathnote";
+    undo.textContent = "undo kept \u00b7 one gesture returns every card home";
+    stage.appendChild(undo);
+    note(sc, "done \u00b7 undo kept");
+  }
+
+  if (key === "archivist") {
+    note(sc, "weekly integrity pass");
+    const duo = document.createElement("div");
+    duo.className = "duo";
+    duo.innerHTML = "<div class='pixbox' data-p></div><div><div class='verdict'>comparing fingerprints\u2026</div><div class='pathnote' data-out></div></div>";
+    stage.appendChild(duo);
+    const stop = mountPix(duo.querySelector("[data-p]"), PIXMODES.dedupe);
+    tlog("archivist", "sweep started \u00b7 925 prints");
+    await dwaitc(2600);
+    duo.querySelector(".verdict").innerHTML = "<b>3 true duplicates</b> \u00b7 byte-identical";
+    duo.querySelector("[data-out]").textContent = "0 broken files \u00b7 0 orphaned tags \u00b7 index fresh";
+    tlog("archivist", "3 duplicates found", "0 tok");
+    const prop = document.createElement("div");
+    prop.className = "prompt-card";
+    prop.innerHTML = "<div class='t'>proposal \u00b7 needs you</div><p>Remove the 3 managed copies. Your original files are never touched.</p><div class='row'><button class='pbtn yes'>Accept</button><button class='pbtn no'>Reject</button></div>";
+    prop.querySelector(".yes").onclick = () => { prop.querySelector(".row").innerHTML = "<span class='mono-xs' style='color:var(--accent)'>accepted \u00b7 3 removed</span>"; tlog("you", "accepted \u00b7 3 duplicates removed"); stop(); };
+    prop.querySelector(".no").onclick = () => { prop.querySelector(".row").innerHTML = "<span class='mono-xs' style='color:var(--red)'>rejected</span>"; };
+    stage.appendChild(prop);
+    note(sc, "clean \u00b7 1 proposal");
+  }
+
+  if (key === "taste") {
+    note(sc, "read-only \u00b7 never writes");
+    const row = document.createElement("div");
+    row.className = "rankrow";
+    stage.appendChild(row);
+    tlog("taste", "re-ranking from 41 signals", "0 tok");
+    const scores = [[IMGIDS[1], 0.92], [IMGIDS[6], 0.81], [IMGIDS[9], 0.66], [IMGIDS[12], 0.38], [IMGIDS[14], 0.21]];
+    for (const [id, s] of scores) {
+      const cell = document.createElement("div");
+      cell.className = "rankcell" + (s > 0.8 ? " top" : "");
+      cell.innerHTML = "<img src='/api/img/" + id + "' alt='' /><span class='meter'></span><span class='score'>\u00b7\u00b7\u00b7</span>";
+      row.appendChild(cell);
+      const stop = mountPix(cell.querySelector(".meter"), PIXMODES.meter);
+      await dwaitc(900);
+      stop();
+      cell.querySelector(".score").textContent = s.toFixed(2);
+    }
+    const noteEl = document.createElement("div");
+    noteEl.className = "pathnote";
+    noteEl.textContent = "rankings feed discovery, scout and the gallery sort \u00b7 taste itself changes nothing";
+    stage.appendChild(noteEl);
+    tlog("taste", "archive re-ranked \u00b7 lent to 3 agents");
+    note(sc, "current \u00b7 passive");
+  }
+
+  if (key === "courier") {
+    note(sc, "a folder wants a home");
+    const ask = document.createElement("div");
+    ask.className = "prompt-card";
+    ask.innerHTML = "<div class='t'>where should <b>Solitude \u00b7 5</b> live?</div><p>Atlas keeps the digital folder either way \u2014 Courier can also mirror it to disk as real files.</p><div class='row'><button class='pbtn yes' data-d>In Atlas</button><button class='pbtn yes' data-l>On disk</button><button class='pbtn yes' data-b>Both</button><button class='pbtn no'>Not now</button></div>";
+    stage.appendChild(ask);
+    const out = document.createElement("div");
+    out.style.cssText = "display:flex;flex-direction:column;gap:10px;margin-top:14px;align-items:flex-start";
+    stage.appendChild(out);
+
+    async function digital() {
+      out.insertAdjacentHTML("beforeend", "<div class='folderchip'>\u25a1 Solitude <small>5 \u00b7 in Atlas</small></div>");
+      tlog("courier", "folder mirrored in Atlas");
+    }
+    async function local() {
+      const chip = document.createElement("div");
+      chip.className = "filechip";
+      chip.innerHTML = "<span class='fpix'></span>exporting to ~/Atlas Exports/Solitude\u2026 <span data-n style='margin-left:auto;color:var(--text-3)'>0 / 5</span>";
+      out.appendChild(chip);
+      const stop = mountPix(chip.querySelector(".fpix"), PIXMODES.drop);
+      for (let i = 1; i <= 5; i++) { await dwaitc(700); chip.querySelector("[data-n]").textContent = i + " / 5"; }
+      stop(); chip.querySelector(".fpix").remove();
+      chip.classList.add("pass");
+      chip.lastElementChild.textContent = "5 / 5 \u00b7 done";
+      out.insertAdjacentHTML("beforeend", "<div class='pathnote'>saved \u2192 C:\\\\Users\\\\matth\\\\Atlas Exports\\\\Solitude \u00b7 5 files \u00b7 originals untouched</div>");
+      tlog("courier", "exported 5 files \u2192 disk");
+    }
+    ask.querySelector("[data-d]").onclick = async () => { ask.querySelector(".row").innerHTML = "<span class='mono-xs' style='color:var(--accent)'>digital</span>"; await digital(); note(sc, "done \u00b7 digital"); };
+    ask.querySelector("[data-l]").onclick = async () => { ask.querySelector(".row").innerHTML = "<span class='mono-xs' style='color:var(--accent)'>local</span>"; await local(); note(sc, "done \u00b7 on disk"); };
+    ask.querySelector("[data-b]").onclick = async () => { ask.querySelector(".row").innerHTML = "<span class='mono-xs' style='color:var(--accent)'>both</span>"; await digital(); await local(); note(sc, "done \u00b7 both homes"); };
+    ask.querySelector(".no").onclick = () => { ask.querySelector(".row").innerHTML = "<span class='mono-xs' style='color:var(--text-3)'>later</span>"; note(sc, "idle"); };
+    tlog("courier", "asked where Solitude lives");
+  }
+}
+
+/* seed the timeline with the shared history so the feature reads instantly */
+[["librarian", "woke \u00b7 budget 40k tokens", ""], ["taste", "re-ranked archive", "0 tok"], ["discovery", "filed 14 \u2192 Solitude (live)", "2.1k tok"]].forEach(([a, w, k]) => tlog(a, w, k));
+
+
+
+/* ================= 4th tab: one agent, three archetypes ================= */
+
+/* icon set: one weight, one grid, no clutter */
+const ICONS = {
+  folder: '<svg viewBox="0 0 16 16"><path d="M1.5 4.7c0-.7.5-1.2 1.2-1.2h2.6l1.4 1.6h6.6c.7 0 1.2.5 1.2 1.2v5.9c0 .7-.5 1.2-1.2 1.2H2.7c-.7 0-1.2-.5-1.2-1.2Z"/></svg>',
+  foldercheck: '<svg viewBox="0 0 16 16"><path d="M1.5 4.7c0-.7.5-1.2 1.2-1.2h2.6l1.4 1.6h6.6c.7 0 1.2.5 1.2 1.2v5.9c0 .7-.5 1.2-1.2 1.2H2.7c-.7 0-1.2-.5-1.2-1.2Z"/><path d="m5.6 9.1 1.8 1.8 3-3.2"/></svg>',
+  drive: '<svg viewBox="0 0 16 16"><rect x="2" y="5.5" width="12" height="5.5" rx="1.2"/><path d="M11.6 8.2h.01M4.4 8.2h4"/></svg>',
+  drivecheck: '<svg viewBox="0 0 16 16"><rect x="2" y="5.5" width="12" height="5.5" rx="1.2"/><path d="m5.4 8.4 1.5 1.5 2.6-2.8"/></svg>',
+  save: '<svg viewBox="0 0 16 16"><path d="M8 2.5v7M5.2 6.7 8 9.5l2.8-2.8"/><path d="M2.5 11v1.5c0 .6.4 1 1 1h9c.6 0 1-.4 1-1V11"/></svg>',
+  tag: '<svg viewBox="0 0 16 16"><path d="m8.6 1.8 5.6 5.6-6.8 6.8-5.6-5.6V3.2c0-.8.6-1.4 1.4-1.4Z"/><circle cx="5.4" cy="5.4" r="1"/></svg>',
+  sort: '<svg viewBox="0 0 16 16"><path d="M4.5 3v10M4.5 13 2.7 11.2M4.5 13l1.8-1.8M11.5 13V3M11.5 3 9.7 4.8M11.5 3l1.8 1.8"/></svg>',
+  find: '<svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.4 10.4 3.1 3.1"/></svg>',
+  clock: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.3 1.5"/></svg>',
+  field: '<svg viewBox="0 0 16 16"><rect x="2.2" y="2.2" width="4.6" height="4.6" rx="1"/><rect x="9.2" y="2.2" width="4.6" height="4.6" rx="1"/><rect x="2.2" y="9.2" width="4.6" height="4.6" rx="1"/><rect x="9.2" y="9.2" width="4.6" height="4.6" rx="1"/></svg>',
+  check: '<svg viewBox="0 0 16 16"><path d="m3 8.6 3.2 3.2L13 5"/></svg>',
+  home: '<svg viewBox="0 0 16 16"><path d="m2.5 7.5 5.5-5 5.5 5"/><path d="M4 7v6h8V7"/></svg>',
+};
+function ic(name) { return ICONS[name] || ICONS.check; }
+document.querySelectorAll("[data-ic]").forEach((el) => { el.innerHTML = ic(el.dataset.ic); });
+
+/* archetype glyphs + brain */
+document.querySelectorAll(".archcol__glyph[data-pix]").forEach((el) => mountPix(el, PIXMODES[el.dataset.pix]));
+mountPix(document.querySelector("[data-brainpix]"), (rects, t, step) => {
+  const ph = (t % 2300) / 2300;
+  const tri = ph < 0.5 ? ph * 2 : (1 - ph) * 2;
+  const rp = easeIO(Math.min(1, Math.max(0, (tri - 0.12) / 0.72)));
+  rects.forEach((r, i) => {
+    const on = GLYPH[Math.floor(i / 5)][i % 5] === 1;
+    const noise = 0.06 + ghash(i, step) * 0.86;
+    setop(r, noise + ((on ? 1 : 0.05) - noise) * rp);
+  });
+});
+
+/* the ledger is DATA first; the timeline anywhere renders from it */
+const TLDATA = [
+  { t: "03:00", who: "archivist", what: "woke \u00b7 budget 40k tokens", tok: "", day: "night" },
+  { t: "03:04", who: "archivist", what: "tagged 22 images against the vocabulary", tok: "9.1k", day: "night" },
+  { t: "03:11", who: "archivist", what: "classified 31 texts \u00b7 quote, essay, journal", tok: "4.2k", day: "night" },
+  { t: "03:19", who: "curator", what: "re-ranked the archive from 41 taste signals", tok: "0", day: "night" },
+  { t: "03:20", who: "archivist", what: "staged 4 proposals \u00b7 slept", tok: "", day: "night", prop: true },
+  { t: "09:12", who: "you", what: "accepted \u00b7 merge Type + Typography", tok: "", day: "today", prop: true },
+  { t: "12:40", who: "curator", what: "filed 14 \u2192 Solitude (live, accepted)", tok: "2.1k", day: "today", prop: true },
+  { t: "14:02", who: "curator", what: "arranged 60 cards by lineage \u00b7 undo kept", tok: "1.1k", day: "today" },
+  { t: "18:55", who: "archivist", what: "integrity pass \u00b7 3 duplicates staged", tok: "0", day: "today", prop: true },
+];
+const _tlogOld = tlog;
+tlog = (who, what, tok) => {
+  TLDATA.push({ t: tlClock.textContent, who, what, tok: tok || "", day: "today" });
+  _tlogOld(who, what, tok);
+};
+
+function renderTimeline(host, filter = "all") {
+  const rows = TLDATA.filter((r) =>
+    filter === "all" ? true :
+    filter === "night" ? r.day === "night" :
+    filter === "today" ? r.day === "today" :
+    filter === "proposals" ? !!r.prop : true);
+  host.innerHTML =
+    '<div class="tlpanel__filters">' +
+    [["all", "All"], ["night", "Last night"], ["today", "Today"], ["proposals", "Proposals"]]
+      .map(([k, l]) => '<button class="tlchip' + (k === filter ? " on" : "") + '" data-f="' + k + '">' + l + "</button>").join("") +
+    "</div>" +
+    rows.map((r) =>
+      '<div class="tlrow"><time>' + r.t + "</time><b class='c-" + r.who.replace(" ", "") + "'>" + r.who + "</b><span>" + r.what + "</span>" +
+      (r.tok ? "<span class='tok'>" + r.tok + " tok</span>" : "") + "</div>").join("");
+  host.querySelectorAll(".tlchip").forEach((b) => { b.onclick = () => renderTimeline(host, b.dataset.f); });
+}
+
+/* ---------------- the conversation surface ---------------- */
+const talk = document.getElementById("talkthread");
+const twait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function tEl(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; }
+function tPush(node) { talk.appendChild(node); talk.scrollTop = talk.scrollHeight; return node; }
+function says(html) { return tPush(tEl('<div class="msg agent"><span class="who">atlas</span>' + html + "</div>")); }
+function yours(text) { return tPush(tEl('<div class="msg user"><span class="who">you</span>' + text + "</div>")); }
+function ctaRow(items) {
+  const row = tPush(tEl('<div class="ctarow"></div>'));
+  items.forEach(([icon, label, fn, sub]) => {
+    const b = tEl('<button class="talkcta"><span class="ic">' + ic(icon) + '</span><span class="talkcta__body"><b>' + label + "</b>" + (sub ? "<small>" + sub + "</small>" : "") + "</span></button>");
+    b.onclick = () => { row.querySelectorAll(".talkcta").forEach((x) => x.classList.add("dim")); b.classList.remove("dim"); b.classList.add("picked"); fn(); };
+    row.appendChild(b);
+  });
+  return row;
+}
+async function progressRow(mode, label, steps, stepMs, done) {
+  const row = tPush(tEl('<div class="agent-tool"><span class="pixslot" style="width:14px;height:14px"></span><span class="agent-tool__label">' + label + '</span><span class="agent-tool__res" data-n>0 / ' + steps + "</span></div>"));
+  const stop = mountPix(row.querySelector(".pixslot"), PIXMODES[mode]);
+  for (let i = 1; i <= steps; i++) { await twait(stepMs); row.querySelector("[data-n]").textContent = i + " / " + steps; }
+  stop();
+  row.querySelector(".pixslot").outerHTML = '<span class="ic ic--13" style="color:var(--accent)">' + ic("check") + "</span>";
+  row.querySelector("[data-n]").textContent = done;
+  return row;
+}
+
+function homeCTAs() {
+  ctaRow([
+    ["tag", "Tag my new images", flowTag, "Archivist"],
+    ["sort", "Sort the canvas", flowSort, "Curator"],
+    ["find", "Find something", flowFind, "Curator"],
+    ["save", "Save a folder", () => flowSave("Solitude", 5, talk), "Media Manager"],
+    ["clock", "Show the timeline", flowTimeline, "Archivist"],
+  ]);
+}
+function home() {
+  says("I can tag, sort, find, file and save \u2014 and show you everything I have done. Where shall we start?");
+  homeCTAs();
+}
+function backHome() { ctaRow([["home", "Something else", () => { home(); }]]); }
+
+async function flowTimeline() {
+  yours("Show the timeline");
+  says("Everything I have done, in one list \u2014 every tool call, every proposal, every time you said yes. Filter it:");
+  const panel = tPush(tEl('<div class="tlpanel"></div>'));
+  renderTimeline(panel, "all");
+  backHome();
+}
+
+async function flowTag() {
+  yours("Tag my new images");
+  says("903 images have no keyterms yet. I tag against your existing vocabulary first \u2014 monochrome, portrait, quote \u2014 and only mint a new term when nothing fits. How many tonight?");
+  ctaRow([
+    ["tag", "Tag 50 now", async () => {
+      yours("Tag 50 now");
+      await progressRow("scan", "<b>tag_image</b> \u00b7 against 219 keyterms", 8, 550, "50 tagged");
+      tlog("archivist", "tagged 50 images", "3.2k tok");
+      says("Done \u2014 50 tagged. I wanted 12 <b>new</b> keyterms along the way (risograph, cyanotype, marginalia\u2026). New words change how everything sorts, so they wait for you:");
+      ctaRow([
+        ["check", "Accept the 12", () => { yours("Accept the 12"); tlog("you", "accepted \u00b7 12 new keyterms"); says("In the vocabulary. The Curator can sort by them immediately \u2014 that is the hand-off."); backHome(); }],
+        ["clock", "Review later", () => { yours("Review later"); says("Parked as a proposal \u2014 it will be on the timeline when you want it."); backHome(); }],
+      ]);
+    }],
+    ["clock", "All 903 overnight", () => { yours("All 903 overnight"); says("Scheduled for 03:00 with a 40k budget \u2014 you will find the results and any new-keyterm proposals on the timeline in the morning."); tlog("archivist", "scheduled \u00b7 903 tags tonight"); backHome(); }],
+    ["home", "Not now", () => { yours("Not now"); says("Nothing touched."); backHome(); }],
+  ]);
+}
+
+async function flowSort() {
+  yours("Sort the canvas");
+  says("How should it read? I sort with what the Archivist wrote \u2014 palettes, light, aesthetic terms.");
+  const pick = (i, label) => async () => {
+    yours(label);
+    await buildSort();
+    SORTS[i].run();
+    document.querySelectorAll(".sortbtn").forEach((x, xi) => x.classList.toggle("on", xi === i));
+    document.querySelector(".handoff").scrollIntoView({ behavior: "smooth", block: "center" });
+    says("Sorted \u2014 the canvas below just re-formed. <b>Scatter</b> releases it whenever.");
+    backHome();
+  };
+  ctaRow([
+    ["sort", "By colour", pick(0, "By colour")],
+    ["sort", "By light", pick(1, "By light")],
+    ["find", "By aesthetic", pick(2, "By aesthetic")],
+  ]);
+}
+
+async function flowFind() {
+  yours("Find something");
+  says("Describe it \u2014 or start from a feeling:");
+  const go = (q) => async () => {
+    yours(q);
+    await progressRow("radar", "<b>find</b> \u00b7 vocabulary + fingerprints", 5, 420, "21 match");
+    tlog("curator", "found 21 \u00b7 " + q, "0 tok");
+    says('21 images answer to that. In the app the field re-forms around them <span class="ic ic--13" style="color:var(--accent)">' + ic("field") + "</span> \u2014 and I can file, sequence or save them from there.");
+    backHome();
+  };
+  ctaRow([
+    ["find", "lonely dusk", go("lonely dusk")],
+    ["find", "monochrome portraits", go("monochrome portraits")],
+    ["find", "text like a confession", go("text like a confession")],
+  ]);
+}
+
+/* the save flow: ONE renderer, used conversationally and contextually */
+async function flowSave(name, count, host) {
+  const inTalk = host === talk;
+  if (inTalk) yours("Save a folder");
+  const say2 = inTalk ? says : (html) => { host.innerHTML = ""; const m = tEl('<div class="msg agent" style="max-width:560px"><span class="who">media manager</span>' + html + "</div>"); host.appendChild(m); return m; };
+  say2("Where should <b>" + name + " \u00b7 " + count + "</b> live? Atlas keeps it digital either way; disk makes real files you can take anywhere. Originals are never touched.");
+  const cards = tEl(
+    '<div class="optcards">' +
+      '<button class="optcard" data-k="digital"><span class="ic">' + ic("folder") + '</span><b>Keep in Atlas</b><small>searchable \u00b7 filterable \u00b7 on the field</small></button>' +
+      '<button class="optcard" data-k="local"><span class="ic">' + ic("drive") + '</span><b>Save to disk</b><small>real files \u00b7 ~/Atlas Exports/' + name + "</small></button>" +
+      '<button class="optcard" data-k="both"><span class="ic">' + ic("save") + '</span><b>Both</b><small>digital and mirrored</small></button>' +
+    "</div>");
+  (inTalk ? tPush(cards) : host.appendChild(cards));
+  const out = tEl('<div class="saveout"></div>');
+  (inTalk ? tPush(out) : host.appendChild(out));
+
+  async function outDigital() {
+    out.appendChild(tEl('<div class="saverow"><span class="ic ic--15">' + ic("foldercheck") + "</span><span><b>" + name + "</b> kept in Atlas</span></div>"));
+    tlog("mediamanager", name + " kept in Atlas");
+  }
+  async function outLocal() {
+    const row = tEl('<div class="saverow"><span class="pixslot" style="width:15px;height:15px"></span><span data-t>exporting \u00b7 0 / ' + count + "</span></div>");
+    out.appendChild(row);
+    const stop = mountPix(row.querySelector(".pixslot"), PIXMODES.drop);
+    for (let i = 1; i <= Math.min(count, 6); i++) { await twait(600); row.querySelector("[data-t]").textContent = "exporting \u00b7 " + i + " / " + count; }
+    stop();
+    row.querySelector(".pixslot").outerHTML = '<span class="ic ic--15">' + ic("drivecheck") + "</span>";
+    row.querySelector("[data-t]").innerHTML = "<b>" + name + "</b> \u2192 ~/Atlas Exports/" + name + " \u00b7 " + count + " files";
+    tlog("mediamanager", "exported " + count + " files \u2192 disk");
+  }
+  cards.querySelectorAll(".optcard").forEach((c) => {
+    c.onclick = async () => {
+      cards.querySelectorAll(".optcard").forEach((x) => x.classList.add("dim"));
+      c.classList.remove("dim"); c.classList.add("picked");
+      const k = c.dataset.k;
+      if (inTalk) yours(c.querySelector("b").textContent);
+      if (k === "digital") await outDigital();
+      if (k === "local") await outLocal();
+      if (k === "both") { await outDigital(); await outLocal(); }
+      if (inTalk) backHome();
+    };
+  });
+}
+
+/* contextual triggers on the folder rows */
+document.querySelectorAll("[data-ctxsave]").forEach((b) => {
+  b.onclick = () => {
+    const [name, count] = b.dataset.ctxsave.split("|");
+    flowSave(name, Number(count), document.getElementById("ctxsaveout"));
+  };
+});
+
+/* boot the conversation once the tab first opens */
+let talkBooted = false;
+document.querySelector('.tabbtn[data-tab="arch"]').addEventListener("click", () => {
+  setTimeout(buildSort, 250);
+  if (!talkBooted) { talkBooted = true; home(); }
+});
+
+/* ---------------- "/" palette (the fast lane into the SAME flows) ---------------- */
+const REGISTRY = [
+  { arch: "Archivist", cmd: "/archive tag", icon: "tag", run: flowTag, desc: "tag new images against the vocabulary" },
+  { arch: "Archivist", cmd: "/archive dedupe", icon: "find", desc: "find true duplicates \u00b7 propose removal", run: () => { yours("/archive dedupe"); says("Fingerprint sweep, zero tokens \u2014 duplicates land as proposals, originals untouched. (Wired in the app.)"); backHome(); } },
+  { arch: "Archivist", cmd: "/timeline", icon: "clock", run: flowTimeline, desc: "show the ledger \u2014 filterable" },
+  { arch: "Curator", cmd: "/curate find", icon: "find", run: flowFind, desc: "hunt by idea, mood, or reference" },
+  { arch: "Curator", cmd: "/curate sort_by", icon: "sort", run: flowSort, desc: "reorganize the canvas by any keyterm" },
+  { arch: "Media Manager", cmd: "/save folder", icon: "save", run: () => flowSave("Solitude", 5, talk), desc: "keep in Atlas, mirror to disk, or both" },
+  { arch: "Media Manager", cmd: "/collect", icon: "drive", desc: "watch a source \u00b7 ingest what clears your taste", run: () => { yours("/collect"); says("Point me at a folder or a URL list \u2014 arrivals get fingerprinted, taste-checked, and staged. Nothing enters uninvited."); backHome(); } },
+];
+const cmdinput = document.getElementById("cmdinput");
+const paletteEl = document.getElementById("palette");
+function renderPalette(items) {
+  paletteEl.innerHTML = "";
+  let last = null;
+  items.forEach((r) => {
+    if (r.arch !== last) { last = r.arch; paletteEl.insertAdjacentHTML("beforeend", '<div class="palette__group">' + r.arch + "</div>"); }
+    const b = tEl('<button class="cmditem"><span class="ic">' + ic(r.icon) + '</span><span class="cmd">' + r.cmd + '</span><span class="desc">' + r.desc + '</span><span class="who">' + r.arch + "</span></button>");
+    b.onclick = () => { paletteEl.classList.remove("open"); cmdinput.value = ""; r.run(); };
+    paletteEl.appendChild(b);
+  });
+  paletteEl.classList.toggle("open", items.length > 0);
+}
+cmdinput.addEventListener("input", () => {
+  const v = cmdinput.value.trim().toLowerCase();
+  if (!v) { paletteEl.classList.remove("open"); return; }
+  if (v.startsWith("/")) {
+    renderPalette(REGISTRY.filter((r) => r.cmd.slice(1).includes(v.slice(1))));
+  } else {
+    const words = v.split(/\s+/).filter((w) => w.length > 2);
+    const scored = REGISTRY.map((r) => ({ r, s: words.reduce((n, w) => n + ((r.cmd + " " + r.desc).toLowerCase().includes(w) ? 1 : 0), 0) }))
+      .filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 4);
+    renderPalette(scored.map((x) => x.r));
+  }
+});
+cmdinput.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") paletteEl.classList.remove("open");
+  if (e.key === "Enter") {
+    const first = paletteEl.querySelector(".cmditem");
+    if (first && paletteEl.classList.contains("open")) first.click();
+  }
+});
+
+/* ---- 04b: curator sorts real images (unchanged engine) ---- */
+const sortstage = document.getElementById("sortstage");
+const sortbar = document.getElementById("sortbar");
+const sortlegend = document.getElementById("sortlegend");
+let sortItems = [];
+function hueOf(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return 0;
+  const v = parseInt(m[1], 16);
+  const r = (v >> 16 & 255) / 255, g = (v >> 8 & 255) / 255, b = (v & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  if (mx === mn) return -1;
+  const d = mx - mn;
+  let h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return h * 60;
+}
+async function buildSort() {
+  if (sortItems.length) return;
+  const d = await fetch("/api/list?limit=40").then((r) => r.json()).catch(() => ({ rows: [] }));
+  const rows = (d.rows || []).filter((r) => r.palette && r.palette.length).slice(0, 24);
+  const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(9);
+  const W = sortstage.clientWidth - 90, H = sortstage.clientHeight - 100;
+  sortItems = rows.map((r) => {
+    const el = document.createElement("div");
+    el.className = "sortcard";
+    const hex = r.palette[0].hex;
+    el.innerHTML = '<img src="/api/img/' + r.id + '" alt="" loading="lazy" /><i style="background:' + hex + '"></i>';
+    const sx = 12 + rnd() * W, sy = 10 + rnd() * H;
+    el.style.left = sx + "px"; el.style.top = sy + "px";
+    sortstage.appendChild(el);
+    return { el, hex, hue: hueOf(hex), luma: r.luma ?? 0.5, chroma: r.chroma ?? 0, sx, sy };
+  });
+}
+function placeSorted(order, legend, agentNote) {
+  const cols = 8, cw = 74, chh = 92;
+  const x0 = (sortstage.clientWidth - cols * cw) / 2;
+  order.forEach((it, i) => {
+    it.el.style.left = (x0 + (i % cols) * cw) + "px";
+    it.el.style.top = (18 + Math.floor(i / cols) * chh) + "px";
+  });
+  sortlegend.textContent = legend;
+  tlog("curator", agentNote, "0 tok");
+}
+const SORTS = [
+  { icon: "sort", label: "by colour", run: () => placeSorted([...sortItems].sort((a, b) => a.hue - b.hue), "hue \u2192 \u00b7 achromatic first \u00b7 palettes by the archivist", "sorted 24 by colour") },
+  { icon: "sort", label: "by light", run: () => placeSorted([...sortItems].sort((a, b) => a.luma - b.luma), "dark \u2192 bright \u00b7 luma by the archivist", "sorted 24 by light") },
+  { icon: "find", label: "by aesthetic", run: () => placeSorted([...sortItems].sort((a, b) => a.chroma - b.chroma), "quiet \u2192 saturated \u00b7 chroma by the archivist", "sorted 24 by aesthetic") },
+  { icon: "field", label: "scatter", run: () => { sortItems.forEach((it) => { it.el.style.left = it.sx + "px"; it.el.style.top = it.sy + "px"; }); sortlegend.textContent = "scattered \u00b7 as found"; } },
+];
+SORTS.forEach((s, i) => {
+  const b = tEl('<button class="sortbtn"><span class="ic">' + ic(s.icon) + "</span>" + s.label + "</button>");
+  b.onclick = async () => {
+    await buildSort();
+    document.querySelectorAll(".sortbtn").forEach((x) => x.classList.toggle("on", x === b));
+    s.run();
+  };
+  sortbar.appendChild(b);
+});
+sortbar.insertAdjacentHTML("beforeend",
+  '<span class="handnote"><span class="ic">' + ic("tag") + "</span>vocabulary \u00b7 written by archivist \u00b7 read by curator</span>");
+
+</script>
+</body>
+</html>

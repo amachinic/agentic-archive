@@ -1,0 +1,17 @@
+node_modules
+.next
+.env.local
+/library
+/.cache
+*.db
+*.db-journal
+.handtag/
+
+# SQLite side files carry real database content
+*.db-wal
+*.db-shm
+# local run output
+dev.log
+backlog.log
+tsconfig.tsbuildinfo
+t.mjs

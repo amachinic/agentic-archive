@@ -1,0 +1,29 @@
+{
+  "name": "atlas",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 4400",
+    "build": "next build",
+    "start": "next start -p 4400",
+    "ingest": "tsx scripts/ingest-cli.ts",
+    "tag-backlog": "tsx scripts/tag-backlog.ts",
+    "tag-local": "tsx scripts/tag-local.ts",
+    "refine-text": "tsx scripts/refine-text.ts",
+    "identify-artists": "tsx scripts/identify-artists.ts",
+    "refine-tags": "tsx scripts/refine-tags.ts"
+  },
+  "dependencies": {
+    "next": "^16.3.2",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "sharp": "^0.34.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tsx": "^4.23.12",
+    "typescript": "^5"
+  }
+}
