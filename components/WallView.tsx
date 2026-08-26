@@ -11,14 +11,17 @@ import { useRouter } from "next/navigation";
 
 type Item = { id: number; w: number; h: number; hex: string; title: string };
 
-const COL_W = 236;
+const INITIAL_COL_W = 236;
 const GAP = 12;
+const MOBILE_COLUMNS = 2;
+const DESKTOP_COLUMNS = 5;
+const MOBILE_QUERY = "(max-width: 720px)";
 
 export default function WallView({ items }: { items: Item[] }) {
   const router = useRouter();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [colCount, setColCount] = useState(0);
-  const [colW, setColW] = useState(COL_W);
+  const [colW, setColW] = useState(INITIAL_COL_W);
   const [paused, setPaused] = useState(false);
   const speedRef = useRef(1);
   const scrubRef = useRef(0);
@@ -29,17 +32,21 @@ export default function WallView({ items }: { items: Item[] }) {
 
   useEffect(() => {
     const el = wrapRef.current!;
+    const mobileQuery = window.matchMedia(MOBILE_QUERY);
     const measure = () => {
       const w = el.clientWidth;
-      const n = Math.max(2, Math.floor((w + GAP) / (COL_W + GAP)));
+      const n = mobileQuery.matches ? MOBILE_COLUMNS : DESKTOP_COLUMNS;
       setColCount(n);
-      // narrow screens: two columns always fit, columns shrink to match
-      setColW(n * (COL_W + GAP) + GAP > w ? Math.floor((w - GAP * (n + 1)) / n) : COL_W);
+      setColW(Math.max(1, (w - GAP * n) / n));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
+    mobileQuery.addEventListener("change", measure);
+    return () => {
+      ro.disconnect();
+      mobileQuery.removeEventListener("change", measure);
+    };
   }, []);
 
   // Deterministic shuffle per mount, seeded from the item list length + first id.
@@ -105,7 +112,7 @@ export default function WallView({ items }: { items: Item[] }) {
           <span className="pill pill--static">{items.length} pieces</span>
         </div>
         <div className="topbar__spacer" />
-        <span className="mono-xs">hover to pause · scroll to scrub · click to analyze</span>
+        <span className="mono-xs">hover to pause / scroll to scrub / click to analyze</span>
       </header>
       <div className="work">
         <main className="pane pane--flush" tabIndex={-1}>

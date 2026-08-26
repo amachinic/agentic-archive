@@ -13,7 +13,7 @@ type Stats = { images: number; analyzed: number; pairs: number; tags: number; ke
 
 const VIEWS = [
   { href: "/", label: "Network", icon: IconNetwork },
-  { href: "/wall", label: "Gallery", icon: IconWaterfall },
+  { href: "/gallery", label: "Gallery", icon: IconWaterfall },
   { href: "/analyze", label: "Analyze", icon: IconSparkle },
 ];
 

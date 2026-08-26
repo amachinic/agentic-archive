@@ -52,24 +52,6 @@ const REVIEWED_UNINDEXED_BY_DERIVATIVE = {
       ["tall", "format"],
     ],
   },
-  "8c02b9c863a85a51b59025910151dc4db5830020c38d1d1ebcfd5521616155a7": {
-    title: "Brad Pitt at the SAG Awards",
-    description: "A full-length event portrait of Brad Pitt in a black suit and open-collar white shirt, standing against a blue SAG-AFTRA backdrop while holding an award statuette.",
-    collectionSlugs: ["culture-is-our-business"],
-    tags: [
-      ["portrait", "subject"],
-      ["figure", "subject"],
-      ["fashion", "subject"],
-      ["signage", "subject"],
-      ["editorial", "style"],
-      ["bright", "style"],
-      ["high contrast", "style"],
-      ["documentary", "style"],
-      ["calm", "mood"],
-      ["photography", "medium"],
-      ["tall", "format"],
-    ],
-  },
 };
 
 function usage() {
