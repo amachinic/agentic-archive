@@ -300,13 +300,24 @@ function OutIcon({ kind }: { kind: OutRow["icon"] }) {
   );
 }
 
-export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
+/** The tuning the page is server-rendered at. Shared, so the server and the first
+ *  client render cannot disagree about which field was handed over. */
+export const FIELD_DEFAULTS = { min: 0.82, mode: "blend" as const, edgesPerNode: 6 };
+
+export default function GraphView({
+  keyterms = [],
+  initialGraph,
+}: {
+  keyterms?: Keyterm[];
+  /** The field, rendered on the server at FIELD_DEFAULTS. See app/page.tsx. */
+  initialGraph?: { nodes: RawNode[]; edges: GEdge[] };
+}) {
   const dialogs = useDialogs();
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [minScore, setMinScore] = useState(0.82);
-  const [simMode, setSimMode] = useState<"blend" | "structure" | "color" | "aesthetic">("blend");
+  const [minScore, setMinScore] = useState(FIELD_DEFAULTS.min);
+  const [simMode, setSimMode] = useState<"blend" | "structure" | "color" | "aesthetic">(FIELD_DEFAULTS.mode);
   const [cap, setCap] = useState(80);
   const [panel, setPanel] = useState<"search" | "prompt">("prompt");
   const [promptIds, setPromptIds] = useState<number[] | null>(null);
@@ -344,11 +355,38 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
      every 120ms as the field spawns, and depending on it restarted the timer
      on every tick so it never finished */
   const hasCards = liveCount > 0;
+  /** thumbnails that have actually decoded, counted by the draw loop's loaders */
+  const paintedRef = useRef(0);
+  /*
+    The panel arrives after the field has PICTURES on it, not merely cards.
+
+    It slides over the canvas, so letting it in while thumbnails are still
+    popping makes the load read as one jumbled moment: a control to type into,
+    over a picture still assembling. The order should be legible. Cards, then
+    images, then the thing you type into.
+
+    Gated on a count rather than a delay, because the delay that looks right
+    against a warm local cache is far too short on a cold deployment. The
+    backstop covers the case that should not happen: images that never arrive
+    must not cost the reader the composer.
+  */
   useEffect(() => {
     if (panelIn) return;
-    const t = setTimeout(() => setPanelIn(true), hasCards ? 480 : 2200);
-    return () => clearTimeout(t);
-  }, [hasCards, panelIn]);
+    if (!hasCards) {
+      const t = setTimeout(() => setPanelIn(true), 2200);
+      return () => clearTimeout(t);
+    }
+    const enough = Math.max(1, Math.min(liveCount, 18));
+    const started = performance.now();
+    const id = setInterval(() => {
+      const ready = paintedRef.current >= enough;
+      if (!ready && performance.now() - started < 5000) return;
+      clearInterval(id);
+      /* a beat after the last of them, so the panel reads as its own move */
+      setTimeout(() => setPanelIn(true), ready ? 420 : 0);
+    }, 100);
+    return () => clearInterval(id);
+  }, [hasCards, panelIn, liveCount]);
   /* every step is reversible: a snapshot of the conversation before it, plus
      the action that produced it, so Back rewinds and Retry runs it again */
   const stepsRef = useRef<Step[]>([]);
@@ -463,7 +501,9 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
     if (rest.length) groups.push({ kind: "tag", items: rest });
     return groups;
   }, [keyterms]);
-  const [raw, setRaw] = useState<{ nodes: RawNode[]; edges: GEdge[] }>({ nodes: [], edges: [] });
+  const [raw, setRaw] = useState<{ nodes: RawNode[]; edges: GEdge[] }>(
+    initialGraph ?? { nodes: [], edges: [] }
+  );
   const [tip, setTip] = useState<{ id: number; label: string; x: number; y: number } | null>(null);
   const [linking, setLinking] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
@@ -528,11 +568,20 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
     const d = await fetch("/api/graph?min=" + minScore + "&mode=" + simMode, { signal }).then((r) => r.json());
     setRaw({ nodes: d.nodes, edges: d.edges });
   }, [minScore, simMode]);
+  /* What the server already handed over, so mounting does not immediately
+     refetch a field that is already correct and rebuild the canvas under the
+     reader. Anything the tune controls ask for beyond that is fetched as
+     before. */
+  const served = useRef(initialGraph ? FIELD_DEFAULTS.min + "|" + FIELD_DEFAULTS.mode : "");
   useEffect(() => {
+    const want = minScore + "|" + simMode;
+    if (served.current === want) return;
     const ac = new AbortController();
-    loadGraph(ac.signal).catch(() => {});
+    loadGraph(ac.signal)
+      .then(() => { served.current = want; })
+      .catch(() => {});
     return () => ac.abort();
-  }, [loadGraph]);
+  }, [loadGraph, minScore, simMode]);
 
   /* ---- pool + homes: keyterm filter and prompt results narrow the pool;
      every pool image gets its fixed spiral home on the plane. Prompt matches
@@ -804,12 +853,18 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
         let entry = s.images.get(n.id);
         if (!entry) { entry = {}; s.images.set(n.id, entry); }
         const wantHi = s.scale >= 0.8;
+        /* onload counts, so something outside the draw loop can tell how much of
+           the field is pictures rather than skeletons. Only the first tier a
+           card asks for is counted: a hi swapping in behind a lo is a
+           refinement, not another card arriving. */
         if (wantHi && !entry.hi) {
           entry.hi = new Image();
+          if (!entry.lo) entry.hi.onload = () => { paintedRef.current += 1; };
           entry.hi.src = "/api/img/" + n.id + "?s=320";
         }
         if (!wantHi && !entry.lo && !entry.hi) {
           entry.lo = new Image();
+          entry.lo.onload = () => { paintedRef.current += 1; };
           entry.lo.src = "/api/img/" + n.id + "?s=128";
         }
         const hiOk = entry.hi?.complete && entry.hi.naturalWidth;
