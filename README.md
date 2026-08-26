@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="app/icon.svg" alt="Atlas mark for Image Archivist" width="104" height="104">
+</p>
+
 # Image Archivist
 
 A multi-agentic dashboard for turning loose image folders into an art-direction-ready visual archive.

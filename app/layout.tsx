@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import DialogProvider from "@/components/DialogProvider";
@@ -28,20 +27,26 @@ const themeScript = `(function(){var t;try{t=localStorage.getItem("atlas-theme")
   preloader marks the session booted before it hands back to "/", so this
   never loops. sessionStorage failures skip the boot rather than trap it.
 */
-const bootScript = `(function(){try{if(location.pathname==="/"&&!sessionStorage.getItem("atlas-booted")){location.replace("/preloader.html")}}catch(e){}})();`;
+const bootScript = `(function(){var root=document.documentElement;try{if(location.pathname==="/"&&!sessionStorage.getItem("atlas-booted")){location.replace("/preloader.html");return}}catch(e){}root.classList.remove("atlas-boot-pending")})();`;
+
+const bootGateStyle = `html.atlas-boot-pending{background:#020202}html.atlas-boot-pending body{visibility:hidden;background:#020202}`;
+const noScriptStyle = `html.atlas-boot-pending body{visibility:visible}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const tree = collectionTree();
   const stats = libraryStats();
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="atlas-boot-pending" suppressHydrationWarning>
+      <head>
+        {/* The gate starts closed in the server HTML. These scripts execute
+            synchronously during head parsing, before body content can paint. */}
+        <style dangerouslySetInnerHTML={{ __html: bootGateStyle }} />
+        <script id="atlas-theme" dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script id="atlas-boot" dangerouslySetInnerHTML={{ __html: bootScript }} />
+        <noscript><style>{noScriptStyle}</style></noscript>
+      </head>
       <body data-hosted-demo={IS_HOSTED_DEMO ? "true" : undefined}>
-        {/* beforeInteractive: injected into the initial HTML ahead of any
-            Next.js code, so both run before first paint — no dashboard
-            flash before the boot redirect, no theme flash. */}
-        <Script id="atlas-boot" strategy="beforeInteractive">{bootScript}</Script>
-        <Script id="atlas-theme" strategy="beforeInteractive">{themeScript}</Script>
         <DialogProvider>
           <div className="app">
             <Sidebar tree={tree} stats={stats} hostedDemo={IS_HOSTED_DEMO} />
