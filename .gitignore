@@ -15,3 +15,15 @@ dev.log
 backlog.log
 tsconfig.tsbuildinfo
 t.mjs
+
+# filming
+.film/
+run.mp4
+run-failed.webm
+
+# card art render
+.cardfilm/
+
+# card artwork renders: build outputs for the portfolio repo, not source here
+public/card/
+public/image-archivist.mp4

@@ -7,6 +7,8 @@ export const maxDuration = 120;
 
 const ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-120b";
+const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1";
 const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
 
 /*
@@ -19,11 +21,29 @@ const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
   Pick with ATLAS_AGENT_PROVIDER=anthropic|groq; with it unset, whichever
   key is present wins, Groq first.
 */
-type Provider = "anthropic" | "groq";
+type Provider = "anthropic" | "openai" | "groq";
 function provider(): Provider {
   const want = (process.env.ATLAS_AGENT_PROVIDER || "").toLowerCase();
-  if (want === "anthropic" || want === "groq") return want;
-  return process.env.GROQ_API_KEY ? "groq" : "anthropic";
+  if (want === "anthropic" || want === "openai" || want === "groq") return want;
+  if (process.env.GROQ_API_KEY) return "groq";
+  if (process.env.OPENAI_API_KEY) return "openai";
+  return "anthropic";
+}
+
+/* Groq speaks OpenAI's chat-completions dialect, so those two share a loop
+   and differ only in where it points and what it is allowed to send.
+   reasoning_format is Groq's own and OpenAI rejects it; the tiny max_tokens
+   exists because Groq bills the reservation against its per-minute ceiling
+   and OpenAI does not, so OpenAI gets room to actually answer. */
+function openAiish(p: Provider) {
+  const groq = p === "groq";
+  return {
+    endpoint: groq ? ENDPOINT : OPENAI_ENDPOINT,
+    model: groq ? MODEL : OPENAI_MODEL,
+    key: (groq ? process.env.GROQ_API_KEY : process.env.OPENAI_API_KEY) ?? "",
+    maxTokens: groq ? 200 : 1200,
+    extra: groq ? { reasoning_format: "hidden" } : {},
+  };
 }
 
 /*
@@ -167,10 +187,13 @@ export async function POST(req: Request) {
   if (!Array.isArray(body?.messages) || !body.messages.length) {
     return Response.json({ error: "messages required" }, { status: 400 });
   }
-  const key = process.env.GROQ_API_KEY;
-  if (provider() === "groq" && !key) return Response.json({ error: "GROQ_API_KEY is not set" }, { status: 500 });
-  if (provider() === "anthropic" && !process.env.ANTHROPIC_API_KEY) {
+  const chosen = provider();
+  if (chosen === "anthropic" && !process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: "ANTHROPIC_API_KEY is not set" }, { status: 500 });
+  }
+  const wire = openAiish(chosen);
+  if (chosen !== "anthropic" && !wire.key) {
+    return Response.json({ error: (chosen === "groq" ? "GROQ_API_KEY" : "OPENAI_API_KEY") + " is not set" }, { status: 500 });
   }
 
   const conn = db();
@@ -397,14 +420,14 @@ export async function POST(req: Request) {
 
     let reply = "";
     for (let round = 0; round < 6; round++) {
-      const res = await fetch(ENDPOINT, {
+      const res = await fetch(wire.endpoint, {
         method: "POST",
-        headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
+        headers: { Authorization: "Bearer " + wire.key, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: MODEL,
-          max_tokens: 200, // Groq bills the RESERVATION against TPM; the reply is 2 sentences
+          model: wire.model,
+          max_tokens: wire.maxTokens,
           temperature: 0.2,
-          reasoning_format: "hidden",
+          ...wire.extra,
           tools: TOOLS,
           tool_choice: "auto",
           messages: msgs,
@@ -414,7 +437,10 @@ export async function POST(req: Request) {
       if (!res.ok) {
         const t = await res.text();
         if (/per day|TPD/i.test(t)) throw new Error("The daily model quota is reached — try again later.");
-        throw new Error("model call failed: " + t.slice(0, 160));
+        /* the retry-after is the useful half of a rate-limit error and it
+           sits past 160 characters, so keep it when it is there */
+        const when = t.match(/try again in ([0-9hms.]+)/i);
+        throw new Error("model call failed: " + t.slice(0, 160) + (when ? " … retry in " + when[1] : ""));
       }
       const data = await res.json() as { choices?: { message?: { content?: string | null; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[] };
       const m = data.choices?.[0]?.message;

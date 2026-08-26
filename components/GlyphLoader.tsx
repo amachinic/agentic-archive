@@ -5,8 +5,15 @@
   cells whose opacity is a PURE function of (cellIndex, timeStep), so the same
   frame always renders the same. Time quantised to ~95ms steps reads as dither
   rather than shimmer; resolving is one lerp per cell from its noise value to
-  its glyph target. Here it breathes: static resolves into the mark, then
-  dissolves back, for as long as the answer is being worked on.
+  its glyph target.
+
+  Two modes. At rest it breathes all the way: static resolves into the mark,
+  holds, dissolves back -- the mark is the point, and the noise is how it
+  arrives. With `working`, it deliberately never lands: the lerp is capped
+  short of the glyph so the shape is always only half-suggested. A loader
+  that reaches its finished mark every 2.3s reads as "done" once a cycle,
+  which is exactly wrong next to the word "thinking" -- the tool rows beside
+  it keep dithering until they earn their tick, and so should this.
 */
 
 import { useEffect, useRef } from "react";
@@ -31,8 +38,20 @@ const CELL = 17;
 const PAD = (100 - CELL * 5) / 2;
 const CYCLE = 2300;  // ms: noise -> glyph -> noise
 const STEP = 95;     // ms per dither step
+/* how far toward the finished mark a `working` glyph is allowed to get:
+   enough to read as the same symbol, never enough to look settled */
+const WORKING_PEAK = 0.62;
 
-export default function GlyphLoader({ size = 16, className }: { size?: number; className?: string }) {
+export default function GlyphLoader({
+  size = 16,
+  className,
+  working = false,
+}: {
+  size?: number;
+  className?: string;
+  /** still in progress: hold the dither, never resolve to the finished mark */
+  working?: boolean;
+}) {
   const ref = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -42,10 +61,12 @@ export default function GlyphLoader({ size = 16, className }: { size?: number; c
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (reduced) {
-      // no motion: hold the resolved mark
+      /* no motion: hold the mark -- but a working glyph holds it half-made,
+         so stillness does not read as completion either */
       rects.forEach((r, i) => {
         const on = GLYPH[Math.floor(i / 5)][i % 5] === 1;
-        r.setAttribute("fill-opacity", on ? "1" : "0.05");
+        if (working) r.setAttribute("fill-opacity", on ? "0.55" : "0.16");
+        else r.setAttribute("fill-opacity", on ? "1" : "0.05");
       });
       return;
     }
@@ -58,7 +79,8 @@ export default function GlyphLoader({ size = 16, className }: { size?: number; c
       // triangle wave over the cycle -> resolve in, hold, dissolve out
       const ph = (t % CYCLE) / CYCLE;
       const tri = ph < 0.5 ? ph * 2 : (1 - ph) * 2;
-      const rp = easeInOut(Math.min(1, Math.max(0, (tri - 0.12) / 0.72)));
+      const rp = easeInOut(Math.min(1, Math.max(0, (tri - 0.12) / 0.72)))
+        * (working ? WORKING_PEAK : 1);
       const step = Math.floor(t / STEP);
       rects.forEach((r, index) => {
         const on = GLYPH[Math.floor(index / 5)][index % 5] === 1;
@@ -69,7 +91,7 @@ export default function GlyphLoader({ size = 16, className }: { size?: number; c
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [working]);
 
   return (
     <svg

@@ -499,14 +499,20 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 .tree-actions .tree-caret.is-save:hover,
 .tree-actions .tree-caret.is-add:focus-visible,
 .tree-actions .tree-caret.is-save:focus-visible { color: var(--accent); }
+/* Only the glyph turns. The chip stays the same grey as the two beside it:
+   a filled red plate under a 2px red ring reads as "already pressed", and
+   the control is offering a destructive action, not reporting one. */
 .tree-actions .tree-caret.is-danger:hover,
-.tree-actions .tree-caret.is-danger:focus-visible {
-  color: #dc2626;
-  background: color-mix(in oklab, #dc2626 18%, transparent);
+.tree-actions .tree-caret.is-danger:focus-visible { color: #dc2626; }
+/* A hairline, not the app's usual 2px ring: these chips are 22px across, so
+   a 2px outline on one is a third of its width. */
+.tree-actions .tree-caret:focus-visible {
+  outline: 1px solid color-mix(in oklab, var(--accent) 60%, transparent);
+  outline-offset: 0;
 }
-/* the app's own ring convention: 2px accent, danger overrides to red */
-.tree-actions .tree-caret:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.tree-actions .tree-caret.is-danger:focus-visible { outline-color: #dc2626; }
+.tree-actions .tree-caret.is-danger:focus-visible {
+  outline-color: color-mix(in oklab, #dc2626 65%, transparent);
+}
 .tree-row .nav-item { padding-left: calc(var(--space-1) + var(--depth, 0) * 14px); }
 .tree-caret {
   flex: none; width: 14px; height: 14px; display: grid; place-items: center;

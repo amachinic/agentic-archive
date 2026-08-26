@@ -1707,8 +1707,17 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
             <div className="graph-top">
               <div className="graph-rail">
                 <div className={"viewswitch" + (panel === "search" ? " is-search" : "")} role="group" aria-label="Mode">
+                  {/* Switching mode shows a different panel. That is ALL it does.
+                      Search used to call clearPrompt() on the way in, which threw away the
+                      conversation, the ids the agent had put on the field, the colour grid and the
+                      undo history: a whole session, discarded by a control that looks like a tab.
+                      Nothing needed it. effectiveQ below already ignores the query outside search
+                      mode, so a stale query cannot silently intersect the agent's results, and the
+                      input says "Search the field" because that is what it does: it narrows what
+                      is showing rather than starting again. Clear, in the conversation's own head,
+                      is the one door that empties it. */}
                   <button className={panel === "prompt" ? "is-active" : ""} onClick={() => { setPanel("prompt"); setSheetOpen(true); }}>Prompt</button>
-                  <button className={panel === "search" ? "is-active" : ""} onClick={() => { setPanel("search"); clearPrompt(); setSheetOpen(true); }}>Search</button>
+                  <button className={panel === "search" ? "is-active" : ""} onClick={() => { setPanel("search"); setSheetOpen(true); }}>Search</button>
                 </div>
                 <button
                   className={"graph-rail__cat graph-filterbtn" + (filterTags.length > 0 ? " has-active" : "")}
@@ -1986,7 +1995,7 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
                         <div className="chat-msg is-ai">
                           <span className="mono-xs">atlas</span>
                           {boot === 0 ? (
-                            <p className="agent-home__think"><GlyphLoader size={15} /></p>
+                            <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                           ) : (
                             <p className="agent-home__say">One agent, three lenses. Find or filter to narrow the field, sort what is showing, save what is worth keeping. Type “/” for every command, or just ask.</p>
                           )}
@@ -2145,7 +2154,7 @@ export default function GraphView({ keyterms = [] }: { keyterms?: Keyterm[] }) {
                       <div className="chat-msg is-ai">
                         <span className="mono-xs">atlas</span>
                         <p style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <GlyphLoader size={15} /> {simBusy ? "matching the image" : "sifting the archive"}
+                          <GlyphLoader size={15} working /> {simBusy ? "matching the image" : "sifting the archive"}
                         </p>
                       </div>
                     )}

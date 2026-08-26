@@ -210,96 +210,79 @@
   .tabview { display: none; }
   .tabview.on { display: block; }
 
-  /* ============ 2nd tab: the dashboard, simulated ============ */
-  .dash { max-width: 1400px; margin: 0 auto; padding: 0 24px; }
-  .dash__frame {
-    display: grid; grid-template-columns: 232px 1fr;
-    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
-    height: 760px; background: var(--bg);
-  }
-  .dsb { border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; }
-  .dsb__brand { display: flex; align-items: center; gap: 9px; height: 52px; padding: 0 14px; border-bottom: 1px solid var(--border); font-weight: 400; font-size: 14px; }
-  .dsb__brand img { width: 17px; height: 17px; }
-  .dsb__scroll { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 18px; }
-  .dsb__title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); padding: 0 6px 6px; }
-  .dnav { display: flex; flex-direction: column; gap: 2px; }
-  .dnav a { display: flex; align-items: center; gap: 10px; padding: 8px 9px; border-radius: var(--r); font-size: 13px; color: var(--text-2); }
-  .dnav a.on { background: var(--accent-wash); color: var(--text); }
-  .dnav a.on svg { stroke: var(--accent); }
-  .dnav svg { width: 15px; height: 15px; fill: none; stroke: var(--text-3); stroke-width: 1.4; }
-  .dfolder { display: flex; align-items: center; gap: 9px; padding: 8px 9px; font-size: 12.5px; color: var(--text-2); border-radius: var(--r); }
-  .dfolder .n { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--text-3); }
-  .dfolder.new { background: var(--accent-wash); color: var(--text); animation: rise 400ms var(--ease) both; }
-  .dfolder.new .n { color: var(--accent); }
-  .dsb__foot { border-top: 1px solid var(--border); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
-  .dstat { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); }
-  .dstat b { color: var(--text-2); font-weight: 400; }
+  /* ============ tabs 02 + 05: the real dashboard, embedded ============
+     Neither dashboard tab draws the app any more. This file is served
+     from the same origin as the app, so both frames below are "/" itself;
+     these styles dress the frame, and everything inside it is the app's
+     own CSS. */
+  .dash { max-width: 1500px; margin: 0 auto; padding: 0 24px; }
 
-  .dwork { display: flex; flex-direction: column; min-width: 0; }
-  .dtopbar { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
-  .dtopbar h3 { font-size: 14px; font-weight: 400; }
-  .dtopbar .spacer { flex: 1; }
-  .dswitch { width: 44px; height: 24px; border-radius: 99px; border: 1px solid var(--border-strong); background: var(--bg); position: relative; }
-  .dswitch::after { content: "\263E"; position: absolute; top: 2.5px; left: 22px; width: 17px; height: 17px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border-strong); font-size: 9px; display: grid; place-items: center; color: var(--text-2); }
-  .drail { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 94%, transparent); }
-  .dseg { display: flex; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
-  .dseg span { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 9px 14px 8px; color: var(--text-2); }
-  .dseg span.on { background: var(--surface-2); color: var(--text); }
-  .dcat { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); padding: 8px 9px; }
-  .dcat i { font-style: normal; font-size: 9px; color: var(--text-3); }
-  .dinfo { margin-left: auto; width: 15px; height: 15px; border: 1px solid var(--text-2); border-radius: 50%; display: grid; place-items: center; font-family: "Times New Roman", serif; font-size: 10px; color: var(--text-2); }
+  .live { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg); }
+  /* nothing of the sandbox's own is allowed on top of the frame: no bar,
+     no badge, no link. The app is shown exactly as the app looks. */
 
-  .dstage { position: relative; flex: 1; overflow: hidden; background: var(--bg); }
-  .dwires { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .dwires path { fill: none; stroke: rgba(190,190,190,0.28); stroke-width: 1; transition: opacity 600ms var(--ease); }
-  .dwires path.faded { opacity: 0.06; }
-  .dwires path.drawn { stroke: var(--accent); stroke-width: 1.6; opacity: 0.9; stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw 900ms var(--ease) forwards; }
-  @keyframes draw { to { stroke-dashoffset: 0; } }
+  /* the frame is laid out at a true desktop viewport and scaled down to
+     whatever width the page gives it, so what you read is the desktop
+     layout rather than a narrowed one */
+  .live__vp { position: relative; width: 100%; overflow: hidden; background: var(--bg); }
+  /* Two frames can share this box. The run ends by dissolving one into the
+     other, so the replacement dashboard is already painted underneath before
+     the finished one begins to fade -- what leaves the screen is the folder,
+     never the app. A frame with neither class is loaded but parked. */
+  .live__vp iframe { position: absolute; top: 0; left: 0; width: 1500px; height: 940px; border: 0; transform-origin: 0 0; opacity: 0; z-index: 1; }
+  .live__vp iframe.is-front { opacity: 1; z-index: 3; }
+  .live__vp iframe.is-standby { opacity: 1; z-index: 2; }
+  /* while a demo is driving, the frame stops taking clicks so a stray
+     mouse cannot fight the script; released the moment it hands back */
+  .live__vp.is-driven iframe { pointer-events: none; }
+  .live__veil {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    padding: 0 40px; text-align: center; background: var(--bg);
+    font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: 0.06em; line-height: 1.7; color: var(--text-3);
+    transition: opacity 500ms var(--ease);
+  }
+  .live__veil.gone { opacity: 0; pointer-events: none; }
 
-  .dcard {
-    position: absolute; width: 92px;
-    border: 1px solid var(--border-strong); border-radius: 5px; overflow: hidden;
-    background: var(--surface);
-    transition: opacity 700ms var(--ease), border-color 400ms var(--ease), box-shadow 400ms var(--ease), transform 700ms var(--ease);
-  }
-  .dcard__head { display: flex; align-items: center; height: 14px; padding: 0 5px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-family: var(--mono); font-size: 6.5px; letter-spacing: 0.04em; color: var(--text-2); text-transform: uppercase; white-space: nowrap; overflow: hidden; }
-  .dcard img { display: block; width: 100%; height: auto; }
-  .dcard::before, .dcard::after {
-    content: ""; position: absolute; top: 50%; width: 5px; height: 5px; border-radius: 50%;
-    background: var(--surface); border: 1px solid var(--border-strong); transform: translateY(-50%); z-index: 2;
-  }
-  .dcard::before { left: -3px; } .dcard::after { right: -3px; }
-  .dcard.gone { opacity: 0.07; }
-  .dcard.kept { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 22px rgba(126,187,28,0.25); transform: scale(1.04); }
+  /* ---- the readout: a sandbox instrument, not a part of the app ----
+     It sits well clear of the frame and wears a different skin on purpose,
+     so nobody reads it as a piece of the product. Its lines are pulled out
+     of the app's own thread, so it cannot claim a result the app did not
+     give -- but the pulling is the sandbox's business alone. */
+  .tap { margin-top: 22px; border: 1px dashed var(--border-strong); border-radius: 10px; background: transparent; }
+  .tap__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 11px 14px 10px; border-bottom: 1px dashed var(--border); }
+  .tap__title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2); }
+  .tap__sub { font-size: 12px; color: var(--text-3); }
+  .tap__state { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+  .tap__state .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--text-3); transition: background 300ms var(--ease), box-shadow 300ms var(--ease); }
+  .tap__state .dot.on { background: var(--accent); box-shadow: 0 0 9px var(--accent); }
 
-  .dcursor {
-    position: absolute; width: 15px; height: 15px; z-index: 6; pointer-events: none;
-    border: 1.5px solid var(--accent); border-radius: 50%;
-    box-shadow: 0 0 16px rgba(126,187,28,0.55);
-    transition: left 800ms var(--ease), top 800ms var(--ease), opacity 300ms;
-    opacity: 0;
-  }
-
-  .dpanel {
-    position: absolute; top: 0; left: 0; z-index: 5;
-    width: 400px; max-height: calc(100% - 8px);
-    display: flex; flex-direction: column; gap: 12px;
-    background: color-mix(in srgb, var(--surface) 95%, transparent);
-    border: 1px solid var(--border); border-top: 0; border-left: 0;
-    border-radius: 0 0 var(--r) 0;
-    padding: 13px; backdrop-filter: blur(10px);
-    overflow-y: auto;
-  }
-  .dpanel__head { display: flex; align-items: center; justify-content: space-between; }
-  .dpanel__topic { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
-  .dpanel__topic.hot { color: var(--accent); }
-  .dcomposer { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); padding: 5px; }
-  .dcomposer .plus { width: 26px; height: 26px; display: grid; place-items: center; color: var(--text-2); font-size: 14px; }
-  .dcomposer .txt { flex: 1; font-size: 13px; color: var(--text); min-height: 19px; }
-  .dcomposer .txt .ph { color: var(--text-3); }
-  .dcomposer .up { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #0a0f04; display: grid; place-items: center; }
-  .caret { display: inline-block; width: 1px; height: 13px; background: var(--text); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
-  @keyframes blink { 50% { opacity: 0; } }
+  .narr { max-height: 190px; overflow-y: auto; padding: 11px 14px; display: flex; flex-direction: column; gap: 7px; }
+  .narr:empty::before { content: "nothing yet \2014 press play"; font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  .narr__n { display: flex; gap: 10px; align-items: baseline; font-size: 12.5px; line-height: 1.55; color: var(--text-2); animation: rise 320ms var(--ease) both; }
+  .narr__n .k { flex: none; width: 68px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  .narr__n.is-step .k { color: var(--accent); }
+  .narr__n.is-warn .k, .narr__n.is-warn .t { color: var(--red); }
+  .narr__n b { color: var(--text); font-weight: 400; }
+  .narr__n .res { color: var(--accent); font-family: var(--mono); font-size: 11px; }
+  /* ---- film mode (?film=1) ----
+     The page is the workbench; the film is of the product. In film mode
+     every part the sandbox adds -- intro, tabs, headings, step chips, the
+     play button, the readout -- steps out, the frame drops its card border
+     and corners, and the app fills the window edge to edge. Nothing about
+     the app itself changes: only what surrounds it. */
+  body.is-film { padding: 0; overflow: hidden; background: var(--bg); }
+  body.is-film .intro,
+  body.is-film .tabs,
+  body.is-film .section__head,
+  body.is-film .lede,
+  body.is-film .runbar,
+  body.is-film .tap { display: none !important; }
+  body.is-film .section,
+  body.is-film .dash { max-width: none; margin: 0; padding: 0; }
+  body.is-film .live { border: 0; border-radius: 0; background: var(--bg); }
+  body.is-film .live__vp { border-radius: 0; }
+  body.is-film .live__veil { border-radius: 0; }
 
   .glyph { width: 15px; height: 15px; flex: none; display: inline-block; }
   .thinkrow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); }
@@ -557,6 +540,29 @@
   .savecta .ic { color: var(--accent); }
   #ctxsaveout { display: flex; flex-direction: column; gap: 10px; align-self: stretch; max-width: 560px; }
 
+
+/* ---- 05: the whole dashboard inside one card ---- */
+.runbar { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin: 4px 0 14px; }
+.runplay {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--accent); color: #0b0b0b; border: 0; border-radius: 8px;
+  padding: 9px 16px 8px; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+}
+.runplay:disabled { opacity: .5; cursor: default; }
+.runplay .ic { display: inline-flex; }
+.runplay .ic svg { width: 13px; height: 13px; fill: none; stroke: #0b0b0b; stroke-width: 1.6; }
+.runsteps { display: flex; gap: 8px; flex-wrap: wrap; }
+.runstep {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-3); border: 1px solid var(--border); border-radius: 99px; padding: 5px 11px 4px;
+  transition: color .25s, border-color .25s, background .25s;
+}
+.runstep b { color: inherit; font-weight: 400; margin-right: 5px; }
+.runstep i { font-style: normal; opacity: .65; }
+.runstep.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: var(--accent-wash); }
+.runstep.done { color: var(--text); border-color: var(--border); }
+.lede { max-width: 760px; margin: 0 0 18px; font-size: 13.5px; line-height: 1.65; color: var(--text-2); }
 </style>
 </head>
 <body>
@@ -571,6 +577,7 @@
   <button class="tabbtn" data-tab="dash">02 · In the dashboard</button>
   <button class="tabbtn" data-tab="crew">03 · Agents at work</button>
   <button class="tabbtn" data-tab="arch">04 · One agent, three archetypes</button>
+  <button class="tabbtn" data-tab="run">05 · A full run</button>
 </div>
 
 <div class="tabview on" id="tab-high">
@@ -622,65 +629,26 @@
 
 <div class="tabview" id="tab-dash">
   <div class="dash">
-    <div class="section__head" style="max-width:1400px;margin:0 auto 14px;">
+    <div class="section__head" style="margin:0 auto 14px;">
       <span class="v">02</span><h2>The agent at work, in the real dashboard</h2>
-      <p>real chrome, real images from the library</p>
-      <button class="replay" id="dreplay" style="margin-left:auto">▶ Play</button>
+      <p>the app itself, in a frame &mdash; not a drawing of it</p>
+      <button class="replay" id="dreplay" style="margin-left:auto">&#9654; Play demo</button>
     </div>
-    <div class="dash__frame">
-      <aside class="dsb">
-        <div class="dsb__brand"><img src="/icon.svg" alt="" />Atlas</div>
-        <div class="dsb__scroll">
-          <div>
-            <div class="dsb__title">Library</div>
-            <nav class="dnav">
-              <a class="on"><svg viewBox="0 0 16 16"><circle cx="8" cy="3.5" r="1.8"/><circle cx="3.5" cy="12" r="1.8"/><circle cx="12.5" cy="12" r="1.8"/><path d="M7 5 4.5 10.3M9 5l2.5 5.3M5.3 12h5.4"/></svg>Network</a>
-              <a><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>Gallery</a>
-              <a><svg viewBox="0 0 16 16"><path d="M8 1.5 9.5 6 14 8l-4.5 2L8 14.5 6.5 10 2 8l4.5-2Z"/></svg>Analyze</a>
-            </nav>
-          </div>
-          <div>
-            <div class="dsb__title">Folders</div>
-            <div class="dfolder">□ Culture Is Our Busin…<span class="n">925</span></div>
-            <div id="dnewfolder"></div>
-          </div>
-        </div>
-        <div class="dsb__foot">
-          <div class="dstat"><span>analyzed</span><b>22 / 925</b></div>
-          <div class="dstat"><span>connections</span><b>4133</b></div>
-          <div class="dstat"><span>size</span><b>0.47 GB</b></div>
-        </div>
-      </aside>
-      <div class="dwork">
-        <header class="dtopbar">
-          <h3>Network</h3><span class="pill"><b id="dpool">925</b>&nbsp;media</span>
-          <span class="pill" id="dagentstate" style="display:none;align-items:center;gap:7px"><span class="glyph" id="railglyph"></span>agent working</span>
-          <div class="spacer"></div><div class="dswitch"></div>
-        </header>
-        <div class="drail">
-          <div class="dseg"><span class="on">Search</span><span>Prompt</span></div>
-          <span class="dcat">Artist <i>▾</i></span><span class="dcat">Style <i>▾</i></span>
-          <span class="dcat">Subject <i>▾</i></span><span class="dcat">Mood <i>▾</i></span>
-          <span class="dcat">Color <i>▾</i></span><span class="dcat">Tune <i>▾</i></span>
-          <span class="dinfo">i</span>
-        </div>
-        <div class="dstage" id="dstage">
-          <svg class="dwires" id="dwires"></svg>
-          <div class="dcursor" id="dcursor"></div>
-          <div class="dpanel" id="dpanel" style="display:none">
-            <div class="dpanel__head">
-              <span class="dpanel__topic" id="dtopic">Conversation</span>
-              <button class="replay" style="padding:5px 8px 4px">Close</button>
-            </div>
-            <div class="thread" id="dthread" style="max-height:330px"></div>
-            <div class="dcomposer">
-              <span class="plus">+</span>
-              <div class="txt" id="dtxt"><span class="ph">Describe what you are hunting for…</span></div>
-              <span class="up"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg></span>
-            </div>
-          </div>
-        </div>
+    <div class="live">
+      <div class="live__vp" id="dvp">
+        <iframe id="dframe" title="Atlas, running"></iframe>
+        <div class="live__veil" id="dveil">the app loads when this tab opens</div>
       </div>
+    </div>
+
+    <!-- the sandbox watching the frame; none of this exists in the app -->
+    <div class="tap">
+      <div class="tap__head">
+        <span class="tap__title">Sandbox readout</span>
+        <span class="tap__sub">pulled out of the app above &mdash; no part of it ships</span>
+        <span class="tap__state"><span class="dot" id="ddot"></span><span id="dstatus">frame idle</span></span>
+      </div>
+      <div class="narr" id="dnarr"></div>
     </div>
   </div>
 </div><!-- /tab-dash -->
@@ -776,6 +744,52 @@
 
   </div>
 </div>
+
+<div class="tabview" id="tab-run">
+  <div class="section" style="max-width:1500px">
+    <div class="section__head">
+      <span class="v">05</span><h2>A full run</h2>
+      <p>one job end to end &middot; find &rarr; arrange &rarr; file &middot; played in the app, not in a mockup</p>
+    </div>
+  <p class="lede">
+    One job, start to finish, in the running app below: find the photography, arrange it by colour,
+    file it as a folder. The demo types into the real composer and the real agent answers &mdash; the
+    tool calls, the counts and the field re-forming are its own. At the end it presses Accept on
+    the proposal, so the folder it names is really created &mdash; through the app&rsquo;s own
+    button, the only door that writes &mdash; and then removes it again, because a simulation
+    should hand the library back the way it found it.
+  </p>
+
+  <div class="runbar">
+    <button class="runplay" id="runplay"><span class="ic"><svg viewBox="0 0 16 16"><path d="M5 3.4v9.2l7-4.6z" fill="#0b0b0b" stroke="none"/></svg></span><span id="runplaylabel">Play the run</span></button>
+    <div class="runsteps">
+      <span class="runstep" data-step="1"><b>1</b> Find &middot; <i>curator</i></span>
+      <span class="runstep" data-step="2"><b>2</b> Sort by colour &middot; <i>curator</i></span>
+      <span class="runstep" data-step="3"><b>3</b> File the folder &middot; <i>media manager</i></span>
+    </div>
+  </div>
+
+  <div class="live">
+    <div class="live__vp" id="rvp">
+      <iframe id="rframe" title="Atlas, running"></iframe>
+      <!-- the standby the closing dissolve fades up from -->
+      <iframe id="rframe2" title="Atlas, running" aria-hidden="true"></iframe>
+      <div class="live__veil" id="rveil">the app loads when this tab opens</div>
+    </div>
+  </div>
+
+  <!-- the sandbox watching the frame; none of this exists in the app -->
+  <div class="tap">
+    <div class="tap__head">
+      <span class="tap__title">Sandbox readout</span>
+      <span class="tap__sub">pulled out of the app above &mdash; no part of it ships</span>
+      <span class="tap__state"><span class="dot" id="rdot"></span><span id="rstatus">frame idle</span></span>
+    </div>
+    <div class="narr" id="rnarr"></div>
+  </div>
+  </div>
+</div>
+
 <script>
 /* ---------------- 1 · scripted conversation ---------------- */
 const thread = document.getElementById("thread");
@@ -990,6 +1004,7 @@ document.querySelectorAll(".tabbtn").forEach((b) => {
     document.getElementById("tab-dash").classList.toggle("on", b.dataset.tab === "dash");
     document.getElementById("tab-crew").classList.toggle("on", b.dataset.tab === "crew");
     document.getElementById("tab-arch").classList.toggle("on", b.dataset.tab === "arch");
+    document.getElementById("tab-run").classList.toggle("on", b.dataset.tab === "run");
   };
 });
 
@@ -1040,174 +1055,477 @@ function mountGlyph(host) {
   return () => cancelAnimationFrame(raf);
 }
 
-/* ---------------- dashboard simulation ---------------- */
-const IDS = [50, 279, 524, 503, 100, 290, 458, 877, 96, 291, 618, 763, 538, 380, 97, 424, 214, 129];
-const KEEP = [0, 4, 7, 11, 14];
-const dstage = document.getElementById("dstage");
-const dwires = document.getElementById("dwires");
-const dcursor = document.getElementById("dcursor");
-const dpool = document.getElementById("dpool");
-const dpanel = document.getElementById("dpanel");
-const dthread = document.getElementById("dthread");
-const dtxt = document.getElementById("dtxt");
-const dtopic = document.getElementById("dtopic");
-const dagentstate = document.getElementById("dagentstate");
-const dcards = [];
-let dReady = false;
+/* ================= the dashboard tabs run the real app =================
+   Tabs 02 and 05 used to redraw the dashboard by hand and script it with
+   invented numbers. They do not any more. This file is served from the
+   same origin as the app, so each frame below is "/" itself and this
+   script can work its real controls: click the real mode switch, type
+   into the real composer, submit the real form. What comes back -- the
+   tool calls, the counts, the field re-forming -- is the app's own
+   answer, which is why neither tab can drift from it now, or claim a
+   result it never produced. */
 
-function buildDash() {
-  if (dReady) return;
-  dReady = true;
-  const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(77);
-  const W = dstage.clientWidth, H = dstage.clientHeight;
-  const pts = [];
-  IDS.forEach((id, i) => {
-    const card = document.createElement("div");
-    card.className = "dcard";
-    const x = 430 + rnd() * (W - 560), y = 20 + rnd() * (H - 200);
-    if (i % 3 === 0 && i > 2) { card.style.left = (40 + rnd() * 330) + "px"; card.style.top = (330 + rnd() * (H - 480)) + "px"; }
-    else { card.style.left = x + "px"; card.style.top = y + "px"; }
-    card.innerHTML = '<div class="dcard__head">' + String(id).padStart(8, "0") + '.JPG</div><img src="/api/img/' + id + '" alt="" loading="lazy" />';
-    dstage.appendChild(card);
-    dcards.push(card);
-  });
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      const centers = dcards.map((c) => {
-        const b = c.getBoundingClientRect(), s = dstage.getBoundingClientRect();
-        return { x: b.left - s.left + b.width / 2, y: b.top - s.top + b.height / 2 };
+const VP_W = 1500, VP_H = 940;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ?film=1 hands the whole page over to the app: see the film-mode styles.
+   The readout still fills in behind the scenes, so the recorder can read
+   back what the agent actually did even though nobody sees it. */
+if (new URLSearchParams(location.search).has("film")) document.body.classList.add("is-film");
+
+function liveApp(id) {
+  /* one frame on the dashboard tab, two on the run tab: the second is only
+     there for the closing cross-dissolve, and everything degrades to a
+     straight reload when it is absent */
+  const frames = [document.getElementById(id + "frame"), document.getElementById(id + "frame2")].filter(Boolean);
+  const frame = () => frames[active];
+  let active = 0;
+  frames[0].classList.add("is-front");
+  const vp = document.getElementById(id + "vp");
+  const veil = document.getElementById(id + "veil");
+  const narrEl = document.getElementById(id + "narr");
+  const statusEl = document.getElementById(id + "status");
+  const dotEl = document.getElementById(id + "dot");
+
+  const doc = () => frame().contentDocument;
+  const win = () => frame().contentWindow;
+  let booting = null;
+
+  /* ---- the camera ----
+     The app is laid out at a fixed 1500x940 desktop viewport and the page
+     shows it through a window the width of the column. Moving the shot is
+     done out here, by transforming the iframe: the app is never resized, so
+     nothing inside it reflows mid-take and no layout depends on where the
+     camera happens to be looking. Wide is 1:1 with the window; a push is
+     the same surface, larger, slid under it. */
+  const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+  const windowH = () => Math.round(VP_H * (vp.clientWidth / VP_W));
+
+  /** point the camera at a rect given in the app's own 1500x940 coordinates */
+  function frameTo(rect, ms) {
+    const vw = vp.clientWidth;
+    if (!vw) return;
+    const vh = windowH();
+    const s = Math.min(vw / rect.w, vh / rect.h);
+    /* the window never slides off the app onto bare page */
+    const clamp = (v, lo, hi) => (lo > hi ? lo : Math.max(lo, Math.min(hi, v)));
+    const tx = clamp(vw / 2 - (rect.x + rect.w / 2) * s, vw - VP_W * s, 0);
+    const ty = clamp(vh / 2 - (rect.y + rect.h / 2) * s, vh - VP_H * s, 0);
+    /* every frame takes the move, or the standby is misaligned the moment
+       it is revealed and the dissolve reads as a jump cut */
+    const t = "translate(" + tx + "px, " + ty + "px) scale(" + s + ")";
+    for (const f of frames) {
+      f.style.transition = ms ? "transform " + ms + "ms " + EASE : "none";
+      f.style.transform = t;
+    }
+  }
+
+  const WIDE = { x: 0, y: 0, w: VP_W, h: VP_H };
+  function fit(ms) {
+    if (!vp.clientWidth) return;
+    vp.style.height = windowH() + "px";
+    frameTo(WIDE, typeof ms === "number" ? ms : 0);
+  }
+  addEventListener("resize", () => fit(0));
+
+  /** pull back to the whole app */
+  async function wide(ms) {
+    fit(ms == null ? 1100 : ms);
+    await sleep((ms == null ? 1100 : ms) + 120);
+  }
+
+  /* A push is capped: past ~1.6x the shot stops reading as the app and
+     starts reading as a crop of it. Small subjects widen out to the cap
+     rather than filling the window. */
+  function shotOf(sel, o) {
+    const opt = o || {};
+    const el = typeof sel === "string" ? (doc() && doc().querySelector(sel)) : sel;
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const pad = opt.pad == null ? 48 : opt.pad;
+    let x = r.left - pad, y = r.top - pad, w = r.width + pad * 2, h = r.height + pad * 2;
+    const maxZoom = opt.max || 1.5;
+    const minW = VP_W / maxZoom, minH = VP_H / maxZoom;
+    if (w < minW) { x -= (minW - w) / 2; w = minW; }
+    if (h < minH) { y -= (minH - h) / 2; h = minH; }
+    return { x, y, w, h };
+  }
+
+  /** push in on a piece of the app; falls back to wide if it is not there */
+  async function push(sel, o) {
+    const opt = o || {};
+    const ms = opt.ms == null ? 900 : opt.ms;
+    const rect = shotOf(sel, opt);
+    if (!rect) { await wide(ms); return false; }
+    frameTo(rect, ms);
+    await sleep(ms + 120);
+    return true;
+  }
+
+  function status(text, on) {
+    statusEl.textContent = text;
+    dotEl.classList.toggle("on", !!on);
+  }
+  function poolStatus() {
+    const pill = doc() && doc().querySelector(".topbar .pill");
+    status("live · " + (pill ? pill.textContent.trim() : "ready"), true);
+  }
+
+  /** one narration line; returns its text cell so a tool row can fill in */
+  function say(html, key, kind) {
+    const n = document.createElement("div");
+    n.className = "narr__n" + (kind ? " is-" + kind : "");
+    n.innerHTML = '<span class="k">' + (key || "") + '</span><span class="t">' + html + "</span>";
+    narrEl.appendChild(n);
+    narrEl.scrollTop = narrEl.scrollHeight;
+    return n.querySelector(".t");
+  }
+  const clear = () => { narrEl.innerHTML = ""; };
+  const drive = (on) => vp.classList.toggle("is-driven", !!on);
+
+  /* the app boots its field asynchronously, so every step waits for the
+     node it is about to touch rather than guessing at a delay */
+  async function until(sel, ms) {
+    const stop = performance.now() + (ms || 25000);
+    for (;;) {
+      const d = doc();
+      const el = d && d.querySelector(sel);
+      if (el) return el;
+      if (performance.now() > stop) throw new Error("the app never showed " + sel);
+      await sleep(120);
+    }
+  }
+  /* The canvas mounts empty and the pool arrives after it, so "the app is
+     up" has to mean the field actually has cards -- the topbar count is the
+     app's own word for that. Waiting on the canvas alone left the film
+     ending on a blank archive. */
+  async function poolReady(ms) {
+    const stop = performance.now() + (ms || 30000);
+    for (;;) {
+      const pill = doc() && doc().querySelector(".topbar .pill");
+      const n = pill ? parseInt(pill.textContent.replace(/[^0-9]/g, ""), 10) : 0;
+      if (n > 0) return n;
+      if (performance.now() > stop) return 0;
+      await sleep(150);
+    }
+  }
+
+  const byText = (sel, t) =>
+    Array.from(doc().querySelectorAll(sel)).find((e) => e.textContent.trim() === t);
+
+  /* booted the first time its tab is opened, not on page load: this is the
+     whole app, and there is no sense paying for it unseen. The app bounces
+     a session's first visit through the preloader, which has a tab of its
+     own here, so mark the session booted and let the frame land straight
+     in the dashboard. */
+  function boot() {
+    if (booting) return booting;
+    try { sessionStorage.setItem("atlas-booted", "1"); } catch (e) { /* storage off */ }
+    veil.textContent = "loading the app…";
+    status("booting");
+    booting = new Promise((resolve) => {
+      frames[0].addEventListener("load", async () => {
+        fit();
+        try {
+          await until(".graph-stage canvas");
+          await poolReady();
+          fit();
+          veil.classList.add("gone");
+          poolStatus();
+          resolve(true);
+        } catch (e) {
+          veil.classList.remove("gone");
+          veil.textContent = "the app did not come up in this frame — is npm run dev still serving 4400?";
+          status("frame stalled");
+          resolve(false);
+        }
+      }, { once: true });
+      frames[0].src = "/";
+    });
+    return booting;
+  }
+
+  /* React owns the composer's value, so write through the native setter
+     and let React hear the input event -- the path a keystroke takes */
+  async function type(el, text, per) {
+    const set = Object.getOwnPropertyDescriptor(win().HTMLTextAreaElement.prototype, "value").set;
+    const fire = () => el.dispatchEvent(new (win().Event)("input", { bubbles: true }));
+    el.focus();
+    set.call(el, ""); fire();
+    for (const ch of text) {
+      set.call(el, el.value + ch); fire();
+      await sleep(per || 22);
+    }
+  }
+
+  /* mirror the app's own thread into the narration: its tool rows with the
+     results it wrote, its replies, its proposals. Whatever is already on
+     screen is marked seen first, so only this turn gets narrated. */
+  function watch() {
+    const scroll = doc().querySelector(".chatscroll");
+    const seen = new WeakSet();
+    let live = true;
+
+    function sweep() {
+      if (!live || !scroll) return;
+      scroll.querySelectorAll(".agent-tool").forEach((el) => {
+        if (seen.has(el)) return;
+        seen.add(el);
+        const label = el.querySelector(".agent-tool__label");
+        const name = label ? label.textContent : "tool";
+        const cell = say("<b>" + name + "</b>", "tool");
+        /* the row completes when the app writes its own result into it */
+        const fill = setInterval(() => {
+          if (el.classList.contains("is-running")) return;
+          clearInterval(fill);
+          const res = el.querySelector(".agent-tool__res");
+          cell.innerHTML = "<b>" + name + '</b> <span class="res">' + (res ? res.textContent : "") + "</span>";
+        }, 200);
+        setTimeout(() => clearInterval(fill), 120000);
       });
-      const rnd2 = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(31);
-      for (let i = 0; i < 16; i++) {
-        const a = centers[Math.floor(rnd2() * centers.length)];
-        const b = centers[Math.floor(rnd2() * centers.length)];
-        if (a === b) continue;
-        const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        const k = Math.max(40, Math.abs(b.x - a.x) / 2);
-        p.setAttribute("d", "M" + a.x + " " + a.y + " C" + (a.x + k) + " " + a.y + " " + (b.x - k) + " " + b.y + " " + b.x + " " + b.y);
-        dwires.appendChild(p);
-      }
-    }, 900);
-  });
-}
+      /* the greeting sits in .agent-home and belongs to no turn */
+      scroll.querySelectorAll(".chat-msg.is-ai p").forEach((p) => {
+        if (seen.has(p)) return;
+        seen.add(p);
+        if (p.closest(".agent-home")) return;
+        const t = p.textContent.trim();
+        if (t) say(t, "atlas");
+      });
+      scroll.querySelectorAll(".agent-prop__t").forEach((el) => {
+        if (seen.has(el)) return;
+        seen.add(el);
+        say("the app is asking you to accept — the buttons are in the frame, and nothing is written until you press one", "proposal", "step");
+      });
+    }
 
-function delEl(html) {
-  const t = document.createElement("template");
-  t.innerHTML = html.trim();
-  return t.content.firstChild;
-}
-function dpush(node) { dthread.appendChild(node); dthread.scrollTop = dthread.scrollHeight; return node; }
-const dwait = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function dtool(label, detail, work, result) {
-  const row = dpush(delEl('<div class="tool running"><span class="glyph"></span><span><b>' + label + '</b>(' + detail + ')</span><span class="res">running\u2026</span></div>'));
-  const stop = mountGlyph(row.querySelector(".glyph"));
-  await dwait(work);
-  stop();
-  row.querySelector(".glyph").innerHTML = "\u2713";
-  row.querySelector(".glyph").style.cssText = "color:var(--accent);font-family:var(--mono);font-size:11px;width:15px;text-align:center";
-  row.classList.remove("running");
-  row.querySelector(".res").textContent = result;
-}
-
-async function dcursorTo(card) {
-  const b = card.getBoundingClientRect(), s = dstage.getBoundingClientRect();
-  dcursor.style.opacity = "1";
-  dcursor.style.left = (b.left - s.left + b.width / 2 - 8) + "px";
-  dcursor.style.top = (b.top - s.top + b.height / 2 - 8) + "px";
-  await dwait(830);
-}
-
-let dPlaying = false;
-async function playDash() {
-  if (dPlaying) return;
-  dPlaying = true;
-  buildDash();
-  dthread.innerHTML = "";
-  document.getElementById("dnewfolder").innerHTML = "";
-  dtopic.textContent = "Conversation";
-  dtopic.classList.remove("hot");
-  dpool.textContent = "925";
-  dcards.forEach((c) => c.classList.remove("gone", "kept"));
-  dwires.querySelectorAll("path").forEach((p) => { p.classList.remove("faded", "drawn"); });
-  dcursor.style.opacity = "0";
-  dpanel.style.display = "flex";
-
-  /* type the ask */
-  const ask = "gather the loneliest images and file the best of them";
-  dtxt.innerHTML = '<span class="caret"></span>';
-  for (let i = 1; i <= ask.length; i++) {
-    dtxt.innerHTML = ask.slice(0, i) + '<span class="caret"></span>';
-    await dwait(26);
+    if (scroll) {
+      scroll.querySelectorAll(".agent-tool, .chat-msg.is-ai p, .agent-prop__t")
+        .forEach((el) => seen.add(el));
+    }
+    const timer = setInterval(sweep, 250);
+    return { stop() { clearInterval(timer); sweep(); live = false; } };
   }
-  await dwait(350);
-  dtxt.innerHTML = '<span class="ph">Describe what you are hunting for\u2026</span>';
-  dpush(delEl('<div class="msg user"><span class="who">you</span>' + ask + '</div>'));
-  dtopic.textContent = "the loneliest images";
-  dtopic.classList.add("hot");
 
-  /* thinking with the micro-animation */
-  dagentstate.style.display = "inline-flex";
-  const railStop = mountGlyph(document.getElementById("railglyph"));
-  const think = dpush(delEl('<div class="msg agent"><span class="who">atlas</span><span class="thinkrow"><span class="glyph"></span>sifting the archive</span></div>'));
-  const thinkStop = mountGlyph(think.querySelector(".glyph"));
-  await dwait(2200);
-  thinkStop();
-  think.remove();
-  dpush(delEl('<div class="msg agent"><span class="who">atlas</span>Hunting through solitude and empty space, then keeping what carries your taste.</div>'));
+  /* one turn of the real agent, start to finish. The app disables the
+     composer for exactly as long as it is busy, so that flag -- not a
+     timer here -- is what says the turn is over. */
+  async function ask(text) {
+    const ta = await until("form.graph-ci textarea");
+    /* in for the typing: the composer is the thing being used */
+    await push(".graph-below--chat", { max: 1.5, pad: 56, ms: 750 });
+    await type(ta, text, 16);
+    await sleep(340);
+    say("<b>" + text + "</b>", "you");
+    const mirror = watch();
+    ta.form.requestSubmit();
+    status("agent working", true);
 
-  await dtool("search_library", "\u201clonely, solitary, empty\u201d", 1300, "47 hits \u00b7 0 tok");
-  await dtool("filter_by_terms", "mood: solitary", 1000, "21 remain");
+    /* Ask the DOM for the composer every time rather than trusting the node
+       captured before the submit: React can swap that element, and a stale
+       reference reports disabled forever -- which is how a 64-second run
+       turned into a 268-second one that timed out with nothing to show. */
+    const busy = () => {
+      const live = doc().querySelector("form.graph-ci textarea");
+      return !!live && live.disabled;
+    };
 
-  /* the field responds */
-  dwires.querySelectorAll("path").forEach((p) => p.classList.add("faded"));
-  dcards.forEach((c, i) => { if (!KEEP.includes(i)) c.classList.add("gone"); });
-  dpool.textContent = "21";
-  await dtool("rank_by_taste", "21 candidates", 1300, "top 5 \u00b7 local");
-  dpool.textContent = "5";
+    const opened = performance.now();
+    while (!busy() && performance.now() - opened < 4000) await sleep(60);
 
-  /* the agent visits its picks and wires them */
-  const kept = KEEP.map((i) => dcards[i]);
-  for (const c of kept.slice(0, 3)) { await dcursorTo(c); c.classList.add("kept"); }
-  kept.slice(3).forEach((c) => c.classList.add("kept"));
-  /* draw reasoned wires between kept cards */
-  const s = dstage.getBoundingClientRect();
-  for (let i = 0; i < kept.length - 1; i++) {
-    const a = kept[i].getBoundingClientRect(), b = kept[i + 1].getBoundingClientRect();
-    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    const ax = a.left - s.left + a.width / 2, ay = a.top - s.top + a.height / 2;
-    const bx = b.left - s.left + b.width / 2, by = b.top - s.top + b.height / 2;
-    const k = Math.max(40, Math.abs(bx - ax) / 2);
-    p.setAttribute("d", "M" + ax + " " + ay + " C" + (ax + k) + " " + ay + " " + (bx - k) + " " + by + " " + bx + " " + by);
-    p.classList.add("drawn");
-    dwires.appendChild(p);
-    await dwait(280);
+    /* hold close for the thinking and the first tool rows, then pull back so
+       the field re-forming is the thing on screen. Tight on purpose: three
+       acts share this beat, so every 100ms here is 300ms off the mark the
+       ending has to hit. */
+    await sleep(1500);
+    await wide(1200);
+
+    /* 90s is far past any healthy turn (they run 2-3s), so a stall fails the
+       take quickly instead of eating three minutes of tape */
+    const deadline = performance.now() + 90000;
+    while (busy() && performance.now() < deadline) await sleep(150);
+    if (busy()) throw new Error("the agent never finished its turn");
+    await sleep(500);
+
+    mirror.stop();
+    poolStatus();
   }
-  dcursor.style.opacity = "0";
-  railStop();
-  dagentstate.style.display = "none";
 
-  /* proposal */
-  const prop = dpush(delEl(
-    '<div class="proposal"><div class="t">proposal \u00b7 needs you</div>' +
-    '<p>Create <b>Solitude</b> and file these 5. The wires I drew carry my reasons \u2014 hover them any time.</p>' +
-    '<div class="row"><button class="pbtn yes">Accept</button><button class="pbtn no">Reject</button></div></div>'
-  ));
-  prop.querySelector(".yes").onclick = async () => {
-    prop.querySelector(".row").innerHTML = '<span class="mono-xs" style="color:var(--accent)">accepted</span>';
-    await dtool("create_collection", "\u201cSolitude\u201d", 700, "created");
-    await dtool("add_to_collection", "5 ids \u2192 Solitude", 800, "filed \u00b7 5");
-    document.getElementById("dnewfolder").innerHTML = '<div class="dfolder new">\u25a1 Solitude<span class="n">5</span></div>';
-    dpush(delEl('<div class="msg agent"><span class="who">atlas</span>Filed. Solitude is in your folders \u2014 the field keeps the five until you release it.</div>'));
-    dPlaying = false;
-  };
-  prop.querySelector(".no").onclick = () => {
-    prop.querySelector(".row").innerHTML = '<span class="mono-xs" style="color:var(--red)">rejected</span>';
-    dpush(delEl('<div class="msg agent"><span class="who">atlas</span>Left untouched.</div>'));
-    dPlaying = false;
-  };
+  /* press the app's own Accept on the proposal it is waiting on, and keep
+     reading while the write goes through. It is the same button and the
+     same door a hand would use -- the run just takes it. */
+  async function accept() {
+    const btn = await until(".agent-prop__yes", 30000);
+    const mirror = watch();
+    /* the closest the camera gets: the one moment the run needs a decision */
+    await push(btn.closest(".agent-prop") || ".agent-prop", { max: 1.75, pad: 44, ms: 800 });
+    await sleep(700);
+    say("pressing <b>Accept</b> \u2014 the app's own button, the only door that writes", "click", "step");
+    btn.click();
+    await until(".agent-prop.is-accepted", 20000);
+    /* the apply writes create_collection then add_to_collection; the second
+       one landing, finished, is what says the folder exists */
+    const deadline = performance.now() + 40000;
+    while (performance.now() < deadline) {
+      const done = Array.from(doc().querySelectorAll(".agent-tool")).some(
+        (r) => r.textContent.includes("add_to_collection") && !r.classList.contains("is-running")
+      );
+      if (done) break;
+      await sleep(200);
+    }
+    await sleep(1200);
+    mirror.stop();
+    poolStatus();
+  }
+
+  /** has this frame's app finished booting AND filled its field? */
+  async function readyIn(f, ms) {
+    const stop = performance.now() + (ms || 45000);
+    for (;;) {
+      const d = f.contentDocument;
+      const pill = d && d.querySelector(".topbar .pill");
+      const count = pill ? parseInt(pill.textContent.replace(/[^0-9]/g, ""), 10) : 0;
+      if (d && d.querySelector(".graph-stage canvas") && count > 0) return true;
+      if (performance.now() > stop) return false;
+      await sleep(150);
+    }
+  }
+
+  /*
+    The stitch at the end of the run.
+
+    Not a dip to black: the dashboard never leaves the screen. A second app
+    is booted on the standby frame and left sitting underneath, fully
+    painted and wearing the same camera, and only then does the finished one
+    fade off it. So the shot holds still while the folder -- and the
+    conversation, and the colour grid -- simply cease to be there, and the
+    last frame of the film is the first frame of it.
+
+    prepare() runs before the standby boots, which is where the folder is
+    actually deleted; the standby then loads a library that never had it.
+  */
+  /*
+    Booting a whole second app takes the better part of ten seconds, so it
+    cannot happen inside a one-second transition. It is done early instead,
+    while the run is still working, and left parked and invisible: primed
+    before the folder is ever created, so what it holds IS the opening
+    frame -- no Photography Project, no conversation, no colour grid.
+  */
+  async function primeStandby() {
+    if (frames.length < 2) return false;
+    const back = frames[(active + 1) % frames.length];
+    back.classList.remove("is-front", "is-standby");
+    back.style.transition = "none";
+    await Promise.race([
+      /* navigate rather than re-set src: on a second play this frame is
+         already sitting on "/" and assigning the same value fires nothing */
+      new Promise((r) => {
+        back.addEventListener("load", r, { once: true });
+        if (back.contentWindow) back.contentWindow.location.replace("/"); else back.src = "/";
+      }),
+      sleep(20000),
+    ]);
+    const ok = await readyIn(back);
+    if (ok) await sleep(2500);     // let its thumbnails paint while unseen
+    return ok;
+  }
+
+  /** reveal it: the finished dashboard simply fades off the one underneath */
+  async function fadeToStandby(ms) {
+    if (frames.length < 2) { await renavigate(); return; }
+    const t = ms == null ? 1000 : ms;
+    const front = frames[active];
+    const back = frames[(active + 1) % frames.length];
+
+    back.style.transform = front.style.transform;   // same camera, or it jumps
+    back.classList.add("is-standby");
+    await sleep(60);
+
+    front.style.transition = "opacity " + t + "ms " + EASE;
+    front.style.opacity = "0";
+    await sleep(t + 80);
+
+    /* hand over: the standby is now the frame the driver talks to */
+    front.classList.remove("is-front");
+    front.style.transition = "none";
+    front.style.opacity = "";
+    back.classList.remove("is-standby");
+    back.classList.add("is-front");
+    active = (active + 1) % frames.length;
+    poolStatus();
+  }
+
+  /* reload the frame and wait for the field again -- used to leave the run
+     on a clean app rather than on its own leftovers */
+  async function reload() {
+    veil.textContent = "resetting the frame…";
+    veil.classList.remove("gone");
+    await Promise.race([
+      new Promise((r) => { frame().addEventListener("load", r, { once: true }); frame().contentWindow.location.replace("/"); }),
+      sleep(20000),
+    ]);
+    try {
+      await until(".graph-stage canvas");
+      await poolReady();
+      await sleep(700);          // let the first thumbnails paint behind the veil
+      fit(0);
+      veil.classList.add("gone");
+      poolStatus();
+    } catch (e) {
+      veil.textContent = "the app did not come back up — reload the page";
+    }
+  }
+
+  /** last-resort sweep, so a failed take never leaves a folder behind */
+  async function unfileViaApi(name) {
+    try {
+      const r = await fetch("/api/collections").then((x) => x.json());
+      const hit = (r.collections || []).find((c) => c.name === name);
+      if (!hit) return true;
+      await fetch("/api/collections?id=" + hit.id, { method: "DELETE" });
+      return true;
+    } catch (e) { return false; }
+  }
+
+  return { boot, fit, until, byText, ask, say, clear, drive, status, doc,
+           accept, unfile: unfileViaApi, primeStandby, fadeToStandby,
+           reload, wide, push, poolReady };
 }
-document.getElementById("dreplay").onclick = playDash;
+
+
+/* ---------------- 02 · the agent at work, in the dashboard ---------------- */
+
+const dash = liveApp("d");
+document.querySelector('.tabbtn[data-tab="dash"]').addEventListener("click", () => {
+  dash.boot();
+  requestAnimationFrame(() => dash.fit(0));
+});
+
+const dashBtn = document.getElementById("dreplay");
+let dashPlaying = false;
+
+dashBtn.onclick = async () => {
+  if (dashPlaying) return;
+  dashPlaying = true;
+  dashBtn.textContent = "running…";
+  dash.clear();
+  dash.drive(true);
+  try {
+    if (!(await dash.boot())) throw new Error("the frame never came up");
+    dash.say("waiting for the field to form", "frame", "step");
+    await dash.until(".graph-stage canvas");
+    const promptBtn = dash.byText(".viewswitch button", "Prompt");
+    if (!promptBtn) throw new Error("the Prompt control is not where the demo expects it");
+    promptBtn.click();
+    dash.say("mode → <b>Prompt</b>", "click", "step");
+    await dash.ask("gather the loneliest images and file the best of them");
+  } catch (e) {
+    dash.say(String((e && e.message) || e), "stopped", "warn");
+  }
+  dash.drive(false);
+  dashBtn.textContent = "▶ Play demo";
+  dashPlaying = false;
+};
 
 
 /* ================= 3rd tab: the crew ================= */
@@ -1941,6 +2259,155 @@ SORTS.forEach((s, i) => {
 });
 sortbar.insertAdjacentHTML("beforeend",
   '<span class="handnote"><span class="ic">' + ic("tag") + "</span>vocabulary \u00b7 written by archivist \u00b7 read by curator</span>");
+
+/* ================= 05 · A FULL RUN =================
+   The same job as before -- find the photography, arrange it by colour,
+   file it as a folder -- except it is no longer mimed. The three acts are
+   three real prompts to the real agent in the frame, and the step chips
+   follow the hand-off between archetypes as the app answers them. The run
+   stops at the proposal on purpose: the accept is the human's, and a demo
+   that pressed it would be lying about the one rule that matters. */
+
+const FOLDER = "Photography Project";
+/* The beat between acts. It exists to let the field be read, nothing more.
+   It was ten seconds while the run was pacing itself around Groq free
+   tier's 8k-per-minute ceiling -- on a provider without one that pause is
+   just tape with nothing on it. Raise it again if you switch back to Groq
+   and the later acts start coming back 502. */
+const ACT_GAP = 900;
+const run = liveApp("r");
+const runplay = document.getElementById("runplay");
+const runlabel = document.getElementById("runplaylabel");
+let runPlaying = false;
+
+document.querySelector('.tabbtn[data-tab="run"]').addEventListener("click", () => {
+  run.boot();
+  requestAnimationFrame(() => run.fit(0));
+});
+
+/* Film mode hides the tab bar, so the run tab has to choose itself -- and
+   it has to happen here, after that handler exists rather than beside the
+   body class up top. A programmatic click reaches a hidden button fine. */
+if (document.body.classList.contains("is-film")) {
+  document.querySelector('.tabbtn[data-tab="run"]').click();
+}
+
+/** chips: the act under way is lit, the ones behind it are done */
+function rStep(n, done) {
+  document.querySelectorAll(".runstep").forEach((el) => {
+    const i = Number(el.dataset.step);
+    el.classList.toggle("on", i === n && !done);
+    if (i < n || (i === n && done)) el.classList.add("done");
+  });
+}
+
+async function playRun() {
+  if (runPlaying) return;
+  runPlaying = true;
+  runplay.disabled = true;
+  runlabel.textContent = "Running…";
+  let standby = Promise.resolve(false);
+  run.clear();
+  document.querySelectorAll(".runstep").forEach((el) => el.classList.remove("on", "done"));
+  run.drive(true);
+  /* a recorder outside the page reads this to know when the take is over */
+  document.body.dataset.run = "playing";
+
+  /* The closing beats are on absolute marks, not on a chain of sleeps, so
+     they land where they were asked for however long the agent took to
+     answer. at(n) waits until n seconds into the take -- and returns at
+     once if the run is already past it, which is the honest failure mode:
+     a slow model pushes the ending later rather than cutting it short. */
+  const t0 = performance.now();
+  const at = (sec) => sleep(Math.max(0, t0 + sec * 1000 - performance.now()));
+  const mark = () => ((performance.now() - t0) / 1000).toFixed(1) + "s";
+  /* centre the frame before the first move, so a recording starts on it */
+  document.getElementById("rvp").scrollIntoView({ behavior: "smooth", block: "center" });
+  await sleep(700);
+
+  /* ---- the shot list ----
+     Wide to establish and to let the field answer; in for anything being
+     typed or pressed. ask() carries its own move (in to compose, out when
+     the agent takes over) so the rhythm is the same in all three acts, and
+     the beats below are only the ones this run does not share with them. */
+  try {
+    if (!(await run.boot())) throw new Error("the frame never came up");
+    await run.until(".graph-stage canvas");
+
+    /* establishing: the whole app, at rest, before anything is asked of it */
+    await run.wide(0);
+    await sleep(900);
+
+    /* a clean slate for the run, taken through the app's own controls
+       rather than by reloading the frame behind its back */
+    const promptBtn = run.byText(".viewswitch button", "Prompt");
+    if (!promptBtn) throw new Error("the Prompt control is not where the run expects it");
+    promptBtn.click();
+    const clearBtn = run.byText(".chathead .closebtn", "Clear");
+    if (clearBtn) { clearBtn.click(); await sleep(400); }
+    await run.until("form.graph-ci textarea");
+
+
+    /* ---------- act 1 · the curator finds ---------- */
+    rStep(1);
+    await run.ask("show me all photography images");
+    rStep(1, true);
+    /* start the standby now, in the background: it needs ~10s and the run
+       has ~30s left. Primed here it never sees the folder. */
+    standby = run.primeStandby();
+    await sleep(ACT_GAP);   // a beat on the field it found
+
+    /* ---------- act 2 · the curator arranges, on the archivist's palettes ---------- */
+    rStep(2);
+    await run.ask("sort what is showing by colour");
+    rStep(2, true);
+    await sleep(ACT_GAP);   // a beat on the grid, which reads top to bottom
+
+    /* ---------- act 3 · the media manager files ---------- */
+    rStep(3);
+    await run.ask("file these as a folder called " + FOLDER);
+    await run.accept();   // pushes in on the proposal, presses, holds
+    rStep(3, true);
+
+    /* Straight from the accept to the folder it just made -- one move, not
+       out and back in again. */
+    await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 1000 });
+    run.say("<b>" + FOLDER + "</b> is in the sidebar — a real folder, in the real library", "filed", "step");
+    await sleep(1200);
+
+    /* the sidebar shot holds until the pan-out mark, however long the
+       agent took to get us here */
+    await at(48);
+    await run.wide(1200);                     // 48s · pan out
+    run.say("panned out at " + mark(), "48s", "step");
+
+    await at(50);                             // 50s · clear the conversation
+    const clr = run.byText(".chathead .closebtn", "Clear");
+    if (clr) clr.click();
+    run.say("cleared the conversation at " + mark(), "50s", "step");
+
+    await at(52);
+  } catch (e) {
+    run.say(String((e && e.message) || e), "stopped", "warn");
+  }
+
+  /* 52s · the stitch. The standby has been sitting underneath since act 1,
+     holding the library as it was before any of this -- no folder, no
+     conversation, no grid. The finished dashboard just fades off it, so the
+     app never leaves the screen and the last frame is the first frame. */
+  await standby;
+  await run.fadeToStandby(1000);
+  await run.unfile(FOLDER);                   // behind the fade, off camera
+  run.say("transitioned at " + mark(), "52s", "step");
+  await at(53);                               // 53s · out
+
+  run.drive(false);
+  runplay.disabled = false;
+  runlabel.textContent = "Play it again";
+  runPlaying = false;
+  document.body.dataset.run = "done";
+}
+runplay.onclick = playRun;
 
 </script>
 </body>
