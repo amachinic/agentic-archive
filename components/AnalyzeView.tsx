@@ -307,7 +307,7 @@ export default function AnalyzeView({
                     {chatBusy && (
                       <div className="chat-msg is-ai">
                         <span className="mono-xs">atlas</span>
-                        <p style={{ display: "flex", alignItems: "center", gap: 8 }}><GlyphLoader size={15} /> thinking about it</p>
+                        <p style={{ display: "flex", alignItems: "center", gap: 8 }}><GlyphLoader size={15} working /> thinking about it</p>
                       </div>
                     )}
                     <div ref={threadEndRef} />

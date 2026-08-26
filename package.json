@@ -11,7 +11,8 @@
     "tag-local": "tsx scripts/tag-local.ts",
     "refine-text": "tsx scripts/refine-text.ts",
     "identify-artists": "tsx scripts/identify-artists.ts",
-    "refine-tags": "tsx scripts/refine-tags.ts"
+    "refine-tags": "tsx scripts/refine-tags.ts",
+    "film": "node scripts/film-run.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.121.0",
@@ -25,6 +26,7 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "playwright": "^1.62.1",
     "tsx": "^4.23.12",
     "typescript": "^5"
   }
