@@ -135,7 +135,9 @@ Groq language or vision model
 
 The Vercel deployment is a read-only snapshot of the full visual catalog. It keeps the reviewed titles, descriptions, artists, controlled keyterms, collections, palettes, perceptual fingerprints, similarity graph, and analysis briefs available across Network, Gallery, and Analyze.
 
-Public image delivery uses metadata-free WebP derivatives in Vercel Blob. The deployment catalog is generated from a transactionally consistent SQLite snapshot, with local source paths, original filenames, hashes, embedded generation metadata, raw OCR, notes, and file timestamps removed before upload. Source originals and the writable `atlas.db` remain local.
+Public image delivery uses metadata-free WebP derivatives in Vercel Blob. The deployment catalog is generated from a transactionally consistent SQLite snapshot, with local source paths, original filenames, source hashes, embedded generation metadata, raw OCR, notes, and file timestamps removed before upload. Source originals and the writable `atlas.db` remain local.
+
+The publisher is fail closed: new unindexed files and database schema changes require explicit review. Existing image blobs are byte-verified and never overwritten, and each sanitized SQLite catalog is published at a content-addressed path before Vercel builds against it.
 
 Uploads, exports, model calls, and archive mutations stay disabled on the public deployment. The persistent working product continues to run locally because ingest, Windows OCR, disk export, and source-file management require durable host storage.
 
