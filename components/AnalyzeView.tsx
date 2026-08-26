@@ -13,7 +13,7 @@ import AnalysisBrief from "./AnalysisBrief";
 import UploadModal from "./UploadModal";
 import GlyphLoader from "./GlyphLoader";
 import { useDragScroll } from "./useDragScroll";
-import { IconSearch, IconUpload, IconX } from "./icons";
+import { IconPlus, IconSearch, IconUpload, IconX } from "./icons";
 
 type PickerItem = { id: number; title: string; w: number; h: number };
 type Detail = { id: number; ai_at: number | null; ai_analysis: Analysis | null; ai_title: string | null; filename: string };
@@ -39,6 +39,7 @@ export default function AnalyzeView({
   const [draft, setDraft] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const threadEndRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const ranFor = useRef<number | null>(null);
 
   /* the empty studio IS a dropzone: files land, upload, and analysis starts
@@ -118,6 +119,13 @@ export default function AnalyzeView({
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [thread, chatBusy]);
+
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }, [draft]);
 
   async function runAnalysis(id: number) {
     setAnalyzing(true);
@@ -304,19 +312,35 @@ export default function AnalyzeView({
                     )}
                     <div ref={threadEndRef} />
                     <form
-                      className="chatbox__input"
+                      className="graph-ci"
                       onSubmit={(e) => { e.preventDefault(); send(); }}
                     >
+                      <button
+                        type="button"
+                        className="graph-ci__icon"
+                        onClick={() => setShowUpload(true)}
+                        disabled={chatBusy}
+                        title="Upload another image"
+                        aria-label="Upload another image"
+                      >
+                        <IconPlus width={14} height={14} />
+                      </button>
                       <textarea
-                        className="note-box"
-                        style={{ minHeight: 44 }}
+                        ref={composerRef}
+                        className="graph-ci__text"
+                        rows={1}
                         placeholder="Ask about material, lighting, history, technique..."
+                        aria-label="Ask Atlas about this image"
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                         disabled={chatBusy}
                       />
-                      <button className="btn is-primary" type="submit" disabled={chatBusy || !draft.trim()}>Send</button>
+                      <button className="graph-ci__send" type="submit" disabled={chatBusy || !draft.trim()} aria-label="Send">
+                        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" />
+                        </svg>
+                      </button>
                     </form>
                   </div>
                 </div>
