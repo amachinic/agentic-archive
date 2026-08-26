@@ -5,11 +5,11 @@
  * - public: the sanitized, read-only archive bundled with the deployment
  */
 export const IS_PUBLIC_ARCHIVE =
-  process.env.ATLAS_ARCHIVE_MODE === "public";
+  process.env.ATLAS_ARCHIVE_MODE?.trim() === "public";
 
 export const IS_HOSTED_DEMO =
   !IS_PUBLIC_ARCHIVE &&
-  (process.env.ATLAS_DEMO === "1" || process.env.VERCEL === "1");
+  (process.env.ATLAS_DEMO?.trim() === "1" || process.env.VERCEL?.trim() === "1");
 
 export const IS_HOSTED_READ_ONLY =
   IS_PUBLIC_ARCHIVE || IS_HOSTED_DEMO;

@@ -11,9 +11,9 @@ const SAFE_DEMO_GET = [
 ];
 
 export function proxy(request: NextRequest) {
-  const publicArchive = process.env.ATLAS_ARCHIVE_MODE === "public";
+  const publicArchive = process.env.ATLAS_ARCHIVE_MODE?.trim() === "public";
   const hostedDemo = !publicArchive
-    && (process.env.ATLAS_DEMO === "1" || process.env.VERCEL === "1");
+    && (process.env.ATLAS_DEMO?.trim() === "1" || process.env.VERCEL?.trim() === "1");
   if (!publicArchive && !hostedDemo) return NextResponse.next();
 
   const safeGet = (request.method === "GET" || request.method === "HEAD")
