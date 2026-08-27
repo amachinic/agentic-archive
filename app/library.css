@@ -1336,6 +1336,7 @@
    composer that never leaves the bottom of the panel ---- */
 .graph-below--chat { overflow: hidden; display: flex; flex-direction: column; }
 .graph-below--chat .chatbox { flex: 1; min-height: 0; gap: 0; }
+.graph-below--chat.is-collapsed .chatbox { flex: none; }
 .chathead {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; flex: none;
@@ -1345,6 +1346,28 @@
   padding: 0 var(--space-2) 12px;
   border-bottom: 1px solid var(--border);
 }
+.graph-below--chat.is-collapsed .chathead { padding-bottom: 0; border-bottom: 0; }
+.chathead__toggle {
+  display: inline-grid; place-items: center;
+  width: 28px; height: 28px; padding: 0; flex: none;
+  background: transparent;
+  border: 0; border-radius: var(--radius-md);
+  color: var(--text-muted); cursor: pointer;
+  transition: background var(--motion-duration) var(--motion-ease),
+              color var(--motion-duration) var(--motion-ease);
+}
+.chathead__toggle:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+}
+.chathead__toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chathead__chevron { transition: transform var(--motion-duration) var(--motion-ease); }
+.chathead__chevron.is-expanded { transform: rotate(180deg); }
+.conversation-body {
+  display: flex; flex: 1; min-height: 0;
+  flex-direction: column;
+}
+.conversation-body[hidden] { display: none; }
 .chatscroll {
   flex: 1; min-height: 0; overflow-y: auto;
   display: flex; flex-direction: column; gap: 14px;

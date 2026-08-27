@@ -24,7 +24,7 @@ import { useDialogs } from "./DialogProvider";
 import { write } from "@/lib/write";
 import GlyphLoader from "./GlyphLoader";
 import Select from "./Select";
-import { IconX, IconPlus, IconCheck, IconCaret, IconTag, IconSearch, IconSave, IconSort, IconClock, IconDrive, IconPalette, IconRefresh, IconFolder, IconSparkle, IconUndo, IconCopy, IconTrash, IconAgent } from "./icons";
+import { IconX, IconPlus, IconCheck, IconCaret, IconChevronDown, IconTag, IconSearch, IconSave, IconSort, IconClock, IconDrive, IconPalette, IconRefresh, IconFolder, IconSparkle, IconUndo, IconCopy, IconTrash, IconAgent } from "./icons";
 import ThemeToggle from "./ThemeToggle";
 import ToolCheck from "./ToolCheck";
 import type { ChatMsg } from "@/lib/vision";
@@ -412,6 +412,7 @@ export default function GraphView({
   const [simMode, setSimMode] = useState<"blend" | "structure" | "color" | "aesthetic">(FIELD_DEFAULTS.mode);
   const [cap, setCap] = useState(80);
   const [panel, setPanel] = useState<"search" | "prompt">("prompt");
+  const [conversationCollapsed, setConversationCollapsed] = useState(false);
   const [promptIds, setPromptIds] = useState<number[] | null>(null);
   const [thread, setThread] = useState<ThreadItem[]>([]);
   const [draft, setDraft] = useState("");
@@ -673,8 +674,10 @@ export default function GraphView({
 
   /* the conversation keeps its newest message in view, like the analysis chat */
   useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [thread, promptBusy]);
+    if (!conversationCollapsed) {
+      threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [thread, promptBusy, conversationCollapsed]);
 
   /* dropdowns close on outside click or Escape */
   useEffect(() => {
@@ -1831,7 +1834,7 @@ export default function GraphView({
     };
     const scroll = document.querySelector(".chatscroll") as HTMLElement | null; // the view renders exactly one
     if (clearingRef.current) return;
-    if (!scroll || thread.length === 0 || matchMedia("(prefers-reduced-motion: reduce)").matches) { finish(); return; }
+    if (conversationCollapsed || !scroll || thread.length === 0 || matchMedia("(prefers-reduced-motion: reduce)").matches) { finish(); return; }
     clearingRef.current = true;
 
     const items = Array.from(scroll.children) as HTMLElement[];
@@ -2400,7 +2403,7 @@ export default function GraphView({
               )}
 
               {panelIn && panel === "prompt" && (
-                <div className={"graph-below graph-below--chat" + (sheetOpen && !filterSheetOpen ? " is-open" : "")}>
+                <div className={"graph-below graph-below--chat" + (conversationCollapsed ? " is-collapsed" : "") + (sheetOpen && !filterSheetOpen ? " is-open" : "")}>
                   <div
                     className="sheet-grab"
                     onPointerDown={grabDown}
@@ -2418,8 +2421,28 @@ export default function GraphView({
                           <button className="closebtn" onClick={clearPrompt} title="Clear the conversation">Clear</button>
                         )}
                         <button className="closebtn sheet-only" onClick={() => setSheetOpen(false)}>Close</button>
+                        <button
+                          type="button"
+                          className="chathead__toggle"
+                          onClick={() => setConversationCollapsed((collapsed) => !collapsed)}
+                          aria-expanded={!conversationCollapsed}
+                          aria-controls="graph-conversation-content"
+                          aria-label={conversationCollapsed ? "Expand conversation" : "Collapse conversation"}
+                          title={conversationCollapsed ? "Expand conversation" : "Collapse conversation"}
+                        >
+                          <IconChevronDown
+                            width={14}
+                            height={14}
+                            className={"chathead__chevron" + (conversationCollapsed ? "" : " is-expanded")}
+                          />
+                        </button>
                       </div>
                     </div>
+                    <div
+                      id="graph-conversation-content"
+                      className="conversation-body"
+                      hidden={conversationCollapsed}
+                    >
                     <div className="chatscroll">
                     {thread.length === 0 && !promptBusy && (
                       <div className="agent-home">
@@ -2643,6 +2666,7 @@ export default function GraphView({
                         </svg>
                       </button>
                     </form>
+                    </div>
                   </div>
                 </div>
               )}
