@@ -164,7 +164,11 @@ export default function AnalyzeView({
       if (!res.ok) throw new Error(d.error || "chat failed");
       setThread([...next, { role: "assistant", content: d.reply }]);
     } catch (e) {
-      setThread([...next, { role: "assistant", content: "That failed: " + (e instanceof Error ? e.message : "unknown error") + " . Try again." }]);
+      /* A refusal is not a failure to retry. The hosted archive says no to
+         this every time, and "try again" turns a clear answer into a loop. */
+      const why = e instanceof Error ? e.message : "unknown error";
+      const said = why[0].toUpperCase() + why.slice(1) + (/[.!?]$/.test(why) ? "" : ".");
+      setThread([...next, { role: "assistant", content: /read.?only/i.test(why) ? said : said + " Try again." }]);
     } finally {
       setChatBusy(false);
     }
