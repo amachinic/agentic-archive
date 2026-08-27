@@ -2393,12 +2393,14 @@ async function playRun() {
        long enough to read the name, and back out by 45. Coming out of it IS
        the pan-out -- one move, not a look parked in front of one. */
     await at(43);
-    await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 700 });
+    /* the moves themselves are slow enough to read as a camera travelling,
+       not a cut: 1.2s down, a beat on the name, 1.3s back out */
+    await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 1200 });
     run.say("<b>" + FOLDER + "</b> is in the sidebar — a real folder, in the real library", "sidebar", "step");
 
-    await at(44.2);
-    await run.wide(800);                      // out by 45s
-    run.say("panned out at " + mark(), "45s", "step");
+    await at(45);
+    await run.wide(1300);                     // out by ~46s
+    run.say("panned out at " + mark(), "46s", "step");
 
     /* The closing marks are floors, not absolutes. A slow model pushes the
        pan-out late, and a mark that has already passed fires at once -- one
