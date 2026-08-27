@@ -22,7 +22,12 @@ const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
   that wants more than that is going in circles rather than converging.
 */
 const HOSTED_MODEL = process.env.ATLAS_HOSTED_MODEL || "gpt-4.1-mini";
-const HOSTED_ROUNDS = 4;
+/* One round is one model turn, and the tools it calls in that turn. Four was
+   enough while every request was one narrowing: it is not enough for a
+   request that misses the vocabulary, corrects itself, sorts, shows, and then
+   still has to say what it did. Running out does not fail the work, but it
+   replaces the answer with "I hit my step limit", which reads as a fault. */
+const HOSTED_ROUNDS = 6;
 const ROUNDS = IS_HOSTED_READ_ONLY ? HOSTED_ROUNDS : 6;
 /* How much of the field one turn can carry, in either direction. The library
    is under a thousand images, so this is a runaway guard rather than a page
@@ -183,12 +188,30 @@ function vocabulary(): string {
   return text;
 }
 
-const VOCAB_SET = () => {
-  const names = db().prepare(
-    "SELECT DISTINCT t.name FROM tags t JOIN image_tags it ON it.tag_id = t.id"
-  ).all() as { name: string }[];
-  return new Set(names.map((r) => r.name));
-};
+const VOCAB_LIST = () => (db().prepare(
+  "SELECT DISTINCT t.name FROM tags t JOIN image_tags it ON it.tag_id = t.id"
+).all() as { name: string }[]).map((r) => r.name);
+
+const VOCAB_SET = () => new Set(VOCAB_LIST());
+
+/*
+  The vocabulary is a controlled list, so a near miss is common and cheap to
+  recover from: the archive files posters under "poster text", and a human who
+  says "posters" should not be told that the whole library matches. Naming the
+  term they nearly said lets the agent correct itself inside the same turn.
+*/
+function nearestTerms(word: string, vocab: string[]): string[] {
+  const w = word.toLowerCase().trim();
+  if (!w) return [];
+  const parts = w.split(/s+/);
+  return vocab
+    .filter((v) => {
+      const t = v.toLowerCase();
+      if (t.includes(w) || w.includes(t)) return true;
+      return parts.some((p) => p.length > 3 && t.split(/s+/).some((q) => q.startsWith(p) || p.startsWith(q)));
+    })
+    .slice(0, 5);
+}
 
 const SYSTEM = [
   "You are Atlas's Discovery agent, working inside a personal image archive.",
@@ -301,7 +324,17 @@ export async function POST(req: Request) {
         const terms = asked.filter((t) => vocab.has(t));
         const unknown = asked.filter((t) => !vocab.has(t));
         if (!terms.length) {
-          return JSON.stringify({ count: ws.length, matched: 0, unknown, note: "none of these are vocabulary terms; the set is unchanged. Pick terms from the KEYTERM VOCABULARY." });
+          const vlist = VOCAB_LIST();
+          const suggest: Record<string, string[]> = {};
+          for (const u of unknown) { const near = nearestTerms(u, vlist); if (near.length) suggest[u] = near; }
+          const hasSuggestion = Object.keys(suggest).length > 0;
+          return JSON.stringify({
+            count: ws.length, matched: 0, unknown,
+            ...(hasSuggestion ? { did_you_mean: suggest } : {}),
+            note: hasSuggestion
+              ? "none of these are vocabulary terms, so the set is unchanged. Call filter_by_terms again with the terms listed under did_you_mean."
+              : "none of these are vocabulary terms; the set is unchanged. Pick terms from the KEYTERM VOCABULARY.",
+          });
         }
         const ids = ws.map((r) => r.id);
         const ph = ids.map(() => "?").join(",");
@@ -314,29 +347,54 @@ export async function POST(req: Request) {
         const keep = new Set(rows.map((r) => r.id));
         /* a miss reports itself instead of destroying the set */
         if (!keep.size) {
-          return JSON.stringify({ count: ws.length, matched: 0, terms, unknown, note: "no image carries ALL of these; the set is unchanged. Try fewer or different vocabulary terms, or show_field what the search found." });
+          /* Which of them would have worked alone. "Try fewer" is advice; a
+             count per term is the answer. */
+          const each: Record<string, number> = {};
+          for (const t of terms) {
+            const row = conn.prepare(
+              "SELECT COUNT(DISTINCT it.image_id) AS n FROM image_tags it JOIN tags tg ON tg.id = it.tag_id " +
+              "WHERE it.image_id IN (" + ph + ") AND tg.name = ?"
+            ).get(...ids, t) as { n: number } | undefined;
+            each[t] = row?.n ?? 0;
+          }
+          return JSON.stringify({
+            count: ws.length, matched: 0, terms, unknown, each,
+            note: "no image carries ALL of these at once, so the set is unchanged. each is how many carry each term on its own: call filter_by_terms again with just the one you want.",
+          });
         }
         ws = ws.filter((r) => keep.has(r.id));
         narrowed = true;
         return JSON.stringify({ count: ws.length, terms, unknown, sample: sample() });
       }
       case "expand_similar": {
-        if (!ws.length) return JSON.stringify({ count: 0 });
+        if (!ws.length) return JSON.stringify({ count: 0, added: 0, note: "nothing to grow from: search or filter first." });
+        const before = ws.length;
         const ids = ws.map((r) => r.id);
         const ph = ids.map(() => "?").join(",");
+        /* Enough edges to reach past the set itself. A flat 200 meant a set of
+           334 could spend the entire result on links it already held. */
+        const edgeLimit = Math.min(4000, Math.max(400, ids.length * 4));
         const rows = conn.prepare(
-          "SELECT a_id, b_id FROM similarity WHERE (a_id IN (" + ph + ") OR b_id IN (" + ph + ")) ORDER BY score DESC LIMIT 200"
+          "SELECT a_id, b_id FROM similarity WHERE (a_id IN (" + ph + ") OR b_id IN (" + ph + ")) ORDER BY score DESC LIMIT " + edgeLimit
         ).all(...ids, ...ids) as { a_id: number; b_id: number }[];
         const have = new Set(ids);
         for (const r of rows) {
           for (const cand of [r.a_id, r.b_id]) {
-            if (!have.has(cand) && ws.length < 300) {
+            /* The ceiling was a flat 300, below an ordinary working set:
+               widening a set of 334 added nothing, returned a count, and the
+               agent reported that it had widened. */
+            if (!have.has(cand) && ws.length < FIELD_CAP) {
               const t = conn.prepare("SELECT ai_title, filename FROM images WHERE id = ?").get(cand) as { ai_title: string | null; filename: string } | undefined;
               if (t) { have.add(cand); ws.push({ id: cand, title: (t.ai_title || t.filename).slice(0, 40) }); }
             }
           }
         }
-        return JSON.stringify({ count: ws.length });
+        const added = ws.length - before;
+        if (added > 0) narrowed = true;
+        return JSON.stringify({
+          count: ws.length, added,
+          ...(added === 0 ? { note: "nothing similar sits outside this set already. Say it could not be widened rather than implying it grew." } : {}),
+        });
       }
       case "show_field": {
         /* Nothing has narrowed the set, so this is the field the human is
