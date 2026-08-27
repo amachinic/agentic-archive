@@ -1066,7 +1066,9 @@ export default function GraphView({
   function fieldIds(): number[] {
     return sim.current.nodes.map((n) => n.id);
   }
-  const DISK_CAP = 400; // matches MAX_FILES in /api/export
+  /* Above this the client CONFIRMS before writing. The server keeps its own
+     higher ceiling in /api/export; this number is only where asking starts. */
+  const DISK_CAP = 400;
 
   /* the session ledger: everything Atlas does, everything you decide */
   function logLedger(who: string, what: string) {
@@ -1098,7 +1100,29 @@ export default function GraphView({
   }
 
   const pushAtlas = (content: string) => setThread((t) => [...t, { type: "msg", role: "assistant", content }]);
-  const pushCtas = (options: CtaOpt[]) => setThread((t) => [...t, { type: "ctas", options, picked: null }]);
+  /*
+    Every action that writes, in one place.
+
+    The hosted archive refuses all of them at the middleware, so offering one
+    is offering a dead end: the reader picks "Save a folder", answers two more
+    questions, and only then finds out nothing here can be written. Filtering
+    centrally rather than at each call site means a follow-up set added later
+    cannot reintroduce the dead end by forgetting.
+  */
+  const WRITES = new Set([
+    "tag", "dedupe", "dedupe-go",
+    "save", "save-new", "save-existing", "save-local", "save-atlas", "save-disk", "save-both",
+    "post-save",
+  ]);
+  const pushCtas = (options: CtaOpt[]) =>
+    setThread((t) => [
+      ...t,
+      {
+        type: "ctas",
+        options: readOnly ? options.filter((o) => !WRITES.has(o.key) && !o.key.startsWith("into:")) : options,
+        picked: null,
+      },
+    ]);
   const pushOutcome = (rows: OutRow[]) => setThread((t) => [...t, { type: "outcome", rows }]);
   /* a finished task never dead-ends: Atlas hands back the moves that make
      sense from where the conversation now stands, plus a way to the full
@@ -1189,9 +1213,9 @@ export default function GraphView({
 
     /* a new folder: named by you, staged as a proposal, written only on accept */
     if (key === "save-new") {
-      const ids = promptIds ?? [];
+      const ids = fieldIds();
       if (!ids.length) {
-        pushAtlas("The whole library is on the field. Narrow it first (find or filter) and I will file exactly what is showing.");
+        pushAtlas("There is nothing on the field to file. Find or filter something first and I will file exactly what is showing.");
         pushNext(["find", "filter"]);
         return;
       }
@@ -1211,9 +1235,9 @@ export default function GraphView({
     /* an existing folder: the same staged write, aimed at a name that exists */
     if (key === "save-existing") {
       if (!collections.length) { pushAtlas("You have no folders yet. Create one first."); pushNext(["save-new"]); return; }
-      const ids = promptIds ?? [];
+      const ids = fieldIds();
       if (!ids.length) {
-        pushAtlas("Nothing is narrowed down yet. Find or filter first, then I will add exactly what is showing.");
+        pushAtlas("There is nothing on the field to add. Find or filter something first and I will add exactly what is showing.");
         pushNext(["find", "filter"]);
         return;
       }
@@ -1223,7 +1247,7 @@ export default function GraphView({
     }
     if (key.startsWith("into:")) {
       const c = collections.find((x) => x.id === Number(key.slice(5)));
-      const ids = promptIds ?? [];
+      const ids = fieldIds();
       if (!c || !ids.length) return;
       setThread((t) => [...t, { type: "proposal", name: c.name, note: "Adding to the folder you already have.", ids, status: "pending" }]);
       logLedger("media manager", "proposed " + ids.length + " into “" + c.name + "”");
@@ -1251,10 +1275,22 @@ export default function GraphView({
       if (isField) {
         const n = source.ids?.length ?? 0;
         if (!n) { pushAtlas("There is nothing on the canvas to save."); return; }
+        /* The cap is there so one tap cannot ship the whole archive by
+           accident. Accidents are answered by ASKING, not by refusing: a
+           narrowed field of 450 is a deliberate choice, and a wall in front of
+           it is the tool arguing with a decision the human already made. */
         if (n > DISK_CAP) {
-          pushAtlas("The canvas holds " + n + " images, and the disk door writes at most " + DISK_CAP + " at a time. Narrow it first and I will save exactly what is showing.");
-          pushNext(["find", "filter", "save-local"]);
-          return;
+          const go = await dialogs.confirm({
+            title: "Write " + n + " files?",
+            message:
+              "That is a large save: " + n + " copies under the folder you pick. Originals in the library are never touched, and nothing in the archive changes.",
+            confirmLabel: "Write them",
+          });
+          if (!go) {
+            pushAtlas("Left it alone. Narrow the field and ask again if you want fewer.");
+            pushNext(["find", "filter", "save-local"]);
+            return;
+          }
         }
       }
       /* the native dialog first: save anywhere on the machine. The picker
@@ -1401,7 +1437,7 @@ export default function GraphView({
     }
 
     if (key === "post-save") {
-      const ids = promptIds ?? [];
+      const ids = fieldIds();
       if (!ids.length) { pushAtlas("Nothing is on the field to file right now."); return; }
       const name = folderNameFrom(lastQueryRef.current);
       setThread((t) => [...t, { type: "proposal", name, note: "Named after your hunt.", ids, status: "pending" }]);
