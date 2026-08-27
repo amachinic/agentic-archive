@@ -5,8 +5,8 @@ import WallView from "@/components/WallView";
 export const dynamic = "force-dynamic";
 
 export default async function GalleryPage() {
-  // The gallery pulls a generous slice and shuffles client-side per visit.
-  const { rows } = listImages({ limit: 400, sort: "newest" });
+  // SQLite LIMIT -1 returns the complete archive without imposing a fixed cap.
+  const { rows } = listImages({ limit: -1, sort: "newest" });
   const items = rows.map((r) => ({
     id: r.id,
     w: r.width ?? 1,
