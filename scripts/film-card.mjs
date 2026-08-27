@@ -80,11 +80,30 @@ async function main() {
   const client = await ctx.newCDPSession(page);
   const stamps = [];
   const writes = [];
-  let count = 0, rolling = false;
+  let count = 0, armed = false, rolling = false, dropped = 0, playedAt = 0;
 
   client.on("Page.screencastFrame", (f) => {
     client.send("Page.screencastFrameAck", { sessionId: f.sessionId }).catch(() => {});
-    if (!rolling) return;
+    if (!armed) return;
+    if (!rolling) {
+      /* Throw away what was already in flight when playback began.
+
+         requestVideoFrameCallback says a video frame was PRESENTED; it does
+         not say the screencast's own surface has caught up, so the frame
+         Chrome is holding at that instant can still be the bare ground
+         behind an unpainted <video>. That lands as one white frame at the
+         head of the clip -- and since the card loops, one white frame is a
+         flash on every pass. It is exactly what this guard caught: frame 1
+         at luma 222 against 101 for the clip itself.
+
+         Delivery is ack-gated, so Chrome only sends the next frame once the
+         last is acked and at most one is ever in flight: dropping a single
+         frame here is provably enough. The timestamp test underneath is
+         belt and braces for the day that stops being true, capped so a
+         clock that disagrees cannot quietly eat the take. */
+      if (dropped === 0 || (f.metadata.timestamp < playedAt && dropped < 4)) { dropped++; return; }
+      rolling = true;
+    }
     stamps.push(f.metadata.timestamp);
     writes.push(writeFile(path.join(RAW, pad(++count) + ".jpg"), Buffer.from(f.data, "base64")));
   });
@@ -95,7 +114,8 @@ async function main() {
   log("starting playback");
   /* rolling AFTER the first frame is on screen, not before: see __play in card-art.html */
   await page.evaluate(() => window.__play());
-  rolling = true;
+  playedAt = Date.now() / 1000;
+  armed = true;
   log("rolling one pass");
   /* one full pass of the inner clip, read off the element rather than timed:
      a dropped frame or a slow decode must not truncate the loop */
@@ -108,7 +128,7 @@ async function main() {
   rolling = false;
   await client.send("Page.stopScreencast").catch(() => {});
   await Promise.all(writes);
-  log(count + " frames captured");
+  log(count + " frames captured" + (dropped ? "  ·  " + dropped + " pre-playback frame" + (dropped === 1 ? "" : "s") + " discarded" : ""));
   if (count < 60) throw new Error("the screencast produced almost nothing (" + count + " frames)");
   await ctx.close();
   await browser.close();

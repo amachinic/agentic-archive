@@ -134,6 +134,58 @@ async function main() {
   /* film mode pins the body, so there is no scroll to agree about */
   await page.waitForTimeout(1500);
 
+  /* Wait for the field to stop moving, rather than for a number of seconds
+     that once looked long enough.
+
+     Not for the loop -- the encode guarantees that join now -- but for the
+     opening shot itself: rolling while thumbnails are still landing means
+     the take starts with cards quietly popping in, which reads as a page
+     that has not finished loading rather than as an archive at rest.
+
+     The comparison runs inside the page, against the app's own canvas, so
+     it can be cheap and tolerant at the same time. Exact equality was
+     neither: a single card still waiting on its thumbnail keeps a shimmer
+     band sweeping across it forever, and the wait simply timed out every
+     take. A downsample and a small threshold ignore that and still catch a
+     field that is genuinely still arranging itself. */
+  {
+    const settled = await page.evaluate(async () => {
+      const grab = () => {
+        const f = document.getElementById("rframe");
+        const c = f && f.contentDocument && f.contentDocument.querySelector(".graph-stage canvas");
+        if (!c) return null;
+        const o = document.createElement("canvas");
+        o.width = 96; o.height = 60;
+        const g = o.getContext("2d");
+        try { g.drawImage(c, 0, 0, 96, 60); return g.getImageData(0, 0, 96, 60).data; }
+        catch (e) { return null; }   /* a tainted canvas is not worth failing a take over */
+      };
+      const apart = (a, b) => {
+        let sum = 0;
+        for (let i = 0; i < a.length; i += 4) sum += Math.abs(a[i] - b[i]);
+        return sum / (a.length / 4);
+      };
+      let last = null, stable = 0;
+      const stop = performance.now() + 40000;
+      while (performance.now() < stop) {
+        const now = grab();
+        if (!now) return null;
+        /* 2.0, not 0: a card still waiting on its thumbnail keeps a shimmer
+           band sweeping across it, and that never stops. Measured, arrivals
+           take the frame-to-frame figure from 18 down to about 1.3 within
+           three seconds and it then sits there for as long as you watch. The
+           threshold sits above that floor so it reads arrivals, not decor. */
+        if (last && apart(last, now) < 2) { if (++stable >= 3) return true; } else stable = 0;
+        last = now;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      return false;
+    });
+    log(settled === null ? "could not read the field to check it had settled"
+      : settled ? "the field has settled"
+      : "the field is still moving -- rolling anyway");
+  }
+
   /* ---- roll ---- */
   const client = await ctx.newCDPSession(page);
   const stamps = [];
@@ -214,14 +266,40 @@ async function main() {
   const listPath = path.join(RAW, "frames.ffconcat");
   await writeFile(listPath, list);
 
-  const vf = has("native")
-    ? "fps=" + FPS + ",format=yuv420p"
-    : "scale=" + WIDTH + ":" + HEIGHT + ":flags=lanczos,fps=" + FPS + ",format=yuv420p";
+  const total = Math.max(0.2, stamps[count - 1] - stamps[0] + 1 / FPS);
+
+  /*
+    The join, made exact rather than hoped for.
+
+    The take ends on a SECOND app, booted on the standby frame and settled
+    while the first one worked, so the closing shot is the library as it was
+    before any of this. Two separate instances of the same app get very
+    close and no closer: with both ends held perfectly still, cards still
+    landed about 1.3px apart, which reads as the whole field twitching every
+    time the card loops.
+
+    So the last half second dissolves into THIS take's own opening frame.
+    The final frame is then the first frame, because it is literally the
+    same picture -- and the standby is already almost that image, so the
+    correction has nothing to show. It is a guarantee, where matching two
+    live instances could only ever be a good attempt.
+  */
+  const HEAD = path.join(RAW, pad(1) + ".jpg");
+  const JOIN = 0.5;
+  const chain = (has("native") ? "" : "scale=" + WIDTH + ":" + HEIGHT + ":flags=lanczos,") + "fps=" + FPS;
+  /* format comes AFTER the blend: xfade renegotiates the pixel format with
+     its inputs and hands back one libx264 will not accept as high profile,
+     which fails the encode outright. */
+  const vf = "[0:v]" + chain + "[m];[1:v]" + chain + "[s];"
+    + "[m][s]xfade=transition=fade:duration=" + JOIN.toFixed(3)
+    + ":offset=" + (total - JOIN).toFixed(3) + ",format=yuv420p[v]";
 
   log("encoding  crf " + CRF + "  " + FPS + "fps" + (has("native") ? "  native " + WIDTH * SCALE + "x" + HEIGHT * SCALE : ""));
   await ffmpeg([
     "-y", "-f", "concat", "-safe", "0", "-i", listPath,
-    "-vf", vf,
+    /* the opening frame, held just long enough to be dissolved into */
+    "-loop", "1", "-t", (JOIN + 2 / FPS).toFixed(3), "-i", HEAD,
+    "-filter_complex", vf, "-map", "[v]",
     "-c:v", "libx264", "-preset", "slow", "-crf", String(CRF),
     "-profile:v", "high",
     /* Screen content is sRGB. Left untagged, ffmpeg wrote color_space
@@ -281,6 +359,32 @@ async function main() {
   log("sidebar reads " + railPx + "  (--surface #0d0d0d = 13)");
   if (Math.abs(railPx - 13) > 3) {
     throw new Error("the sidebar decoded as " + railPx + ", not 13 -- the encode shifted the greys");
+  }
+
+  /* The join, checked in the finished file rather than trusted to the
+     arithmetic that set it up. The last frame should now BE the first
+     frame, so anything past encoder noise means the dissolve did not land
+     where it was told to. */
+  const seam = await new Promise((resolve) => {
+    const p = spawn("ffmpeg", ["-v", "error", "-i", OUT,
+      "-filter_complex",
+      "[0:v]select='eq(n,0)',setpts=N/FRAME_RATE/TB[a];" +
+      "[0:v]reverse,select='eq(n,0)',setpts=N/FRAME_RATE/TB[b];" +
+      "[a][b]blend=all_mode=difference,format=gray",
+      "-frames:v", "1", "-f", "rawvideo", "-"], { stdio: ["ignore", "pipe", "ignore"] });
+    const chunks = [];
+    p.stdout.on("data", (d) => chunks.push(d));
+    p.on("close", () => {
+      const b = Buffer.concat(chunks);
+      let sum = 0;
+      for (const v of b) sum += v;
+      resolve(b.length ? sum / b.length : -1);
+    });
+    p.on("error", () => resolve(-1));
+  });
+  log("loop join: last frame against first, mean difference " + seam.toFixed(2));
+  if (seam > 1.5) {
+    throw new Error("the last frame is not the first frame (" + seam.toFixed(2) + ") -- the loop would jump");
   }
 
   console.log("\n  " + OUT);
