@@ -27,3 +27,4 @@ run-failed.webm
 # card artwork renders: build outputs for the portfolio repo, not source here
 public/card/
 public/image-archivist.mp4
+.qa/

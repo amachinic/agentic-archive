@@ -24,6 +24,11 @@ const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
 const HOSTED_MODEL = process.env.ATLAS_HOSTED_MODEL || "gpt-4.1-mini";
 const HOSTED_ROUNDS = 4;
 const ROUNDS = IS_HOSTED_READ_ONLY ? HOSTED_ROUNDS : 6;
+/* How much of the field one turn can carry, in either direction. The library
+   is under a thousand images, so this is a runaway guard rather than a page
+   size: anything lower silently shrinks the canvas every time the agent
+   re-forms it. */
+const FIELD_CAP = 1200;
 
 /*
   Two backs for the same agent. Groq is the house model; Claude is here for
@@ -124,6 +129,14 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "release_field",
+      description: "Put the WHOLE library back on the canvas and clear any narrowing. Use whenever the human asks to see everything again, start over, reset, undo the filter or release the field. Do NOT answer that with search_library: an empty search returns a capped page, not the library.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "propose_folder",
       description: "STAGE a proposal to create a folder and file the current working set into it. Does not write anything; the human accepts or rejects.",
       parameters: {
@@ -185,6 +198,7 @@ const SYSTEM = [
   "- Search FIRST; filters only narrow an existing working set.",
   "- After narrowing to something worth seeing, call show_field so the canvas re-forms.",
   "- sort_field arranges whatever is showing into a sorted grid; it is the answer to sort/arrange/order/grid requests.",
+  "- release_field puts the whole library back and drops any narrowing; it is the answer to everything again / reset / start over / show it all. Never answer that with a search.",
   "- If the human asked to file, collect or organize, stage it with propose_folder — never claim you created anything yourself.",
   "- To FIND an artist's work, search_library(their name) FIRST: it reads the credit on every image and reaches artists not listed below. Artist names also work inside filter_by_terms, but only to narrow a set you already have.",
   "- filter_by_terms accepts ONLY terms from the KEYTERM VOCABULARY below, verbatim. Translate the human's words into the nearest vocabulary terms (e.g. 'deep rich colours' -> colorful, dark; 'moodboard for product photography' -> photography, still life, object).",
@@ -217,8 +231,13 @@ export async function POST(req: Request) {
      "them" and "what is showing" refer to. Before this, only a turn that
      searched had a set at all, and "file these" staged a folder of nothing. */
   let ws: { id: number; title: string }[] = [];
+  /* False while ws is only the field the client sent, true once a tool has
+     actually narrowed it. show_field leans on this: re-forming the canvas
+     around a set nobody narrowed is a no-op, and must never be allowed to
+     truncate the field down to a page of itself. */
+  let narrowed = false;
   const seed = Array.isArray(body.field)
-    ? body.field.map(Number).filter(Number.isInteger).slice(0, 500)
+    ? body.field.map(Number).filter(Number.isInteger).slice(0, FIELD_CAP)
     : [];
   if (seed.length) {
     const ph = seed.map(() => "?").join(",");
@@ -229,7 +248,12 @@ export async function POST(req: Request) {
     // the field's own order is the set's order
     ws = seed.filter((id) => title.has(id)).map((id) => ({ id, title: title.get(id)! }));
   }
-  const out: { shownIds: number[] | null; proposal: { name: string; note: string; ids: number[] } | null; sort: { by: "colour" | "light" } | null } = { shownIds: null, proposal: null, sort: null };
+  const out: {
+    shownIds: number[] | null;
+    proposal: { name: string; note: string; ids: number[] } | null;
+    sort: { by: "colour" | "light" } | null;
+    release: boolean;
+  } = { shownIds: null, proposal: null, sort: null, release: false };
   const toolLog: ToolLogRow[] = [];
 
   const sample = () => ws.slice(0, 4).map((r) => r.title).join(", ");
@@ -256,6 +280,7 @@ export async function POST(req: Request) {
           }
         }
         ws = [...found].map(([id, title]) => ({ id, title }));
+        narrowed = true;
         return JSON.stringify({ count: ws.length, sample: sample() });
       }
       case "filter_by_terms": {
@@ -292,6 +317,7 @@ export async function POST(req: Request) {
           return JSON.stringify({ count: ws.length, matched: 0, terms, unknown, note: "no image carries ALL of these; the set is unchanged. Try fewer or different vocabulary terms, or show_field what the search found." });
         }
         ws = ws.filter((r) => keep.has(r.id));
+        narrowed = true;
         return JSON.stringify({ count: ws.length, terms, unknown, sample: sample() });
       }
       case "expand_similar": {
@@ -313,8 +339,32 @@ export async function POST(req: Request) {
         return JSON.stringify({ count: ws.length });
       }
       case "show_field": {
-        out.shownIds = ws.slice(0, 200).map((r) => r.id);
-        return JSON.stringify({ shown: out.shownIds.length });
+        /* Nothing has narrowed the set, so this is the field the human is
+           already looking at. Pinning it would replace "everything" with a
+           page of everything and report that as a re-form. Say so instead. */
+        if (!narrowed) {
+          return JSON.stringify({
+            shown: ws.length,
+            note: "that set is already what is on the canvas, so there was nothing to re-form. If they asked to see everything, call release_field.",
+          });
+        }
+        out.shownIds = ws.slice(0, FIELD_CAP).map((r) => r.id);
+        return JSON.stringify({
+          shown: out.shownIds.length,
+          ...(ws.length > FIELD_CAP ? { of: ws.length, note: "the canvas shows the first " + FIELD_CAP + "; tell them the set is larger" } : {}),
+        });
+      }
+      case "release_field": {
+        /* Not show_field over an empty set: that reports a capped PAGE of the
+           library, and the canvas would settle on 200 of 926 while the human
+           was told they were looking at everything. Releasing is the client
+           dropping its narrowing entirely, so the field goes back to whatever
+           the pool actually is. */
+        ws = [];
+        narrowed = false;
+        out.release = true;
+        out.shownIds = null;
+        return JSON.stringify({ released: true, note: "the whole library is back on the canvas" });
       }
       case "sort_field": {
         out.sort = { by: args.by === "colour" ? "colour" : "light" };
@@ -328,7 +378,7 @@ export async function POST(req: Request) {
         out.proposal = {
           name: String(args.name ?? "Untitled").slice(0, 60),
           note: String(args.note ?? "").slice(0, 160),
-          ids: ws.slice(0, 500).map((r) => r.id),
+          ids: ws.slice(0, FIELD_CAP).map((r) => r.id),
         };
         return JSON.stringify({ staged: true, count: out.proposal.ids.length });
       }
@@ -440,8 +490,8 @@ export async function POST(req: Request) {
   try {
     if (provider() === "anthropic") {
       const reply = await runClaude();
-      if (out.shownIds === null && !out.proposal && ws.length) {
-        out.shownIds = ws.slice(0, 200).map((r) => r.id);
+      if (out.shownIds === null && !out.proposal && narrowed && ws.length) {
+        out.shownIds = ws.slice(0, FIELD_CAP).map((r) => r.id);
         toolLog.push({ tool: "show_field", args: {}, result: JSON.stringify({ shown: out.shownIds.length, auto: true }) });
       }
       return Response.json({
@@ -504,8 +554,8 @@ export async function POST(req: Request) {
     }
     /* the model may run out of rounds without calling show_field: a working
        set it built still lands on the field rather than evaporating */
-    if (out.shownIds === null && !out.proposal && ws.length) {
-      out.shownIds = ws.slice(0, 200).map((r) => r.id);
+    if (out.shownIds === null && !out.proposal && narrowed && ws.length) {
+      out.shownIds = ws.slice(0, FIELD_CAP).map((r) => r.id);
       toolLog.push({ tool: "show_field", args: {}, result: JSON.stringify({ shown: out.shownIds.length, auto: true }) });
     }
     if (!reply) {
@@ -513,7 +563,11 @@ export async function POST(req: Request) {
         ? "I hit my step limit, but the " + out.shownIds.length + " I gathered are on the field."
         : "I hit my step limit before finding anything worth showing. Try different words.";
     }
-    return Response.json({ reply, toolLog, ids: out.shownIds ?? out.proposal?.ids ?? null, proposal: out.proposal, sort: out.sort });
+    return Response.json({
+      reply, toolLog,
+      ids: out.shownIds ?? out.proposal?.ids ?? null,
+      proposal: out.proposal, sort: out.sort, release: out.release,
+    });
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : "agent failed" }, { status: 502 });
   }

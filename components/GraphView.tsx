@@ -1492,9 +1492,16 @@ export default function GraphView({
         await playToolRow(t.tool, fmtDetail(t.tool, t.args), fmtResult(t.result));
         logLedger("curator", t.tool + " " + fmtDetail(t.tool, t.args));
       }
+      /* Releasing is the one case where the agent hands back NO ids on
+         purpose: it is asking the field to stop being narrowed rather than to
+         show a different set. Handled before the ids, because an empty list
+         means "found nothing" everywhere else. The sort goes with it, since
+         "show everything again" means the library as it was, not the library
+         re-formed into somebody's grid. */
+      if (d.release) { setPromptIds(null); setFieldSort(null); }
       /* [] means the agent narrowed to nothing, not "show nothing": the
          field it found nothing in is the field worth keeping on screen */
-      if (Array.isArray(d.ids) && d.ids.length) setPromptIds(d.ids);
+      else if (Array.isArray(d.ids) && d.ids.length) setPromptIds(d.ids);
       if (d.sort) {
         setFieldSort(d.sort.by === "colour" ? "colour" : "light");
         logLedger("curator", "sorted the field by " + d.sort.by + " · grid");
