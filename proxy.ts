@@ -22,7 +22,7 @@ export function proxy(request: NextRequest) {
 
   return NextResponse.json(
     {
-      error: "The hosted Image Archivist archive is read-only. Run the project locally to use archive and agent actions.",
+      error: "the hosted Agentic Archive is read-only, so the agent and any archive change are off here. Run it locally for those",
       code: "SHOWCASE_READ_ONLY",
     },
     { status: 403, headers: { "Cache-Control": "no-store" } },

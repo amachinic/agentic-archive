@@ -94,6 +94,11 @@ const CTA_META: Record<string, CtaOpt> = {
   skills: { key: "skills", label: "Other agent skills", sub: "atlas" },
 };
 const HOME_CTAS: CtaOpt[] = [CTA_META.tag, CTA_META.sort, CTA_META.find, CTA_META.save, CTA_META.skills];
+/* The hosted archive can only offer what never leaves the browser. Tag reads
+   /api/list, find goes to the agent and save writes: all three are refused by
+   the middleware, so offering them is offering a 403. Filter and sort are pure
+   client state and work exactly as they do locally. */
+const READ_ONLY_CTAS: CtaOpt[] = [CTA_META.filter, CTA_META.sort, CTA_META.skills];
 
 /* everything Atlas can actually do today, under the archetype that owns it */
 const SKILLS: { arch: string; note: string; keys: string[] }[] = [
@@ -307,10 +312,22 @@ export const FIELD_DEFAULTS = { min: 0.82, mode: "blend" as const, edgesPerNode:
 export default function GraphView({
   keyterms = [],
   initialGraph,
+  readOnly = false,
 }: {
   keyterms?: Keyterm[];
   /** The field, rendered on the server at FIELD_DEFAULTS. See app/page.tsx. */
   initialGraph?: { nodes: RawNode[]; edges: GEdge[] };
+  /**
+   * The hosted archive, where the middleware refuses every write and every
+   * model call (see proxy.ts).
+   *
+   * Everything the FIELD does is client-side and still works: filtering,
+   * sorting, releasing, panning, opening a card. What cannot work is anything
+   * that leaves the browser. Knowing which is which up front is the whole
+   * point of this flag: the alternative is a composer that invites a question
+   * and answers it with a 403, which is what it used to do.
+   */
+  readOnly?: boolean;
 }) {
   const dialogs = useDialogs();
   const router = useRouter();
@@ -2052,12 +2069,14 @@ export default function GraphView({
                           {boot === 0 ? (
                             <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                           ) : (
-                            <p className="agent-home__say">One agent, three lenses. Find or filter to narrow the field, sort what is showing, save what is worth keeping. Type “/” for every command, or just ask.</p>
+                            <p className="agent-home__say">{readOnly
+                              ? "This is the hosted archive, so I am reading only: filter the field by keyterm and sort what is showing, and every card opens. Asking me to hunt, tag or file needs the local build, where I can actually write."
+                              : "One agent, three lenses. Find or filter to narrow the field, sort what is showing, save what is worth keeping. Type “/” for every command, or just ask."}</p>
                           )}
                         </div>
                         {boot >= 2 && (
                           <div className="agent-ctas">
-                            {HOME_CTAS.map((o, i) => (
+                            {(readOnly ? READ_ONLY_CTAS : HOME_CTAS).map((o, i) => (
                               <button
                                 key={o.key}
                                 className="agent-cta agent-cta--reveal"
@@ -2236,8 +2255,10 @@ export default function GraphView({
                         type="button"
                         className="graph-ci__icon"
                         onClick={() => fileRef.current?.click()}
-                        disabled={promptBusy || simBusy}
-                        title="Upload an image to find similar in the library"
+                        disabled={promptBusy || simBusy || readOnly}
+                        title={readOnly
+                          ? "Matching an upload needs the local build"
+                          : "Upload an image to find similar in the library"}
                         aria-label="Upload an image to find similar"
                       >
                         <IconPlus width={14} height={14} />
@@ -2246,13 +2267,18 @@ export default function GraphView({
                         ref={composerRef}
                         className="graph-ci__text"
                         rows={1}
-                        placeholder="Describe what you are hunting for..."
+                        /* Disabled rather than left open to fail. The hosted archive refuses the
+                           model call, and a composer that takes a question and answers it with a
+                           403 is worse than one that says so before you type. */
+                        placeholder={readOnly
+                          ? "Reading only here. Filter and sort still work."
+                          : "Describe what you are hunting for..."}
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendPrompt(); } }}
-                        disabled={promptBusy}
+                        disabled={promptBusy || readOnly}
                       />
-                      <button className="graph-ci__send" type="submit" disabled={promptBusy || simBusy || !draft.trim()} aria-label="Send">
+                      <button className="graph-ci__send" type="submit" disabled={promptBusy || simBusy || readOnly || !draft.trim()} aria-label="Send">
                         <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                           <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" />
                         </svg>
