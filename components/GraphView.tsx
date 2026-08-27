@@ -48,6 +48,27 @@ function reportAtlasBoot(progress: number, ready = false) {
   }
 }
 
+/*
+  The opening reveal, in milliseconds.
+
+  Loading and showing are different questions. Thumbnails decode while the
+  preloader still owns the screen -- that is the point of loading behind it --
+  so by the time the cover lifts every card already holds a finished picture,
+  and the field would simply BE there. Instead each card keeps drawing its
+  skeleton until this wave reaches it, then crosses into its image.
+
+  The wave moves out from the middle of the view, which is where the spiral
+  starts, so the field fills the way it is laid out rather than in whatever
+  order the live map happens to iterate.
+
+  REVEAL_SPAN is the point past which no card can still be waiting, so it also
+  serves as the cue for the panel that comes in behind the pictures.
+*/
+const REVEAL_FADE = 420;    // one card, skeleton to picture
+const REVEAL_SPREAD = 0.9;  // ms of delay per screen pixel out from the centre
+const REVEAL_LEAD = 700;    // the longest any card is made to wait its turn
+const REVEAL_SPAN = REVEAL_LEAD + REVEAL_FADE;
+
 /* the conversation holds more than words: tool calls the agent made, and
    proposals waiting on the human */
 type ThreadItem =
@@ -417,10 +438,16 @@ export default function GraphView({
      capabilities arrive one after another */
   const [boot, setBoot] = useState(0);
   const [liveCount, setLiveCount] = useState(0);
-  /* the field goes first. The panel holds back until cards have actually
-     spawned (liveCount is written by the render loop), then slides in;
-     a fallback releases it so an empty library can never strand it. */
+  /* the field goes first. The panel holds back until the pictures have
+     actually arrived on screen, then slides in; a fallback releases it so an
+     empty library can never strand it. */
   const [panelIn, setPanelIn] = useState(false);
+  /* the archive is ready to be LOOKED AT: cards spawned, thumbnails decoded,
+     canvas real. This is what releases the preloader -- and nothing more, so
+     that the opening below still has an audience when the cover lifts. */
+  const [assetsReady, setAssetsReady] = useState(false);
+  /* the cover is off and the opening can play */
+  const [revealed, setRevealed] = useState(false);
 
   /* depend on WHETHER cards exist, never on how many: the count is rewritten
      every 120ms as the field spawns, and depending on it restarted the timer
@@ -430,55 +457,49 @@ export default function GraphView({
   const paintedRef = useRef(0);
   useEffect(() => { reportAtlasBoot(25); }, []);
   /*
-    The panel arrives after the field has PICTURES on it, not merely cards.
+    Loading: the archive has PICTURES ready, not merely cards.
 
-    It slides over the canvas, so letting it in while thumbnails are still
-    popping makes the load read as one jumbled moment: a control to type into,
-    over a picture still assembling. The order should be legible. Cards, then
-    images, then the thing you type into.
+    This is what the preloader waits on, so it has to mean the thing behind
+    the cover is genuinely worth uncovering -- the thumbnails have decoded,
+    not just been asked for.
 
     Gated on a count rather than a delay, because the delay that looks right
     against a warm local cache is far too short on a cold deployment. The
     backstop covers the case that should not happen: images that never arrive
-    must not cost the reader the composer.
+    must not cost the reader the archive.
   */
   useEffect(() => {
-    if (panelIn) return;
+    if (assetsReady) return;
     if (!hasCards) {
       reportAtlasBoot(45);
-      const t = setTimeout(() => {
-        setPanelIn(true);
-      }, 2200);
+      /* an empty library has nothing to decode and must not wait for it */
+      const t = setTimeout(() => setAssetsReady(true), initialNodeCount === 0 ? 0 : 2200);
       return () => clearTimeout(t);
     }
     const enough = Math.max(1, Math.min(liveCount, 18));
     const started = performance.now();
-    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
     reportAtlasBoot(55);
     const id = setInterval(() => {
       const decoded = Math.min(paintedRef.current, enough);
-      reportAtlasBoot(55 + (decoded / enough) * 35);
-      const ready = paintedRef.current >= enough;
-      if (!ready && performance.now() - started < 5000) return;
+      reportAtlasBoot(55 + (decoded / enough) * 39);
+      if (paintedRef.current < enough && performance.now() - started < 5000) return;
       clearInterval(id);
-      /* a beat after the last of them, so the panel reads as its own move */
-      releaseTimer = setTimeout(() => {
-        reportAtlasBoot(94);
-        setPanelIn(true);
-      }, ready ? 420 : 0);
+      setAssetsReady(true);
     }, 100);
-    return () => {
-      clearInterval(id);
-      if (releaseTimer) clearTimeout(releaseTimer);
-    };
-  }, [hasCards, panelIn]);
+    return () => clearInterval(id);
+  }, [assetsReady, hasCards, initialNodeCount]);
 
-  /* The final signal is deliberately rendered-state based. Hydration alone
-     is not enough: the canvas must have a real bitmap, the first cards must
-     exist (unless the library is empty), the composer must be mounted, and
-     the fonts that determine the chrome geometry must be settled. */
+  /* The final signal is deliberately rendered-state based. Hydration alone is
+     not enough: the canvas must have a real bitmap, the first cards must exist
+     (unless the library is empty), and the fonts that determine the chrome
+     geometry must be settled.
+
+     It no longer waits for the composer. The composer is part of the opening,
+     and the opening cannot play until this signal has taken the cover away --
+     waiting for it here is what made the whole introduction happen in the
+     dark. */
   useEffect(() => {
-    if (!panelIn) return;
+    if (!assetsReady) return;
     let cancelled = false;
     let verifyTimer: ReturnType<typeof setTimeout> | undefined;
     let firstFrame = 0;
@@ -493,8 +514,7 @@ export default function GraphView({
       const enough = Math.max(1, Math.min(liveCount, 18));
       const fieldReady = initialNodeCount === 0
         || (hasCards && paintedRef.current >= enough);
-      const composerReady = panel !== "prompt" || !!composerRef.current;
-      if (canvasReady && fieldReady && composerReady) {
+      if (canvasReady && fieldReady) {
         reportAtlasBoot(100, true);
         return;
       }
@@ -515,7 +535,62 @@ export default function GraphView({
       cancelAnimationFrame(firstFrame);
       cancelAnimationFrame(secondFrame);
     };
-  }, [hasCards, initialNodeCount, liveCount, panel, panelIn]);
+  }, [assetsReady, hasCards, initialNodeCount, liveCount]);
+
+  /*
+    Showing: the cover is off, so the opening can begin.
+
+    Watched as an attribute rather than an event because four different paths
+    end the boot -- the runtime's own exit, its 12s backstop, and the two
+    fallbacks in AtlasPreloader when the runtime script never arrives at all.
+    They agree on exactly one thing, which is this attribute. A session that
+    has already booted starts "ready", so a revisit reveals from mount and
+    behaves as it always did.
+  */
+  useEffect(() => {
+    const root = document.documentElement;
+    if (root.dataset.atlasBoot === "ready") { setRevealed(true); return; }
+    const obs = new MutationObserver(() => {
+      if (root.dataset.atlasBoot !== "ready") return;
+      obs.disconnect();
+      setRevealed(true);
+    });
+    obs.observe(root, { attributes: true, attributeFilter: ["data-atlas-boot"] });
+    return () => obs.disconnect();
+  }, []);
+
+  /* The draw loop reads performance.now(), so the wave is stamped in the same
+     clock it will be measured against. Asked for less motion, it is stamped
+     already spent: the pictures are simply there, with no branch added to the
+     per-card path to say so. */
+  useEffect(() => {
+    if (!revealed || sim.current.revealAt !== null) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    sim.current.revealAt = performance.now() - (still ? REVEAL_SPAN : 0);
+  }, [revealed]);
+
+  /*
+    The panel arrives last, after the pictures it slides over.
+
+    Letting it in while the field is still filling makes the opening read as
+    one jumbled moment: a control to type into, over a picture still
+    assembling. The order should be legible -- cards, then images, then the
+    thing you type into -- so it waits out the picture wave and then takes a
+    beat, which is what makes it read as its own move rather than the tail of
+    the previous one.
+
+    On a revisit there is no cover and the wave has long since run, so the
+    remaining span is zero and only the beat is left.
+  */
+  useEffect(() => {
+    if (panelIn || !revealed) return;
+    const started = sim.current.revealAt;
+    const waveLeft = started === null
+      ? REVEAL_SPAN
+      : Math.max(0, REVEAL_SPAN - (performance.now() - started));
+    const t = setTimeout(() => setPanelIn(true), waveLeft + 420);
+    return () => clearTimeout(t);
+  }, [panelIn, revealed]);
   /* every step is reversible: a snapshot of the conversation before it, plus
      the action that produced it, so Back rewinds and Retry runs it again */
   const stepsRef = useRef<Step[]>([]);
@@ -681,6 +756,9 @@ export default function GraphView({
     hoveredEdge: GEdge | null;
     live: Map<number, { born: number; dying: number | null }>;
     wiring: { from: GNode; toX: number; toY: number } | null;
+    /* when the opening wave started; null while the preloader still has the
+       screen, after which every card holds its skeleton */
+    revealAt: number | null;
   }>({
     nodes: [], edges: [], byId: new Map(),
     scale: 0.55, ox: 0, oy: 0,
@@ -691,6 +769,7 @@ export default function GraphView({
     hoveredEdge: null,
     live: new Map(),
     wiring: null,
+    revealAt: null,
   });
 
   const capRef = useRef(cap); capRef.current = cap;
@@ -968,6 +1047,16 @@ export default function GraphView({
       const showText = s.scale >= 0.42;
       if (showText) ctx.font = '9px "Input Mono", ui-monospace, monospace';
 
+      /* The opening wave, measured from the middle of the view. Negative
+         means the cover is still up and nothing has crossed over yet; past
+         REVEAL_SPAN it is spent, and cards spawned later by panning behave
+         as they always have -- skeleton while streaming, picture once
+         decoded. The distance is taken in screen pixels so the wave moves at
+         the speed the eye sees it, whatever the zoom. */
+      const revealT = s.revealAt === null ? -1 : nowT - s.revealAt;
+      const waving = revealT >= 0 && revealT < REVEAL_SPAN;
+      const viewCx = -s.ox / s.scale, viewCy = -s.oy / s.scale;
+
       for (const [id] of s.live) {
         const n = s.byId.get(id);
         if (!n) continue;
@@ -1017,21 +1106,26 @@ export default function GraphView({
         const loOk = entry.lo?.complete && entry.lo.naturalWidth;
         const im = (wantHi && hiOk) ? entry.hi! : loOk ? entry.lo! : hiOk ? entry.hi! : null;
 
+        /* how much of this card's picture the wave has uncovered */
+        let shown = 1;
+        if (revealT < 0) shown = 0;
+        else if (waving) {
+          const d = Math.hypot(nx - viewCx, ny - viewCy) * s.scale;
+          const wait = Math.min(REVEAL_LEAD, d * REVEAL_SPREAD);
+          shown = Math.max(0, Math.min(1, (revealT - wait) / REVEAL_FADE));
+        }
+
         const bodyTop = top + HEADER_H * grow;
         const bw = cw - 2, bh = ch - HEADER_H * grow - 1;
         ctx.save();
         ctx.beginPath();
         ctx.roundRect(left + 1, bodyTop, bw, bh, [0, 0, rr - 1, rr - 1]);
         ctx.clip();
-        if (im) {
-          const ir = im.naturalWidth / im.naturalHeight, br = bw / bh;
-          let dw = bw, dh = bh, dx = left + 1, dy = bodyTop;
-          if (ir > br) { dw = bh * ir; dx -= (dw - bw) / 2; }
-          else { dh = bw / ir; dy -= (dh - bh) / 2; }
-          ctx.drawImage(im, dx, dy, dw, dh);
-        } else {
-          /* skeleton: dominant-colour tint + a shimmer band sweeping across
-             while the thumbnail streams in */
+        /* Skeleton first, and it stays under a picture that is still crossing
+           in: dominant-colour tint + a shimmer band sweeping across, drawn
+           while the thumbnail streams -- or, during the opening, while a
+           thumbnail that decoded behind the cover waits its turn. */
+        if (!im || shown < 1) {
           ctx.fillStyle = hexA(n.hex, 0.16);
           ctx.fillRect(left + 1, bodyTop, bw, bh);
           const sweep = ((nowT / 850 + n.id * 0.161) % 1) * (bw + 120) - 60;
@@ -1042,6 +1136,15 @@ export default function GraphView({
           shine.addColorStop(1, "rgba(160,160,160,0)");
           ctx.fillStyle = shine;
           ctx.fillRect(left + 1, bodyTop, bw, bh);
+        }
+        if (im && shown > 0) {
+          const ir = im.naturalWidth / im.naturalHeight, br = bw / bh;
+          let dw = bw, dh = bh, dx = left + 1, dy = bodyTop;
+          if (ir > br) { dw = bh * ir; dx -= (dw - bw) / 2; }
+          else { dh = bw / ir; dy -= (dh - bh) / 2; }
+          if (shown < 1) ctx.globalAlpha = fade * shown;
+          ctx.drawImage(im, dx, dy, dw, dh);
+          if (shown < 1) ctx.globalAlpha = fade;
         }
         ctx.restore();
 
