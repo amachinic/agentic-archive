@@ -441,7 +441,21 @@ export default function GraphView({
       el.style.transform = "";
     }
   }
-  const [showWires, setShowWires] = useState(true);
+  /* Connections are OFF until asked for. The threads are the most active
+     thing on a first landing and they pull the eye away from the images --
+     and while the tagging is still being refined, what they assert is weaker
+     than how loudly they assert it. The choice persists: someone who turns
+     them on has said they want them, and should not have to say it again on
+     every visit. Read in an effect, not the initializer, so the server and
+     first client paint agree. */
+  const [showWires, setShowWires] = useState(false);
+  useEffect(() => {
+    try { if (localStorage.getItem("atlas-wires") === "on") setShowWires(true); } catch { /* blocked storage */ }
+  }, []);
+  const setWires = (on: boolean) => {
+    setShowWires(on);
+    try { localStorage.setItem("atlas-wires", on ? "on" : "off"); } catch { /* blocked storage */ }
+  };
   const [edgeTip, setEdgeTip] = useState<{ x: number; y: number; title: string; desc: string | null } | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -1863,7 +1877,7 @@ export default function GraphView({
         <button
           type="button"
           className={"graph-switch" + (showWires ? " is-on" : "")}
-          onClick={() => setShowWires((w) => !w)}
+          onClick={() => setWires(!showWires)}
           role="switch"
           aria-checked={showWires}
           aria-label="Show connections"
