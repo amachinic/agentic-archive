@@ -1,4 +1,5 @@
 import fsp from "node:fs/promises";
+import { recordEvent } from "@/lib/events";
 import path from "node:path";
 import { db, LIBRARY_DIR, THUMB_DIR } from "@/lib/db";
 import { getImage } from "@/lib/queries";
@@ -53,5 +54,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   conn.prepare("DELETE FROM images WHERE id = ?").run(id);
   await fsp.unlink(path.join(LIBRARY_DIR, row.rel_path)).catch(() => {});
   await fsp.unlink(path.join(THUMB_DIR, id + ".webp")).catch(() => {});
+  recordEvent("you", "delete", { rel_path: row.rel_path }, id);
   return Response.json({ ok: true });
 }

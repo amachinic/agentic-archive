@@ -2,7 +2,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { db, now, LIBRARY_DIR } from "./db";
-import { canonical, vocabularyBlock } from "./taxonomy";
+import { canonical, vocabularyBlock, facetBlock, TAXONOMY } from "./taxonomy";
 
 /* ============================================================
    Groq vision. This account has no Llama-4 multimodal access, so the model is
@@ -15,6 +15,13 @@ import { canonical, vocabularyBlock } from "./taxonomy";
 
 const ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = process.env.GROQ_VISION_MODEL || "qwen/qwen3.6-27b";
+/* The catalogue pass can ride OpenAI instead: Groq's free tier caps the day
+   at 200k tokens and a full 925-image pass needs roughly ten times that.
+   Opt in per process with ATLAS_VISION_PROVIDER=openai -- the backlog runner
+   sets it; interactive single-image analysis stays on the house model. */
+const OAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+const OAI_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-4.1-mini";
+const USE_OAI = process.env.ATLAS_VISION_PROVIDER?.trim() === "openai";
 // Text-only work rides a separate model with its OWN rate bucket, so prompt
 // discovery never competes with image analysis for tokens-per-minute.
 const TEXT_MODEL = process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-120b";
@@ -32,22 +39,24 @@ type Msg = {
 };
 
 async function chat(messages: Msg[], maxTokens = 3600, retries = 6, json = true, effort?: "none" | "low", model = MODEL): Promise<string> {
-  const key = process.env.GROQ_API_KEY;
-  if (!key) throw new VisionError("GROQ_API_KEY is not set. Add it to .env.local");
+  const oai = USE_OAI;
+  const key = oai ? process.env.OPENAI_API_KEY : process.env.GROQ_API_KEY;
+  if (!key) throw new VisionError((oai ? "OPENAI_API_KEY" : "GROQ_API_KEY") + " is not set. Add it to .env.local");
 
   let lastErr = "";
   for (let attempt = 0; attempt <= retries; attempt++) {
     let res: Response;
     try {
-      res = await fetch(ENDPOINT, {
+      res = await fetch(oai ? OAI_ENDPOINT : ENDPOINT, {
         method: "POST",
         headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model,
+          model: oai ? OAI_MODEL : model,
           max_tokens: maxTokens,
           temperature: json ? 0.3 : 0.5,
-          reasoning_format: "hidden",
-          ...(effort ? { reasoning_effort: effort } : {}),
+          /* reasoning_format / reasoning_effort are Groq dialect */
+          ...(oai ? {} : { reasoning_format: "hidden" }),
+          ...(!oai && effort ? { reasoning_effort: effort } : {}),
           ...(json ? { response_format: { type: "json_object" } } : {}),
           messages,
         }),
@@ -131,7 +140,16 @@ export type Analysis = {
   subjects: string[];
   style: string[];
   mood: string[];
-  medium: string;
+  /* the archival facets: what the work IS, how it reached this file, when it
+     dates from, what it is made of, how it was made. See lib/taxonomy.ts. */
+  work: string;
+  carrier: string;
+  period: string;
+  materials: string[];
+  processes: string[];
+  period_evidence: string;
+  /* pre-facet analyses stored this; kept so old JSON still types */
+  medium?: string;
   material: string;
   lighting: string;
   aesthetic: string;
@@ -145,7 +163,7 @@ export type Analysis = {
   differentiation: string;
 };
 
-const ANALYSIS_SYSTEM = `You are an art director cataloguing a visual reference archive.
+const ANALYSIS_SYSTEM = `You are an archivist and art director cataloguing a visual reference archive.
 Look at the image and answer with ONLY a JSON object, no prose around it, with exactly these keys:
 {
   "title": "short evocative name, max 6 words",
@@ -153,7 +171,12 @@ Look at the image and answer with ONLY a JSON object, no prose around it, with e
   "subjects": ["categories from the SUBJECT vocabulary below"],
   "style": ["categories from the STYLE vocabulary below"],
   "mood": ["categories from the MOOD vocabulary below"],
-  "medium": "photography | illustration | 3d render | graphic design | painting | mixed",
+  "work": "ONE value from WORK: what the work IS, not how it was captured",
+  "carrier": "ONE value from CARRIER: how the work reached this file",
+  "period": "ONE value from PERIOD: the decade the work was most likely CREATED",
+  "materials": ["0 to 2 values from MATERIAL: what the work is made of or printed on"],
+  "processes": ["0 to 2 values from PROCESS: the making process, only when readable from the surface"],
+  "period_evidence": "the concrete evidence behind the period call: a printed date, a process, dress, typography, a device on screen. 'none' when the period is undated",
   "material": "the physical or simulated materials and surfaces present and how they read, one sentence",
   "lighting": "the light: apparent source, direction, quality, contrast, one sentence",
   "aesthetic": "the aesthetic lineage or movement this sits in, one sentence",
@@ -169,7 +192,14 @@ Look at the image and answer with ONLY a JSON object, no prose around it, with e
 Use lowercase for every array entry.
 KEYTERM RULES. Every entry in subjects, style and mood MUST be copied verbatim from this vocabulary:
 ${vocabularyBlock()}
-Pick only what genuinely applies (2 to 5 per array; fewer is better than forced). If nothing in a list fits, return an empty array. NEVER invent a term, never combine two, never add adjectives: a phrase true of only this one image belongs in the description, not in a keyterm. The description is searched, so detail is not lost.`;
+Pick only what genuinely applies (2 to 5 per array; fewer is better than forced). If nothing in a list fits, return an empty array. NEVER invent a term, never combine two, never add adjectives: a phrase true of only this one image belongs in the description, not in a keyterm. The description is searched, so detail is not lost.
+
+FACET RULES. work, carrier, period, materials and processes MUST be copied verbatim from:
+${facetBlock()}
+The work is what the thing IS, never how it was captured. A photograph of an open book is a "book spread"; a photograph of a poster on a wall is a "poster"; a product shot of a sneaker is a "photograph" only if the photograph itself is the work -- when the file exists to reproduce or document some other work, name THAT work. "photograph" is reserved for images where the photograph is the work: a photographer's frame, a portrait, a street scene, an art photograph.
+The carrier says how the work got here: "direct" when the file IS the work (native digital design, a photographer's own frame), "photographed" when a physical work was photographed (book spreads, posters on walls, product and documentation shots), "scanned" for flatbed reproductions, "screen captured" for screenshots of screens.
+The period is when the work was CREATED, judged from evidence -- a printed date, the process, dress, typography, devices. A contemporary design in a 1960s style is 2010s or 2020s, not 1960s. Answer "undated" when the evidence is not there, and say so in period_evidence.
+work, carrier and period must NEVER be empty and never a word outside their lists: when none fits exactly, pick the nearest listed value. A photographic portrait or figure study is "photograph". A hardback seen from outside is "book cover"; open pages are "book spread". Physical things -- sculpture, buildings, garments, products -- are never work values: they are subjects, and an image that exists to show one is "photograph" when the photograph has its own authorship, or "artwork reproduction" when the file is purely a record of another artwork. Anything created before 1900 is "pre-1900".`;
 
 export async function analyzeImage(imageId: number): Promise<Analysis> {
   const conn = db();
@@ -195,13 +225,25 @@ export async function analyzeImage(imageId: number): Promise<Analysis> {
 
   const a = parseJson<Analysis>(content);
   const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).map((s) => String(s).trim().toLowerCase()) : []);
+  /* a facet answer is either on its controlled list or it is nothing */
+  const facet = (v: unknown, kind: keyof typeof TAXONOMY) => {
+    const n = String(v ?? "").trim().toLowerCase();
+    return TAXONOMY[kind].includes(n) ? n : "";
+  };
+  const facets = (v: unknown, kind: keyof typeof TAXONOMY, max: number) =>
+    arr(v).filter((n) => TAXONOMY[kind].includes(n)).slice(0, max);
   const clean: Analysis = {
     title: String(a.title ?? "").trim() || "Untitled",
     description: String(a.description ?? "").trim(),
     subjects: arr(a.subjects),
     style: arr(a.style),
     mood: arr(a.mood),
-    medium: String(a.medium ?? "").trim().toLowerCase(),
+    work: facet(a.work, "work"),
+    carrier: facet(a.carrier, "carrier"),
+    period: facet(a.period, "period"),
+    materials: facets(a.materials, "material", 2),
+    processes: facets(a.processes, "process", 2),
+    period_evidence: String(a.period_evidence ?? "").trim(),
     material: String(a.material ?? "").trim(),
     lighting: String(a.lighting ?? "").trim(),
     aesthetic: String(a.aesthetic ?? "").trim(),
@@ -230,8 +272,25 @@ function applyTags(imageId: number, a: Analysis) {
     [a.subjects, "subject"],
     [a.style, "style"],
     [a.mood, "mood"],
-    [a.medium ? [a.medium] : [], "medium"],
+    [a.work ? [a.work] : [], "work"],
+    [a.carrier ? [a.carrier] : [], "carrier"],
+    [a.period ? [a.period] : [], "period"],
+    [a.materials ?? [], "material"],
+    [a.processes ?? [], "process"],
   ];
+  /* The archival facets hold ONE value per image (work, carrier, period) or
+     a small current set (materials, processes): a re-catalogue must replace
+     what an earlier pass wrote, or an image reclassified from "photograph"
+     to "book spread" would simply carry both. Subjects, style and mood stay
+     accumulative, as they always were. */
+  const clearKind = conn.prepare(
+    "DELETE FROM image_tags WHERE image_id = ? AND tag_id IN (SELECT id FROM tags WHERE kind = ?)"
+  );
+  for (const [names, kind] of groups) {
+    if (["work", "carrier", "period", "material", "process"].includes(kind) && names.length) {
+      clearKind.run(imageId, kind);
+    }
+  }
   /* a name owns exactly one kind: never let a later tagger flip it (that is
      how tall images once became "portraits") */
   const upsertTag = conn.prepare("INSERT INTO tags (name, kind) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET name=excluded.name RETURNING id");
@@ -264,12 +323,16 @@ Look at the image and answer with ONLY a JSON object:
   "subjects": ["categories from the SUBJECT vocabulary below"],
   "style": ["categories from the STYLE vocabulary below"],
   "mood": ["categories from the MOOD vocabulary below"],
-  "medium": "photography | illustration | 3d render | graphic design | painting | mixed"
+  "work": "ONE value from the WORK list: what the work IS, not how it was captured",
+  "carrier": "ONE value from the CARRIER list: how the work reached this file"
 }
 Use lowercase for every array entry.
 KEYTERM RULES. Every entry in subjects, style and mood MUST be copied verbatim from this vocabulary:
 ${vocabularyBlock()}
-Pick only what genuinely applies (2 to 5 per array; fewer is better than forced). If nothing in a list fits, return an empty array. NEVER invent a term, never combine two, never add adjectives: a phrase true of only this one image belongs in the description, not in a keyterm. The description is searched, so detail is not lost.`;
+Pick only what genuinely applies (2 to 5 per array; fewer is better than forced). If nothing in a list fits, return an empty array. NEVER invent a term, never combine two, never add adjectives: a phrase true of only this one image belongs in the description, not in a keyterm. The description is searched, so detail is not lost.
+WORK: ${TAXONOMY.work.join(", ")}
+CARRIER: ${TAXONOMY.carrier.join(", ")}
+The work is what the thing IS: a photograph of an open book is a "book spread"; "photograph" is reserved for images where the photograph itself is the work. The carrier is "direct" when the file IS the work, "photographed" / "scanned" / "screen captured" when it reproduces one.`;
 
 export async function quickTagImage(imageId: number): Promise<{ title: string; tags: number }> {
   const conn = db();
@@ -295,13 +358,18 @@ export async function quickTagImage(imageId: number): Promise<{ title: string; t
 
   const a = parseJson<Partial<Analysis>>(content);
   const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).map((x) => String(x).trim().toLowerCase()) : []);
+  const facet = (v: unknown, kind: keyof typeof TAXONOMY) => {
+    const n = String(v ?? "").trim().toLowerCase();
+    return TAXONOMY[kind].includes(n) ? n : "";
+  };
   const clean = {
     title: String(a.title ?? "").trim() || "Untitled",
     description: String(a.description ?? "").trim(),
     subjects: arr(a.subjects),
     style: arr(a.style),
     mood: arr(a.mood),
-    medium: String(a.medium ?? "").trim().toLowerCase(),
+    work: facet(a.work, "work"),
+    carrier: facet(a.carrier, "carrier"),
   };
 
   conn.prepare(

@@ -1,4 +1,5 @@
 import fsp from "node:fs/promises";
+import { recordEvent } from "@/lib/events";
 import path from "node:path";
 import { db, LIBRARY_DIR, THUMB_DIR } from "@/lib/db";
 import { rebuildSimilarity } from "@/lib/ingest";
@@ -101,5 +102,6 @@ export async function POST() {
     }
   }
   const sim = removed ? rebuildSimilarity() : null;
+  recordEvent("archivist", "dedupe", { removed, groups: groups.length });
   return Response.json({ removed, groups: groups.length, similarity: sim });
 }
