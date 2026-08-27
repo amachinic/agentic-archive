@@ -157,6 +157,10 @@ export default function Inspector({
     );
   }
 
+  const folderOptions = collections
+    .filter((c) => !img.collections.some((x) => x.id === c.id))
+    .map((c) => ({ value: String(c.id), label: c.name, depth: c.depth }));
+
   const a = img.ai_analysis;
   const kb = (img.bytes / 1024).toFixed(0);
 
@@ -300,16 +304,22 @@ export default function Inspector({
           <span className="mono-label">Folders</span>
           <div className="tag-row">
             {img.collections.map((c) => <span key={c.id} className="tag-pill">{c.name}</span>)}
-            <Select
-              value={null}
-              placeholder="+ folder"
-              ariaLabel="Add to folder"
-              variant="pill"
-              onChange={(v) => addToCollection(Number(v))}
-              options={collections
-                .filter((c) => !img.collections.some((x) => x.id === c.id))
-                .map((c) => ({ value: String(c.id), label: c.name, depth: c.depth }))}
-            />
+            {/* An image already in every folder has nowhere left to go, and
+                offering "+ folder" there opens an empty menu: a control that
+                looks broken rather than finished. */}
+            {folderOptions.length > 0 && (
+              <Select
+                value={null}
+                placeholder="+ folder"
+                ariaLabel="Add to folder"
+                variant="pill"
+                onChange={(v) => addToCollection(Number(v))}
+                options={folderOptions}
+              />
+            )}
+            {folderOptions.length === 0 && img.collections.length === 0 && (
+              <span className="mono-xs">no folders yet</span>
+            )}
           </div>
         </div>
 

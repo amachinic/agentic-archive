@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Inspector from "./Inspector";
 import { useDialogs } from "./DialogProvider";
+import { write } from "@/lib/write";
 import GlyphLoader from "./GlyphLoader";
 import Select from "./Select";
 import { IconX, IconPlus, IconCheck, IconCaret, IconTag, IconSearch, IconSave, IconSort, IconClock, IconDrive, IconPalette, IconRefresh, IconFolder, IconSparkle, IconUndo, IconCopy, IconTrash, IconAgent } from "./icons";
@@ -1615,22 +1616,30 @@ export default function GraphView({
       danger: true,
     });
     if (!ok) return;
-    await fetch("/api/disconnect", {
+    const cut = await write("/api/disconnect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ a: edge.source, b: edge.target, kind: edge.kind }),
     });
+    if (!cut.ok) {
+      await dialogs.alert({ title: "Still connected", message: cut.message });
+      return;
+    }
     await loadGraph();
   }
 
   async function createLink(fromId: number, toId: number) {
     setLinking(true);
     try {
-      await fetch("/api/links", {
+      const made = await write("/api/links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fromId, toId, kind: "relates" }),
       });
+      if (!made.ok) {
+        await dialogs.alert({ title: "Link not drawn", message: made.message });
+        return;
+      }
       await loadGraph();
     } finally {
       setLinking(false);
