@@ -910,6 +910,145 @@
 }
 .agentcard__switch.on::after { transform: translateX(15px); background: var(--accent); }
 
+/* ---- Connections: the sources Atlas may look at ----
+   ROWS, not the archetypes' card grid. Every source has to answer the same
+   three questions in the same three places, and only a full-width row lets
+   those line up into columns the eye can compare down. */
+.conns__rows { display: flex; flex-direction: column; gap: 10px; }
+
+.conns__legend {
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: var(--space-2);
+  margin-bottom: 12px;
+}
+.conns__legend p {
+  margin: 6px 0 0;
+  font-size: var(--font-body-sm);
+  color: var(--text-secondary);
+  max-width: 84ch;
+}
+.conns__legend strong { color: var(--text-primary); font-weight: var(--weight-medium); }
+
+.conn-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  padding: var(--space-2);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.conn-row.is-live { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+/* A source that cannot be used is still worth showing -- it records a decision.
+   It reads as retired rather than broken: dimmed, never alarming. */
+.conn-row.is-blocked { opacity: 0.68; }
+.conn-row.is-blocked .agentcard__glyph { color: var(--text-muted); }
+
+.conn-row__head { display: flex; align-items: center; gap: 10px; }
+.conn-row__id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.conn-row__host {
+  font-family: var(--font-mono);
+  font-size: var(--font-input-xs);
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.conn-row__access { margin-left: auto; }
+.conn-row__access.is-blocked { border-style: dashed; color: var(--text-muted); }
+.conn-row__state { flex: none; }
+
+.conn-row__blurb {
+  margin: 0;
+  font-size: var(--font-body-sm);
+  color: var(--text-secondary);
+  max-width: 92ch;
+}
+
+/* The three readouts. Fixed columns so Data/Images/Keep sit at the same x on
+   every row and can be scanned down the page as a table would be. */
+.conn-row__reads {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+@media (max-width: 760px) { .conn-row__reads { grid-template-columns: 1fr; } }
+
+/* minmax(0,1fr), never max-content: these notes are full sentences, and a
+   max-content track refuses to wrap and pushes the third column out past the
+   card's own edge. */
+.conn-read { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 2px 7px; align-items: baseline; }
+.conn-read__mark { font-size: 11px; line-height: 1.2; }
+.conn-read.is-full .conn-read__mark { color: var(--accent); }
+.conn-read.is-partial .conn-read__mark { color: var(--text-secondary); }
+.conn-read.is-none .conn-read__mark { color: var(--text-muted); }
+.conn-read__label {
+  font-family: var(--font-mono); font-size: var(--font-input-2xs);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+.conn-read__note {
+  grid-column: 2; margin: 0;
+  font-size: var(--font-body-xs);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.conn-row__actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.conn-row__connect {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 0; padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-input-xs);
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.conn-row__connect:hover { color: var(--text-primary); }
+.conn-row__connect svg { transition: transform var(--motion-duration) var(--motion-ease); }
+.conn-row__connect.is-open svg { transform: rotate(180deg); }
+.conn-row__env code {
+  font-family: var(--font-mono); font-size: var(--font-input-2xs);
+  letter-spacing: 0.04em; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 3px 6px 2px;
+}
+
+.conn-row__setup {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  animation: content-in 160ms var(--motion-ease) both;
+}
+.conn-row__setup ol { margin: 0; padding-left: 1.15em; display: flex; flex-direction: column; gap: 5px; }
+.conn-row__setup li { font-size: var(--font-body-sm); color: var(--text-secondary); }
+.conn-row__setup li::marker { font-family: var(--font-mono); font-size: var(--font-input-2xs); color: var(--text-muted); }
+
+.conn-row__cta {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--accent); color: var(--on-accent);
+  border: 0; border-radius: var(--radius-md);
+  padding: 7px 12px;
+  font-family: var(--font-mono); font-size: var(--font-input-sm);
+  letter-spacing: 0.03em; cursor: pointer;
+  transition: opacity var(--motion-duration) var(--motion-ease);
+}
+.conn-row__cta:hover { opacity: 0.85; }
+.conn-row__cta.is-off {
+  background: none; color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+}
+.conn-row__docs {
+  font-family: var(--font-mono); font-size: var(--font-input-xs);
+  letter-spacing: 0.04em; color: var(--text-muted);
+  text-decoration: none;
+}
+.conn-row__docs:hover { color: var(--text-primary); }
+
 /* Guidelines: one full-width card (the card grid's width), every rule its
    own accordion, set at reading size rather than caption size */
 .agents__rules {
