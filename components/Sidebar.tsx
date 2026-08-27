@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -31,6 +31,53 @@ export default function Sidebar({
   const dialogs = useDialogs();
   const activeCollection = params.get("c") ? Number(params.get("c")) : null;
   const activeTag = params.get("tag");
+
+  /* ---- folders that have just arrived ----
+     A folder the agent files lands here through router.refresh(), and a row
+     that simply exists on the next paint reads as a redraw rather than as
+     something happening: the sidebar looks the same, one line longer. So a
+     folder that was not in the last tree plays itself in once, sliding down
+     from behind the row above it while the list opens to make room.
+
+     Only arrivals animate. The set the sidebar mounts with is recorded
+     without playing, or every folder would slide in on each page load.
+
+     A layout effect, not an effect: the row is in the DOM before either
+     runs, and an ordinary effect fires AFTER the browser has painted it, so
+     the folder appeared at full height for a frame and then collapsed to
+     animate back. Measured, that flash was 60ms of finished row before the
+     open began. useLayoutEffect lands the class in the same paint. */
+  const known = useRef<Set<number> | null>(null);
+  /* The height to open to, read off a row already on screen. The animation
+     needs a real number: a grid track of 0fr still leaves the row as tall
+     as its own padding, so the list jumped 14px before it started moving. */
+  const [arrival, setArrival] = useState<{ ids: Set<number>; h: number }>(() => ({ ids: new Set(), h: 0 }));
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
+
+  useLayoutEffect(() => {
+    const ids = new Set<number>();
+    const walk = (nodes: CollectionNode[]) => {
+      for (const n of nodes) { ids.add(n.id); walk(n.children); }
+    };
+    walk(tree);
+
+    if (known.current === null) { known.current = ids; return; }
+    const fresh = [...ids].filter((id) => !known.current!.has(id));
+    known.current = ids;
+    if (!fresh.length) return;
+
+    const row = document.querySelector(".tree-row");
+    const h = row ? Math.round(row.getBoundingClientRect().height) : 0;
+    setArrival({ ids: new Set(fresh), h });
+    /* Clear the class once the animation is spent. The timer lives in a ref
+       rather than in this effect's cleanup: tree is a fresh array on every
+       render, so a cleanup here would cancel the pending clear the moment
+       anything else re-rendered, and the class would stay on for good. */
+    if (settle.current) clearTimeout(settle.current);
+    settle.current = setTimeout(() => setArrival({ ids: new Set(), h: 0 }), 1100);
+  }, [tree]);
 
   /* ---- Resizable / collapsible sidebar ----
      The right edge is a handle: drag to stretch (200-420px), click to
@@ -168,7 +215,7 @@ export default function Sidebar({
             </button>
           </div>
           {tree.map((node) => (
-            <TreeItem key={node.id} node={node} depth={0} activeId={activeCollection} onNewChild={newCollection} onDelete={deleteCollection} />
+            <TreeItem key={node.id} node={node} depth={0} activeId={activeCollection} arrival={arrival} onNewChild={newCollection} onDelete={deleteCollection} />
           ))}
           {tree.length === 0 && (
             <div style={{ padding: "4px 8px", fontSize: "var(--font-body-xs)", color: "var(--text-muted)" }}>
@@ -271,9 +318,10 @@ function StatRow({ label, value }: { label: string; value: string }) {
 }
 
 function TreeItem({
-  node, depth, activeId, onNewChild, onDelete,
+  node, depth, activeId, arrival, onNewChild, onDelete,
 }: {
   node: CollectionNode; depth: number; activeId: number | null;
+  arrival: { ids: Set<number>; h: number };
   onNewChild: (parentId: number) => void;
   onDelete: (node: CollectionNode) => void;
 }) {
@@ -283,7 +331,13 @@ function TreeItem({
 
   return (
     <>
-      <div className="tree-row" style={{ ["--depth" as string]: depth }}>
+      <div
+        className={"tree-row" + (arrival.ids.has(node.id) ? " is-arriving" : "")}
+        style={{
+          ["--depth" as string]: depth,
+          ...(arrival.ids.has(node.id) ? { ["--arrive-h" as string]: arrival.h + "px" } : {}),
+        }}
+      >
         <Link href={"/library?c=" + node.id} className={"nav-item" + (activeId === node.id ? " is-active" : "")}>
           {hasKids ? (
             <button
@@ -327,7 +381,7 @@ function TreeItem({
         </Link>
       </div>
       {open && node.children.map((c) => (
-        <TreeItem key={c.id} node={c} depth={depth + 1} activeId={activeId} onNewChild={onNewChild} onDelete={onDelete} />
+        <TreeItem key={c.id} node={c} depth={depth + 1} activeId={activeId} arrival={arrival} onNewChild={onNewChild} onDelete={onDelete} />
       ))}
     </>
   );

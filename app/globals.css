@@ -464,6 +464,50 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 }
 
 .tree-row { display: flex; align-items: center; }
+
+/* A folder arriving in the list.
+
+   Two things move together. The row's slot opens from nothing to its full
+   height, so everything under it is pushed down rather than jumping down;
+   and the row itself starts one row-height above, hidden by its own clip,
+   and slides into the space as it appears. The clip is what sells it: the
+   new folder comes out from behind the one above it instead of fading in
+   on top of the gap.
+
+   The slot is a grid row rather than a height, so nothing has to know how
+   tall a folder is -- 0fr to 1fr measures that itself. Where that is not
+   interpolatable the slot simply opens at once and the slide and the fade
+   still play, which is a lesser version of the same idea rather than a
+   broken one. */
+@keyframes folder-slot { from { height: 0; } to { height: var(--arrive-h); } }
+@keyframes folder-arrive {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tree-row.is-arriving {
+  /* The slot. An explicit height, because a row is only ever as short as
+     its own padding otherwise, and the list would jump that far before any
+     of this began. --arrive-h is measured off a row already on screen. */
+  overflow: hidden;
+  align-items: flex-start;   /* reveal downward from the top edge, not out of the middle */
+  /* The delay is not styling, it is timing. A folder arrives on the back of
+     router.refresh(), and re-rendering the page is the busiest moment this
+     view has: filmed, the whole 420ms passed without the compositor
+     producing a single frame, so the recording caught the row absent and
+     then finished, with nothing in between. Waiting a beat lets the refresh
+     land and gives the animation an idle main thread to play on. */
+  animation: folder-slot 560ms var(--motion-ease) 150ms both;
+}
+/* The row itself, sliding into the slot from behind the folder above it.
+   Its own height never changes, so -100% is exactly one row: it starts
+   sitting where the row above is, hidden by the clip, and arrives as the
+   space for it finishes opening. */
+.tree-row.is-arriving .nav-item { animation: folder-arrive 560ms var(--motion-ease) 150ms both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tree-row.is-arriving,
+  .tree-row.is-arriving .nav-item { animation: none; }
+}
 /* Folder row actions: zero-width at rest so the count sits flush right like
    the keyterm counts; hovering the row slides them open. The row's right end
    belongs to one thing at a time -- at rest the count, on hover the three

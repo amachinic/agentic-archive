@@ -1357,8 +1357,14 @@ function liveApp(id) {
   async function accept() {
     const btn = await until(".agent-prop__yes", 30000);
     const mirror = watch();
-    /* the closest the camera gets: the one moment the run needs a decision */
-    await push(btn.closest(".agent-prop") || ".agent-prop", { max: 1.75, pad: 44, ms: 800 });
+    /* The camera stays where the shot list left it, which is wide. It used
+       to come right down onto the proposal card to press it -- a good
+       instinct for a decision, and the wrong one here: the write puts the
+       folder in the sidebar, and the sidebar was off screen for the whole
+       of it. The one thing this run exists to do happened where nobody
+       could watch it. Wide, the press and the folder arriving are a single
+       continuous shot, and where the camera goes afterwards is the shot
+       list's business rather than this function's. */
     await sleep(700);
     say("pressing <b>Accept</b> \u2014 the app's own button, the only door that writes", "click", "step");
     btn.click();
@@ -2366,17 +2372,30 @@ async function playRun() {
     /* ---------- act 3 · the media manager files ---------- */
     rStep(3);
     await run.ask("file these as a folder called " + FOLDER);
-    await run.accept();   // pushes in on the proposal, presses, holds
+    /* Wide through the whole accept: the press, the write, and the folder
+       appearing in the sidebar are one shot with nothing cropped out of
+       it. See accept() for why it no longer moves the camera itself. */
+    await run.accept();
     rStep(3, true);
+    run.say("folder written at " + mark(), "filed", "step");
 
-    /* Straight from the accept to the folder it just made -- one move, not
-       out and back in again. */
-    await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 1000 });
-    run.say("<b>" + FOLDER + "</b> is in the sidebar — a real folder, in the real library", "filed", "step");
-    await sleep(1200);
+    /* The row does not land with the write. It arrives a beat later, on the
+       back of the app's own refresh, and plays a short slide as it does.
+       Wait for both: going to look at a folder while it is still sliding in
+       puts a camera move and a UI animation on top of each other, and which
+       one the eye follows is then down to how fast the model answered. */
+    for (let i = 0; i < 80 && !run.byText(".tree-row .nav-item__label", FOLDER); i++) await sleep(100);
+    await sleep(760);   // 150ms delay + 560ms of arrival, per globals.css
 
-    /* the sidebar shot holds until the pan-out mark, however long the
-       agent took to get us here */
+    /* Then a look at what it made. Short on purpose -- long enough to read
+       the name off the sidebar, no longer -- and timed so that coming out
+       of it IS the pan-out rather than an extra move parked in front of
+       one. Two seconds held, pulling back on the 48s mark. */
+    await at(45);
+    await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 900 });
+    run.say("<b>" + FOLDER + "</b> is in the sidebar — a real folder, in the real library", "sidebar", "step");
+    await sleep(2000);                        // the two-second look
+
     await at(48);
     await run.wide(1200);                     // 48s · pan out
     run.say("panned out at " + mark(), "48s", "step");
