@@ -1565,13 +1565,75 @@ export default function GraphView({
 
   /* Clear undoes the conversation AND what the conversation did to the
      field. Releasing the ids but leaving the grid behind meant "Clear" left
-     the canvas in a state only the cleared conversation had asked for. */
+     the canvas in a state only the cleared conversation had asked for.
+
+     It does not blink out. The messages fold away bottom to top, each one
+     collapsing to nothing as it fades, and the panel's height rides down
+     WITH them: the panel is sized by its content, so pinning every item at
+     its measured height and animating those heights to zero collapses the
+     component in exact unison with the content clearing. Nothing here
+     guesses at a target height. The container's gap eases out over the same
+     sweep, or fourteen ghost pixels per message would be left standing
+     after their messages had gone. */
+  const clearingRef = useRef(false);
   function clearPrompt() {
-    setThread([]);
-    setPromptIds(null);
-    setFieldSort(null);
-    stepsRef.current = [];
-    setSteps(0);
+    const finish = () => {
+      clearingRef.current = false;
+      /* boot resets in the SAME commit as the thread. The reset normally
+         rides an effect, which runs after paint, so the home block mounted
+         for one frame in its finished state -- text and all four
+         capabilities at full height -- before snapping back to "thinking".
+         After a 300px collapse, that flash read as the panel bouncing. */
+      setBoot(0);
+      setThread([]);
+      setPromptIds(null);
+      setFieldSort(null);
+      stepsRef.current = [];
+      setSteps(0);
+    };
+    const scroll = document.querySelector(".chatscroll") as HTMLElement | null; // the view renders exactly one
+    if (clearingRef.current) return;
+    if (!scroll || thread.length === 0 || matchMedia("(prefers-reduced-motion: reduce)").matches) { finish(); return; }
+    clearingRef.current = true;
+
+    const items = Array.from(scroll.children) as HTMLElement[];
+    /* read everything, then write everything: no interleaved reflows */
+    const heights = items.map((el) => el.offsetHeight);
+    items.forEach((el, i) => {
+      el.style.height = heights[i] + "px";
+      el.style.minHeight = "0";
+      el.style.overflow = "hidden";
+    });
+    void scroll.offsetHeight; // commit the pinned heights before they move
+
+    const DUR = 240;
+    /* the sweep climbs the thread at a fixed step, capped so a long
+       conversation drains in about half a second rather than scrolling
+       credits */
+    const step = Math.min(26, Math.max(8, Math.round(320 / items.length)));
+    const total = (items.length - 1) * step + DUR;
+    items.forEach((el, i) => {
+      const delay = (items.length - 1 - i) * step; // the newest folds first
+      el.style.transition = ["height", "opacity", "margin", "padding"]
+        .map((p) => p + " " + DUR + "ms var(--motion-ease) " + delay + "ms").join(", ");
+      el.style.height = "0px";
+      el.style.opacity = "0";
+      el.style.marginTop = "0"; el.style.marginBottom = "0";
+      el.style.paddingTop = "0"; el.style.paddingBottom = "0";
+    });
+    scroll.style.transition = "gap " + total + "ms var(--motion-ease)";
+    scroll.style.gap = "0px";
+    window.setTimeout(() => {
+      finish();
+      /* the container styles come back only after React has swapped the
+         zeroed items for the home block: restored in the same tick, the
+         fourteen-pixel gaps reappeared under six zero-height messages for
+         one frame and the panel visibly bounced before settling */
+      requestAnimationFrame(() => {
+        scroll.style.transition = "";
+        scroll.style.gap = "";
+      });
+    }, total + 60);
   }
 
   /* upload an image; the field re-forms around its closest matches. The
