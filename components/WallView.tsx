@@ -22,9 +22,11 @@ export default function WallView({ items }: { items: Item[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [colCount, setColCount] = useState(0);
   const [colW, setColW] = useState(INITIAL_COL_W);
-  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
   const speedRef = useRef(1);
   const scrubRef = useRef(0);
+  const offsetsRef = useRef<number[]>([]);
+  const loopHeightsRef = useRef<number[]>([]);
   /* touch/pointer drag scrubs the wall; a real drag must not fire the
      click-through to Analyze on release */
   const dragY = useRef<number | null>(null);
@@ -61,35 +63,59 @@ export default function WallView({ items }: { items: Item[] }) {
     return arr;
   }, [items]);
 
-  // Distribute into columns, shortest-first so columns stay balanced.
+  // Distribute into columns, shortest-first so columns stay balanced. Use a
+  // width-independent estimate so sidebar and viewport resizing cannot move
+  // pieces between columns while their geometry is changing.
   const columns = useMemo(() => {
     if (!colCount) return [];
     const cols: { items: Item[]; height: number }[] = Array.from({ length: colCount }, () => ({ items: [], height: 0 }));
     for (const it of shuffled) {
       const target = cols.reduce((a, b) => (a.height <= b.height ? a : b));
       target.items.push(it);
-      target.height += (colW * it.h) / Math.max(1, it.w) + GAP;
+      target.height += it.h / Math.max(1, it.w) + GAP / INITIAL_COL_W;
     }
     return cols;
-  }, [shuffled, colCount, colW]);
+  }, [shuffled, colCount]);
 
   // Animation: each column loops its own content; odd columns drift up, even drift down.
   const colRefs = useRef<(HTMLDivElement | null)[]>([]);
   useEffect(() => {
     let raf = 0;
-    const offsets = columns.map(() => 0);
+    const offsets = offsetsRef.current;
+    offsets.length = columns.length;
+    for (let i = 0; i < columns.length; i++) {
+      if (!Number.isFinite(offsets[i])) offsets[i] = 0;
+    }
+
+    // The first item in the repeated set marks the exact loop distance. Cache
+    // it per layout so the animation does not force layout reads every frame.
+    const loopHeights = columns.map((col, i) => {
+      const repeatedStart = colRefs.current[i]?.children.item(col.items.length);
+      if (repeatedStart instanceof HTMLElement) return repeatedStart.offsetTop;
+      return col.items.reduce(
+        (height, item) => height + (colW * item.h) / Math.max(1, item.w) + GAP,
+        0,
+      );
+    });
+    loopHeights.forEach((height, i) => {
+      const previousHeight = loopHeightsRef.current[i];
+      if (previousHeight > 0 && height > 0) {
+        offsets[i] = (offsets[i] / previousHeight) * height;
+      }
+    });
+    loopHeightsRef.current = loopHeights;
     let last = performance.now();
     const tick = (t: number) => {
       const dt = Math.min(64, t - last);
       last = t;
-      const target = paused ? 0 : 1;
+      const target = pausedRef.current ? 0 : 1;
       speedRef.current += (target - speedRef.current) * 0.06;
       const scrub = scrubRef.current;
       scrubRef.current *= 0.92;
-      columns.forEach((col, i) => {
+      columns.forEach((_, i) => {
         const el = colRefs.current[i];
         if (!el) return;
-        const h = el.scrollHeight / 2; // content is doubled for the loop
+        const h = loopHeights[i];
         if (h <= 0) return;
         const dir = i % 2 === 0 ? 1 : -1;
         const base = (12 + (i % 3) * 4.5) / 1000; // px per ms, per-column variance
@@ -102,7 +128,7 @@ export default function WallView({ items }: { items: Item[] }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [columns, paused]);
+  }, [columns, colW]);
 
   return (
     <>
@@ -119,14 +145,14 @@ export default function WallView({ items }: { items: Item[] }) {
           <div
             className="wall"
             ref={wrapRef}
-            onMouseEnter={() => setPaused(true)}
-            onMouseLeave={() => setPaused(false)}
+            onMouseEnter={() => { pausedRef.current = true; }}
+            onMouseLeave={() => { pausedRef.current = false; }}
             onWheel={(e) => { scrubRef.current += e.deltaY * 0.06; }}
             onPointerDown={(e) => {
               if (e.pointerType === "mouse") return; // mouse keeps hover+wheel
               dragY.current = e.clientY;
               dragMoved.current = false;
-              setPaused(true);
+              pausedRef.current = true;
             }}
             onPointerMove={(e) => {
               if (dragY.current === null) return;
@@ -135,8 +161,8 @@ export default function WallView({ items }: { items: Item[] }) {
               scrubRef.current += dy * 0.9;
               dragY.current = e.clientY;
             }}
-            onPointerUp={() => { dragY.current = null; setPaused(false); }}
-            onPointerCancel={() => { dragY.current = null; setPaused(false); }}
+            onPointerUp={() => { dragY.current = null; pausedRef.current = false; }}
+            onPointerCancel={() => { dragY.current = null; pausedRef.current = false; }}
           >
             {columns.map((col, i) => (
               <div
@@ -161,7 +187,14 @@ export default function WallView({ items }: { items: Item[] }) {
                       tabIndex={rep === 0 ? 0 : -1}
                       aria-hidden={rep === 1}
                     >
-                      <img src={"/api/img/" + it.id} alt={rep === 0 ? it.title : ""} loading="lazy" />
+                      <img
+                        src={"/api/img/" + it.id}
+                        alt={rep === 0 ? it.title : ""}
+                        width={it.w}
+                        height={it.h}
+                        loading="lazy"
+                        decoding="async"
+                      />
                     </button>
                   ))
                 )}
