@@ -1036,9 +1036,10 @@ export default function GraphView({
     try {
       const r = JSON.parse(raw);
       if (r.staged) return "staged · " + r.count;
-      if (r.sorted) return "grid re-formed";
+      if (r.sorted) return r.sorted === "off" ? "grid dropped" : "grid re-formed";
       if (r.shown != null) return "field re-formed · " + r.shown;
       if (r.count != null) return r.count + " in set";
+      if (r.released) return "field released";
     } catch { /* opaque */ }
     return "done";
   };
@@ -1504,8 +1505,11 @@ export default function GraphView({
          field it found nothing in is the field worth keeping on screen */
       else if (Array.isArray(d.ids) && d.ids.length) setPromptIds(d.ids);
       if (d.sort) {
-        setFieldSort(d.sort.by === "colour" ? "colour" : "light");
-        logLedger("curator", "sorted the field by " + d.sort.by + " · grid");
+        /* "off" is the agent undoing its own grid: the set on the canvas is
+           untouched, only the arrangement goes back to the field's own order */
+        const off = d.sort.by === "off";
+        setFieldSort(off ? null : d.sort.by === "colour" ? "colour" : "light");
+        logLedger("curator", off ? "put the field back in its own order" : "sorted the field by " + d.sort.by + " · grid");
       }
       if (d.proposal) {
         setThread((it) => [...it, { type: "proposal", name: d.proposal.name, note: d.proposal.note ?? "", ids: d.proposal.ids, status: "pending" }]);
