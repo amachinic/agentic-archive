@@ -1796,17 +1796,20 @@ export default function GraphView({
           onChange={(e) => setMinScore(Number(e.target.value))}
         />
       </label>
-      <label>
+      <div className="graph-tune__toggle">
         <span className="mono-xs">connections</span>
         <button
           type="button"
-          className={"pill" + (showWires ? " is-active" : "")}
+          className={"graph-switch" + (showWires ? " is-on" : "")}
           onClick={() => setShowWires((w) => !w)}
-          aria-pressed={showWires}
+          role="switch"
+          aria-checked={showWires}
+          aria-label="Show connections"
         >
-          {showWires ? "shown" : "hidden"}
+          <span aria-hidden>{showWires ? "on" : "off"}</span>
+          <i aria-hidden />
         </button>
-      </label>
+      </div>
     </>
   );
 
