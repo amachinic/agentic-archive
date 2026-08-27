@@ -1816,6 +1816,124 @@ export default function GraphView({
      guesses at a target height. The container's gap eases out over the same
      sweep, or fourteen ghost pixels per message would be left standing
      after their messages had gone. */
+  /* The panel grows the way it drains. Clearing folds each message away and
+     the panel rides down with them; arriving is the mirror. Every element
+     that lands in the thread OPENS -- height animated from nothing to its
+     measured size, the container gap absorbed by an easing margin, content
+     fading in -- and an element that grows in place (the thinking line
+     becoming the reply) glides between its old height and its new one
+     instead of stepping. WAAPI with measured pixels, because CSS cannot do
+     this: Chrome drops height keyframes whose other end is auto, even with
+     interpolate-size. Effects, not styles, so nothing lingers to fight the
+     clear-drain inline styles later. */
+  useEffect(() => {
+    /* keyed on panelIn: the panel mounts AFTER the field has painted, so an
+       effect that looked for .chatscroll once at mount found nothing and
+       silently never attached */
+    const scroll = document.querySelector(".chatscroll");
+    if (!scroll || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+    const known = new WeakMap<Element, number>();
+
+    /* The pin-keeper. The app pins the thread to its bottom when a row
+       lands -- but it pins against a row this effect has just collapsed to
+       zero, and the row then grows BELOW the fold: the newest message, and
+       a proposal card whole buttons, ended up past the visible bottom with
+       nothing re-pinning. So while any slot animation is running, if the
+       thread was at its bottom when the animation began, it is HELD at the
+       bottom every frame until the last animation ends. */
+    let animating = 0;
+    let holdPin = false;
+    const pinLoop = () => {
+      if (holdPin && scroll) scroll.scrollTop = scroll.scrollHeight;
+      if (animating > 0) requestAnimationFrame(pinLoop);
+      else holdPin = false;
+    };
+    const beginAnim = () => {
+      const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 60;
+      if (animating === 0) {
+        holdPin = nearBottom;
+        animating++;
+        requestAnimationFrame(pinLoop);
+      } else {
+        holdPin = holdPin || nearBottom;
+        animating++;
+      }
+    };
+    const endAnim = () => { animating = Math.max(0, animating - 1); };
+
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const el = e.target as HTMLElement;
+        /* While one of OUR animations drives this element, every reading is
+           a mid-flight value: recording those into known is what once made
+           each finished glide spawn the next -- an endless 24px->120px loop
+           that held a proposal card collapsed for good. Skip entirely; the
+           animation itself writes the terminal height when it lands. (The
+           entry fade content-in fills forever, so the check names only the
+           slot animations.) */
+        if (el.getAnimations().some((a) => a.id.startsWith("slot-"))) continue;
+        const h = el.getBoundingClientRect().height;
+        const prev = known.get(el);
+        known.set(el, h);
+        if (prev === undefined || Math.abs(h - prev) < 8) continue;
+        el.style.overflow = "hidden";
+        beginAnim();
+        const anim = el.animate(
+          [{ height: prev + "px" }, { height: h + "px" }],
+          { duration: 260, easing: EASE }
+        );
+        anim.id = "slot-glide";
+        anim.onfinish = () => { el.style.overflow = ""; known.set(el, el.getBoundingClientRect().height); endAnim(); };
+        anim.oncancel = () => { el.style.overflow = ""; endAnim(); };
+      }
+    });
+
+    const open = (el: HTMLElement) => {
+      const h = el.getBoundingClientRect().height;
+      if (h < 2) return;
+      known.set(el, h);
+      ro.observe(el);
+      /* Inline the closed state BEFORE the animation exists: a fresh WAAPI
+         animation is created pending and applies nothing until the next
+         frame, so without this the browser paints the mutation frame at
+         full height -- one visible pop, then a grow. Mutation callbacks run
+         before paint; inline styles land in the same frame. */
+      el.style.height = "0px";
+      el.style.marginTop = "-14px";
+      el.style.opacity = "0";
+      el.style.overflow = "hidden";
+      void el.offsetHeight;
+      beginAnim();
+      const anim = el.animate(
+        [
+          { height: "0px", marginTop: "-14px", opacity: 0, transform: "translateY(4px)" },
+          { height: h + "px", marginTop: "0px", opacity: 1, transform: "none" },
+        ],
+        { duration: 320, easing: EASE }
+      );
+      anim.id = "slot-open";
+      anim.onfinish = () => {
+        el.style.height = ""; el.style.marginTop = ""; el.style.opacity = ""; el.style.overflow = "";
+        known.set(el, el.getBoundingClientRect().height);
+        endAnim();
+      };
+      anim.oncancel = () => {
+        el.style.height = ""; el.style.marginTop = ""; el.style.opacity = ""; el.style.overflow = "";
+        endAnim();
+      };
+    };
+
+    for (const el of scroll.children) { known.set(el, el.getBoundingClientRect().height); ro.observe(el); }
+    const mo = new MutationObserver((muts) => {
+      for (const m of muts) for (const n of m.addedNodes) {
+        if (n instanceof HTMLElement && n.parentElement === scroll) open(n);
+      }
+    });
+    mo.observe(scroll, { childList: true });
+    return () => { mo.disconnect(); ro.disconnect(); };
+  }, [panelIn]);
+
   const clearingRef = useRef(false);
   function clearPrompt() {
     const finish = () => {

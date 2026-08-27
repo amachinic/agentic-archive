@@ -282,6 +282,28 @@
   body.is-film .dash { max-width: none; margin: 0; padding: 0; }
   body.is-film .live { border: 0; border-radius: 0; background: var(--bg); }
   body.is-film .live__vp { border-radius: 0; }
+
+  /* The hand. A drawn cursor that travels to what the run is about to use,
+     so the take reads as someone DOING this rather than it happening. It
+     rides above both app frames, never takes real pointer events, and eases
+     between targets; the press is a quick dip. Arrow by default, index
+     finger over anything clickable, an I-beam over the composer. */
+  .hand {
+    position: absolute; left: 0; top: 0; z-index: 6;
+    width: 26px; height: 30px;
+    pointer-events: none;
+    opacity: 0;
+    transition: transform 430ms cubic-bezier(0.32, 0, 0.18, 1), opacity 260ms ease;
+    will-change: transform;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55));
+  }
+  .hand.is-on { opacity: 1; }
+  .hand.is-press { animation: hand-press 200ms cubic-bezier(0.4, 0, 0.2, 1); }
+  @keyframes hand-press { 40% { scale: 0.82; } }
+  .hand svg { position: absolute; inset: 0; opacity: 0; transition: opacity 120ms; }
+  .hand[data-glyph="arrow"] svg.g-arrow { opacity: 1; }
+  .hand[data-glyph="finger"] svg.g-finger { opacity: 1; }
+  .hand[data-glyph="text"] svg.g-text { opacity: 1; }
   body.is-film .live__veil { border-radius: 0; }
 
   .glyph { width: 15px; height: 15px; flex: none; display: inline-block; }
@@ -771,6 +793,11 @@
 
   <div class="live">
     <div class="live__vp" id="rvp">
+      <div class="hand" id="rhand" data-glyph="arrow" aria-hidden="true">
+        <svg class="g-arrow" viewBox="0 0 26 30"><path d="M4 2 L4 24 L9.6 19.2 L13 27.4 L16.6 25.8 L13.2 17.8 L20.4 17.2 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <svg class="g-finger" viewBox="0 0 26 30"><path d="M9.2 27.5 C6.8 24.8 4.6 21.9 4.1 20.2 C3.5 18.2 5.8 17 7.2 18.4 L9 20.2 L9 7.4 C9 4.9 12.6 4.9 12.6 7.4 L12.6 13.4 C15.9 13.1 21.6 14 21.6 17.8 C21.6 21.4 20.6 24.6 19.4 27.5 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <svg class="g-text" viewBox="0 0 26 30"><path d="M9 4 H17 M13 4 V26 M9 26 H17" fill="none" stroke="#fff" stroke-width="2.6"/><path d="M9 4 H17 M13 4 V26 M9 26 H17" fill="none" stroke="#111" stroke-width="1.2"/></svg>
+      </div>
       <iframe id="rframe" title="Atlas, running"></iframe>
       <!-- the standby the closing dissolve fades up from -->
       <iframe id="rframe2" title="Atlas, running" aria-hidden="true"></iframe>
@@ -1214,6 +1241,45 @@ function liveApp(id) {
   const byText = (sel, t) =>
     Array.from(doc().querySelectorAll(sel)).find((e) => e.textContent.trim() === t);
 
+  /* ---- the hand ----
+     The cursor the viewer follows. Targets live inside the iframe in the
+     app's 1500x940 space; the frame is translated and scaled by the camera,
+     so a target on SCREEN is the frame rect plus the element's position
+     times the frame's scale. Recomputed at every move, so the hand lands
+     wherever the camera has put things by the time it travels. */
+  const hand = document.getElementById(id + "hand");
+  function handPoint(el, ax, ay) {
+    const f = frame();
+    const fr = f.getBoundingClientRect();
+    const vr = vp.getBoundingClientRect();
+    const scale = fr.width / VP_W;
+    const r = el.getBoundingClientRect();
+    const x = fr.left - vr.left + (r.left + r.width * (ax == null ? 0.5 : ax)) * scale;
+    const y = fr.top - vr.top + (r.top + r.height * (ay == null ? 0.5 : ay)) * scale;
+    return { x, y };
+  }
+  async function handTo(sel, opt) {
+    if (!hand) return;
+    const o = opt || {};
+    const el = typeof sel === "string" ? doc() && doc().querySelector(sel) : sel;
+    if (!el) return;
+    const p = handPoint(el, o.ax, o.ay);
+    hand.dataset.glyph = o.glyph || "finger";
+    hand.classList.add("is-on");
+    /* the glyph's hotspot is its top-left tip; nudge so the tip touches */
+    hand.style.transform = "translate(" + (p.x - 4) + "px, " + (p.y - 2) + "px)";
+    await sleep(o.ms == null ? 460 : o.ms);
+  }
+  async function handPress(el) {
+    if (!hand) return;
+    hand.classList.add("is-press");
+    await sleep(170);
+    hand.classList.remove("is-press");
+    if (el) el.click();
+    await sleep(90);
+  }
+  function handOff() { if (hand) hand.classList.remove("is-on"); }
+
   /* booted the first time its tab is opened, not on page load: this is the
      whole app, and there is no sense paying for it unseen. The app bounces
      a session's first visit through the preloader, which has a tab of its
@@ -1314,7 +1380,12 @@ function liveApp(id) {
     const ta = await until("form.graph-ci textarea");
     /* in for the typing: the composer is the thing being used */
     await push(".graph-below--chat", { max: 1.5, pad: 56, ms: 750 });
+    /* the hand selects the field, then steps to its far end so the words
+       stay readable while they arrive */
+    await handTo(ta, { glyph: "text", ax: 0.22, ay: 0.5, ms: 470 });
+    await handPress();
     await type(ta, text, 16);
+    handTo(ta, { glyph: "text", ax: 0.97, ay: 0.5, ms: 420 });
     await sleep(340);
     say("<b>" + text + "</b>", "you");
     const mirror = watch();
@@ -1367,7 +1438,29 @@ function liveApp(id) {
        list's business rather than this function's. */
     await sleep(700);
     say("pressing <b>Accept</b> \u2014 the app's own button, the only door that writes", "click", "step");
-    btn.click();
+    /* the thread auto-scrolls as rows land, and the Accept can sit just
+       below the panel fold: bring the card fully on screen first, or the
+       hand presses something the viewer cannot see */
+    {
+      /* Rows keep landing while the hand is on its way, each one nudging
+         the button further down, and a press at a stale position happens
+         below the fold where nobody can see it. So: pin the thread to its
+         bottom, then wait until the button position holds still for two
+         consecutive checks before the hand travels. */
+      const sc = doc().querySelector(".chatscroll");
+      let last = -1, still = 0;
+      for (let i = 0; i < 20 && still < 2; i++) {
+        if (sc) sc.scrollTop = sc.scrollHeight;
+        await sleep(140);
+        const y = Math.round(btn.getBoundingClientRect().top);
+        if (y === last) still++; else { still = 0; last = y; }
+      }
+    }
+    await handTo(btn, { glyph: "finger", ms: 430 });
+    await sleep(520);          /* hover: the viewer finds the finger first */
+    await handPress(btn);
+    await sleep(380);          /* and sees it pressed before it leaves */
+    handOff();   /* the write is the star now; the hand returns for Clear */
     await until(".agent-prop.is-accepted", 20000);
     /* the apply writes create_collection then add_to_collection; the second
        one landing, finished, is what says the folder exists */
@@ -1494,6 +1587,7 @@ function liveApp(id) {
   }
 
   return { boot, fit, until, byText, ask, say, clear, drive, status, doc,
+           handTo, handPress, handOff,
            accept, unfile: unfileViaApi, primeStandby, fadeToStandby,
            reload, wide, push, poolReady };
 }
@@ -1606,7 +1700,8 @@ const PIXMODES = {
     const F = PIX_FORMS;
     const T = 1600, u = (t % T) / T, k = Math.floor(t / T) % 3;
     rects.forEach((r, i) => {
-      const cur = F[k][i], nxt = F[(k + 1) % 3][i];
+      const cur = (F[k] || [])[i], nxt = (F[(k + 1) % 3] || [])[i];
+      if (cur === undefined || nxt === undefined) return;
       let on = cur;
       if (u >= 0.62 && cur !== nxt) {
         const m = (u - 0.62) / 0.38;
@@ -2280,7 +2375,7 @@ const FOLDER = "Photography Project";
    tier's 8k-per-minute ceiling -- on a provider without one that pause is
    just tape with nothing on it. Raise it again if you switch back to Groq
    and the later acts start coming back 502. */
-const ACT_GAP = 900;
+const ACT_GAP = 350;
 const run = liveApp("r");
 const runplay = document.getElementById("runplay");
 const runlabel = document.getElementById("runplaylabel");
@@ -2390,20 +2485,20 @@ async function playRun() {
     for (let i = 0; i < 80 && !run.byText(".tree-row .nav-item__label", FOLDER); i++) await sleep(100);
     await sleep(760);   // 150ms delay + 560ms of arrival, per globals.css
 
-    /* Then a look at what it made. The folder lands around 42s, and holding
-       a wide shot for three more seconds before going to see it read as the
-       video stalling, so the look starts on the very next beat: in at 43,
-       long enough to read the name, and back out by 45. Coming out of it IS
-       the pan-out -- one move, not a look parked in front of one. */
-    await at(43);
+    /* Then a look at what it made, on the heels of the arrival: in at 41 --
+       waiting three seconds on a wide shot after the climax read as the
+       video stalling -- held long enough to read the name, out by ~44.8.
+       Coming out of it IS the pan-out: one move, not a look parked in
+       front of one. */
+    await at(41);
     /* the moves themselves are slow enough to read as a camera travelling,
        not a cut: 1.2s down, a beat on the name, 1.3s back out */
     await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 1200 });
     run.say("<b>" + FOLDER + "</b> is in the sidebar — a real folder, in the real library", "sidebar", "step");
 
-    await at(45.5);
-    await run.wide(1300);                     // out by ~46.5s
-    run.say("panned out at " + mark(), "46.5s", "step");
+    await at(43.5);
+    await run.wide(1300);                     // out by ~44.8s
+    run.say("panned out at " + mark(), "44.8s", "step");
 
     /* The closing marks are floors, not absolutes. A slow model pushes the
        pan-out late, and a mark that has already passed fires at once -- one
@@ -2412,12 +2507,20 @@ async function playRun() {
        one before it, so a late take ends late but still ends in rhythm. */
     const after = (sec, gap) => at(Math.max(sec, (performance.now() - t0) / 1000 + gap));
 
-    await after(47, 1.6);                     // 47s · clear the conversation
+    await after(46, 1.6);                     // 46s · clear the conversation
     const clr = run.byText(".chathead .closebtn", "Clear");
-    if (clr) clr.click();
-    run.say("cleared the conversation at " + mark(), "47s", "step");
+    if (clr) {
+      /* the hand comes back to do it: travel, press, and only then the
+         drain -- the viewer sees WHO cleared it */
+      await run.handTo(clr, { glyph: "finger", ms: 560 });
+      await sleep(420);
+      await run.handPress(clr);
+      await sleep(300);
+      run.handOff();
+    }
+    run.say("cleared the conversation at " + mark(), "46s", "step");
 
-    await after(49, 2);
+    await after(48, 2);
   } catch (e) {
     run.say(String((e && e.message) || e), "stopped", "warn");
   }
@@ -2429,8 +2532,8 @@ async function playRun() {
   await standby;
   await run.fadeToStandby(1000);
   await run.unfile(FOLDER);                   // behind the fade, off camera
-  run.say("transitioned at " + mark(), "49s", "step");
-  await at(50);                               // 50s · out
+  run.say("transitioned at " + mark(), "48s", "step");
+  await at(49);                               // 49s · out
 
   run.drive(false);
   runplay.disabled = false;

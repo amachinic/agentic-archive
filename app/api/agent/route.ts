@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { canonical } from "@/lib/taxonomy";
 import { db } from "@/lib/db";
 import { listImages } from "@/lib/queries";
 import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
@@ -222,6 +223,7 @@ const SYSTEM = [
   "- After narrowing to something worth seeing, call show_field so the canvas re-forms.",
   "- sort_field arranges whatever is showing into a sorted grid; it is the answer to sort/arrange/order/grid requests.",
   "- release_field puts the whole library back and drops any narrowing; it is the answer to everything again / reset / start over / show it all. Never answer that with a search.",
+  "- Category-like requests (photography, posters, book spreads, paintings, the 1960s) are filter_by_terms even when the exact word is not in the vocabulary: the filter resolves everyday aliases itself, and tells you what it substituted. search_library is for names, phrases and free text, not categories.",
   "- If the human asked to file, collect or organize, stage it with propose_folder — never claim you created anything yourself.",
   "- To FIND an artist's work, search_library(their name) FIRST: it reads the credit on every image and reaches artists not listed below. Artist names also work inside filter_by_terms, but only to narrow a set you already have.",
   "- filter_by_terms accepts ONLY terms from the KEYTERM VOCABULARY below, verbatim. Translate the human's words into the nearest vocabulary terms (e.g. 'deep rich colours' -> colorful, dark; 'moodboard for product photography' -> photography, still life, object).",
@@ -307,7 +309,10 @@ export async function POST(req: Request) {
         return JSON.stringify({ count: ws.length, sample: sample() });
       }
       case "filter_by_terms": {
-        const asked = (Array.isArray(args.terms) ? args.terms : []).map((t) => String(t).toLowerCase()).slice(0, 6);
+        const asked = (Array.isArray(args.terms) ? args.terms : [])
+          .map((t) => String(t).toLowerCase())
+          .map((t) => canonical(t)?.name ?? t)
+          .slice(0, 6);
         if (!asked.length) return JSON.stringify({ count: ws.length, note: "no terms given" });
         /* An empty working set means nobody has searched yet. Refusing with
            "nothing to filter" is technically true and practically useless: the

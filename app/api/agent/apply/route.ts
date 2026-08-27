@@ -9,7 +9,7 @@ import { recordEvent } from "@/lib/events";
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null) as { name?: string; ids?: number[] } | null;
   const name = String(body?.name ?? "").trim().slice(0, 60);
-  const ids = Array.isArray(body?.ids) ? body.ids.filter((n) => Number.isInteger(n)).slice(0, 500) : [];
+  const ids = Array.isArray(body?.ids) ? body.ids.filter((n) => Number.isInteger(n)).slice(0, 1200) : [];
   if (!name || !ids.length) return Response.json({ error: "name and ids required" }, { status: 400 });
 
   const conn = db();
