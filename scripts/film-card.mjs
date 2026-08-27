@@ -35,7 +35,13 @@ const flag = (n, d) => { const i = argv.indexOf("--" + n); return i === -1 ? d :
 const BASE   = flag("base", "http://localhost:4400");
 const PAGE   = flag("page", "/card-art.html");
 const WIDTH  = Number(flag("width", 1920));
-const HEIGHT = Number(flag("height", 1008));
+/* 1392, not 1008: the portfolio card runs about 1.38:1 and crops with
+   object-fit cover, so the artwork must BE 1.38:1 (1920x1392) or cover eats
+   the difference -- the framed product loses its bottom edge and its rounded
+   corners and stops sitting centred. The first render got this right via a
+   command-line flag, and every re-cut after silently lost it by using the
+   old 1008 default. The card's shape lives here now. */
+const HEIGHT = Number(flag("height", 1392));
 const FPS    = Number(flag("fps", 30));
 const OUT    = path.resolve(flag("out", "public/card/image-archivist"));
 const RAW    = path.resolve(".cardfilm");

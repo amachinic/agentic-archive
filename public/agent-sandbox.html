@@ -2340,9 +2340,12 @@ async function playRun() {
     if (!(await run.boot())) throw new Error("the frame never came up");
     await run.until(".graph-stage canvas");
 
-    /* establishing: the whole app, at rest, before anything is asked of it */
+    /* establishing: the whole app, at rest, before anything is asked of it.
+       The extra second and a half is deliberate stillness -- the loop lands
+       back on this exact frame, so a breath here is what keeps the restart
+       from feeling like the video snapping straight back into motion. */
     await run.wide(0);
-    await sleep(900);
+    await sleep(2400);
 
     /* a clean slate for the run, taken through the app's own controls
        rather than by reloading the frame behind its back */
@@ -2398,9 +2401,9 @@ async function playRun() {
     await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 1200 });
     run.say("<b>" + FOLDER + "</b> is in the sidebar — a real folder, in the real library", "sidebar", "step");
 
-    await at(45);
-    await run.wide(1300);                     // out by ~46s
-    run.say("panned out at " + mark(), "46s", "step");
+    await at(45.5);
+    await run.wide(1300);                     // out by ~46.5s
+    run.say("panned out at " + mark(), "46.5s", "step");
 
     /* The closing marks are floors, not absolutes. A slow model pushes the
        pan-out late, and a mark that has already passed fires at once -- one
