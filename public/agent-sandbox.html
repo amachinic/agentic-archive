@@ -2387,38 +2387,45 @@ async function playRun() {
     for (let i = 0; i < 80 && !run.byText(".tree-row .nav-item__label", FOLDER); i++) await sleep(100);
     await sleep(760);   // 150ms delay + 560ms of arrival, per globals.css
 
-    /* Then a look at what it made. Short on purpose -- long enough to read
-       the name off the sidebar, no longer -- and timed so that coming out
-       of it IS the pan-out rather than an extra move parked in front of
-       one. Two seconds held, pulling back on the 48s mark. */
-    await at(45);
-    await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 900 });
+    /* Then a look at what it made. The folder lands around 42s, and holding
+       a wide shot for three more seconds before going to see it read as the
+       video stalling, so the look starts on the very next beat: in at 43,
+       long enough to read the name, and back out by 45. Coming out of it IS
+       the pan-out -- one move, not a look parked in front of one. */
+    await at(43);
+    await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 700 });
     run.say("<b>" + FOLDER + "</b> is in the sidebar — a real folder, in the real library", "sidebar", "step");
-    await sleep(2000);                        // the two-second look
 
-    await at(48);
-    await run.wide(1200);                     // 48s · pan out
-    run.say("panned out at " + mark(), "48s", "step");
+    await at(44.2);
+    await run.wide(800);                      // out by 45s
+    run.say("panned out at " + mark(), "45s", "step");
 
-    await at(50);                             // 50s · clear the conversation
+    /* The closing marks are floors, not absolutes. A slow model pushes the
+       pan-out late, and a mark that has already passed fires at once -- one
+       take had the clear land 0.1s behind the pan-out, which collapsed the
+       ending into a pile-up. Each beat now also keeps its distance from the
+       one before it, so a late take ends late but still ends in rhythm. */
+    const after = (sec, gap) => at(Math.max(sec, (performance.now() - t0) / 1000 + gap));
+
+    await after(47, 1.6);                     // 47s · clear the conversation
     const clr = run.byText(".chathead .closebtn", "Clear");
     if (clr) clr.click();
-    run.say("cleared the conversation at " + mark(), "50s", "step");
+    run.say("cleared the conversation at " + mark(), "47s", "step");
 
-    await at(52);
+    await after(49, 2);
   } catch (e) {
     run.say(String((e && e.message) || e), "stopped", "warn");
   }
 
-  /* 52s · the stitch. The standby has been sitting underneath since act 1,
+  /* 49s · the stitch. The standby has been sitting underneath since act 1,
      holding the library as it was before any of this -- no folder, no
      conversation, no grid. The finished dashboard just fades off it, so the
      app never leaves the screen and the last frame is the first frame. */
   await standby;
   await run.fadeToStandby(1000);
   await run.unfile(FOLDER);                   // behind the fade, off camera
-  run.say("transitioned at " + mark(), "52s", "step");
-  await at(53);                               // 53s · out
+  run.say("transitioned at " + mark(), "49s", "step");
+  await at(50);                               // 50s · out
 
   run.drive(false);
   runplay.disabled = false;
