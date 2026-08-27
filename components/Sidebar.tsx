@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import type { CollectionNode } from "@/lib/queries";
 import { AtlasMark, IconNetwork, IconWaterfall, IconFolder, IconCaret, IconPlus, IconSparkle, IconTrash, IconAgent, IconSave } from "./icons";
 import { useDialogs } from "./DialogProvider";
+import { write } from "@/lib/write";
 import ThemeToggle from "./ThemeToggle";
 
 type Stats = { images: number; analyzed: number; pairs: number; tags: number; keep: number; reject: number; bytes: number };
@@ -88,7 +89,11 @@ export default function Sidebar({
       danger: true,
     });
     if (!ok) return;
-    await fetch("/api/collections?id=" + node.id, { method: "DELETE" });
+    const r = await write("/api/collections?id=" + node.id, { method: "DELETE" });
+    if (!r.ok) {
+      await dialogs.alert({ title: "Folder not removed", message: r.message });
+      return;
+    }
     // if the removed folder was open, fall back to the whole library
     if (activeCollection === node.id) router.push("/library");
     else router.refresh();
@@ -103,11 +108,15 @@ export default function Sidebar({
       confirmLabel: "Create",
     });
     if (!name) return;
-    await fetch("/api/collections", {
+    const r = await write("/api/collections", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, parentId }),
     });
+    if (!r.ok) {
+      await dialogs.alert({ title: parentId ? "Sub-folder not created" : "Folder not created", message: r.message });
+      return;
+    }
     router.refresh();
   }
 
@@ -210,7 +219,12 @@ function DedupeButton() {
   async function run() {
     setBusy(true);
     try {
-      const dry = await fetch("/api/dedupe").then((r) => r.json());
+      const probe = await fetch("/api/dedupe");
+      const dry = await probe.json().catch(() => ({}));
+      if (!probe.ok) {
+        await dialogs.alert({ title: "Cannot scan for duplicates", message: typeof dry.error === "string" ? dry.error[0].toUpperCase() + dry.error.slice(1) : "That did not go through (" + probe.status + ")." });
+        return;
+      }
       if (!dry.duplicates) {
         await dialogs.alert({ title: "No duplicates", message: "The library is clean." });
         return;
@@ -224,7 +238,12 @@ function DedupeButton() {
         danger: true,
       });
       if (!ok) return;
-      const r = await fetch("/api/dedupe", { method: "POST" }).then((x) => x.json());
+      const done = await write<{ removed: number }>("/api/dedupe", { method: "POST" });
+      if (!done.ok) {
+        await dialogs.alert({ title: "Duplicates not removed", message: done.message });
+        return;
+      }
+      const r = done.data;
       await dialogs.alert({ title: "Duplicates removed", message: r.removed + " cop" + (r.removed === 1 ? "y" : "ies") + " removed from the library." });
       router.refresh();
     } catch {

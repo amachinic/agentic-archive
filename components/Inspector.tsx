@@ -7,6 +7,7 @@ import type { Analysis } from "@/lib/vision";
 import { IconX, IconSparkle, IconArrowLeft } from "./icons";
 import AnalysisBrief from "./AnalysisBrief";
 import { useDialogs } from "./DialogProvider";
+import { write } from "@/lib/write";
 import Select from "./Select";
 
 type Detail = ImageRow & {
@@ -77,16 +78,18 @@ export default function Inspector({
   }, [analyzing]);
 
   async function patch(body: Record<string, unknown>) {
-    const res = await fetch("/api/images/" + imageId, {
+    const r = await write<Detail>("/api/images/" + imageId, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (res.ok) {
-      const d: Detail = await res.json();
-      setImg(d);
-      onRowPatch(imageId, { flagged: d.flagged, rating: d.rating, note: d.note, ai_title: d.ai_title });
+    if (!r.ok) {
+      await dialogs.alert({ title: "Change not saved", message: r.message });
+      return;
     }
+    const d = r.data;
+    setImg(d);
+    onRowPatch(imageId, { flagged: d.flagged, rating: d.rating, note: d.note, ai_title: d.ai_title });
   }
 
   async function runAnalysis() {
@@ -112,11 +115,15 @@ export default function Inspector({
   }
 
   async function addToCollection(collectionId: number) {
-    await fetch("/api/collections", {
+    const r = await write("/api/collections", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ collectionId, imageIds: [imageId] }),
     });
+    if (!r.ok) {
+      await dialogs.alert({ title: "Not filed", message: r.message });
+      return;
+    }
     const fresh = await fetch("/api/images/" + imageId).then((r) => r.json());
     setImg(fresh);
     router.refresh();
@@ -130,7 +137,11 @@ export default function Inspector({
       danger: true,
     });
     if (!ok) return;
-    await fetch("/api/images/" + imageId, { method: "DELETE" });
+    const gone = await write("/api/images/" + imageId, { method: "DELETE" });
+    if (!gone.ok) {
+      await dialogs.alert({ title: "Image not removed", message: gone.message });
+      return;
+    }
     onRemoved?.();
     onClose();
     router.refresh();
