@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import type { CollectionNode } from "@/lib/queries";
-import { AtlasMark, IconNetwork, IconWaterfall, IconFolder, IconCaret, IconPlus, IconSparkle, IconTrash, IconAgent, IconSave } from "./icons";
+import { AtlasMark, IconNetwork, IconWaterfall, IconFolder, IconCaret, IconPlus, IconSparkle, IconTrash, IconAgent, IconSave, IconLink } from "./icons";
 import { useDialogs } from "./DialogProvider";
 import { write } from "@/lib/write";
 import ThemeToggle from "./ThemeToggle";
@@ -235,6 +235,16 @@ export default function Sidebar({
           >
             <IconAgent className="nav-item__icon" />
             <span className="nav-item__label">Settings</span>
+          </Link>
+          <Link
+            href="/agents/connections"
+            className={"nav-item" + (pathname === "/agents/connections" ? " is-active" : "")}
+            title="Sources Atlas may look at"
+            aria-label="Connections"
+            aria-current={pathname === "/agents/connections" ? "page" : undefined}
+          >
+            <IconLink className="nav-item__icon" />
+            <span className="nav-item__label">Connections</span>
           </Link>
         </nav>
       </div>
