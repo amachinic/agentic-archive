@@ -862,8 +862,12 @@
   font-family: var(--font-mono); font-size: 9.5px;
   text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
 }
-.agentcard__status i { width: 6px; height: 6px; border-radius: 50%; background: var(--border-strong); }
-.agentcard__status.is-on i { background: var(--accent); }
+.agentcard__status i {
+  width: 6px; height: 6px; flex: none;
+  position: relative; top: -1px;
+  border-radius: 50%; background: var(--border-strong);
+}
+.agentcard__status.is-on i { background: var(--processing-accent); }
 /* the budget sits on its own second line, flush with the status TEXT
    (6px dot + 6px gap), never fighting the status for width */
 .agentcard__budget { grid-column: 1; margin-left: 12px; font-family: var(--font-mono); font-size: 9.5px; color: var(--text-muted); }
