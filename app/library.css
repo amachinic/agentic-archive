@@ -1355,6 +1355,8 @@
 }
 .chathead .closebtn:disabled { opacity: 0.45; cursor: default; }
 
+
+
 /* Atlas thinks before it speaks, then the sentence arrives */
 .agent-home__think { margin: 0; display: flex; align-items: center; min-height: 21px; }
 .agent-home__say { animation: content-in 260ms var(--motion-ease) both; }
