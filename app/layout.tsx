@@ -6,7 +6,7 @@ import { collectionTree, libraryStats } from "@/lib/queries";
 import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
 
 export const metadata: Metadata = {
-  title: "Image Archivist",
+  title: "Agentic Archive",
   description: "A multi-agentic dashboard for art direction, visual search, image sorting, curation, and archiving.",
 };
 

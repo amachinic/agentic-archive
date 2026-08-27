@@ -1,18 +1,18 @@
 <p align="center">
-  <img src="app/icon.svg" alt="Atlas mark for Image Archivist" width="104" height="104">
+  <img src="app/icon.svg" alt="Atlas mark for Agentic Archive" width="104" height="104">
 </p>
 
-# Image Archivist
+# Agentic Archive
 
 A multi-agentic dashboard for turning loose image folders into an art-direction-ready visual archive.
 
-Image Archivist helps designers, art directors, photographers, and visual researchers find, compare, sort, collect, and archive reference imagery. **Atlas**, its orchestrating agent, works through three specialized archetypes while the Network, Gallery, Analyze studio, and collection tools remain directly usable by hand.
+Agentic Archive helps designers, art directors, photographers, and visual researchers find, compare, sort, collect, and archive reference imagery. **Atlas**, its orchestrating agent, works through three specialized archetypes while the Network, Gallery, Analyze studio, and collection tools remain directly usable by hand.
 
-> Image Archivist is the workspace. Atlas is the agent inside it.
+> Agentic Archive is the workspace. Atlas is the agent inside it.
 
-[Open the public read-only archive](https://image-archivist.vercel.app)
+[Open the public read-only archive](https://archivist-agent.vercel.app)
 
-![Image Archivist Network dashboard](docs/network-showcase.png)
+![Agentic Archive Network dashboard](docs/network-showcase.png)
 
 ## What it is for
 
@@ -114,7 +114,7 @@ The canonical taxonomy lives in [`lib/taxonomy.ts`](lib/taxonomy.ts).
 
 ## Local-first architecture
 
-Image Archivist is local-first, not offline-only.
+Agentic Archive is local-first, not offline-only.
 
 Managed image copies, SQLite metadata, perceptual hashes, palettes, OCR, and similarity data stay on the host machine. Atlas text requests use the configured Groq model. Invoking visual analysis sends a downscaled version of the selected image to the configured Groq vision endpoint. Source originals are read during ingest and are never modified.
 
