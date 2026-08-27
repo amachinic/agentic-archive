@@ -30,6 +30,23 @@ import type { ChatMsg } from "@/lib/vision";
 
 export type Keyterm = { id: number; name: string; kind: string; count: number };
 
+/* The preloader and field share a document, so readiness is a tiny DOM
+   contract rather than a second set of network requests. The dataset keeps
+   the latest value if the animation runtime arrives after this component. */
+function reportAtlasBoot(progress: number, ready = false) {
+  if (typeof window === "undefined") return;
+  const root = document.documentElement;
+  if (root.dataset.atlasBoot !== "loading") return;
+  const previous = Number(root.dataset.atlasBootProgress) || 0;
+  const next = ready ? 100 : Math.max(previous, Math.min(99, Math.round(progress)));
+  root.dataset.atlasBootProgress = String(next);
+  window.dispatchEvent(new CustomEvent("atlas:boot-progress", { detail: { progress: next } }));
+  if (ready) {
+    root.dataset.atlasBootReady = "true";
+    window.dispatchEvent(new CustomEvent("atlas:boot-ready"));
+  }
+}
+
 /* the conversation holds more than words: tool calls the agent made, and
    proposals waiting on the human */
 type ThreadItem =
@@ -332,6 +349,7 @@ export default function GraphView({
 }) {
   const dialogs = useDialogs();
   const router = useRouter();
+  const initialNodeCount = initialGraph?.nodes.length ?? 0;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [minScore, setMinScore] = useState(FIELD_DEFAULTS.min);
@@ -375,6 +393,7 @@ export default function GraphView({
   const hasCards = liveCount > 0;
   /** thumbnails that have actually decoded, counted by the draw loop's loaders */
   const paintedRef = useRef(0);
+  useEffect(() => { reportAtlasBoot(25); }, []);
   /*
     The panel arrives after the field has PICTURES on it, not merely cards.
 
@@ -391,20 +410,77 @@ export default function GraphView({
   useEffect(() => {
     if (panelIn) return;
     if (!hasCards) {
-      const t = setTimeout(() => setPanelIn(true), 2200);
+      reportAtlasBoot(45);
+      const t = setTimeout(() => {
+        setPanelIn(true);
+      }, 2200);
       return () => clearTimeout(t);
     }
     const enough = Math.max(1, Math.min(liveCount, 18));
     const started = performance.now();
+    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+    reportAtlasBoot(55);
     const id = setInterval(() => {
+      const decoded = Math.min(paintedRef.current, enough);
+      reportAtlasBoot(55 + (decoded / enough) * 35);
       const ready = paintedRef.current >= enough;
       if (!ready && performance.now() - started < 5000) return;
       clearInterval(id);
       /* a beat after the last of them, so the panel reads as its own move */
-      setTimeout(() => setPanelIn(true), ready ? 420 : 0);
+      releaseTimer = setTimeout(() => {
+        reportAtlasBoot(94);
+        setPanelIn(true);
+      }, ready ? 420 : 0);
     }, 100);
-    return () => clearInterval(id);
-  }, [hasCards, panelIn, liveCount]);
+    return () => {
+      clearInterval(id);
+      if (releaseTimer) clearTimeout(releaseTimer);
+    };
+  }, [hasCards, panelIn]);
+
+  /* The final signal is deliberately rendered-state based. Hydration alone
+     is not enough: the canvas must have a real bitmap, the first cards must
+     exist (unless the library is empty), the composer must be mounted, and
+     the fonts that determine the chrome geometry must be settled. */
+  useEffect(() => {
+    if (!panelIn) return;
+    let cancelled = false;
+    let verifyTimer: ReturnType<typeof setTimeout> | undefined;
+    let firstFrame = 0;
+    let secondFrame = 0;
+
+    const verify = () => {
+      if (cancelled) return;
+      const canvas = canvasRef.current;
+      const rect = canvas?.getBoundingClientRect();
+      const canvasReady = !!canvas && !!rect && rect.width > 0 && rect.height > 0
+        && canvas.width > 0 && canvas.height > 0;
+      const enough = Math.max(1, Math.min(liveCount, 18));
+      const fieldReady = initialNodeCount === 0
+        || (hasCards && paintedRef.current >= enough);
+      const composerReady = panel !== "prompt" || !!composerRef.current;
+      if (canvasReady && fieldReady && composerReady) {
+        reportAtlasBoot(100, true);
+        return;
+      }
+      verifyTimer = setTimeout(verify, 100);
+    };
+
+    reportAtlasBoot(96);
+    void document.fonts.ready.catch(() => undefined).then(() => {
+      if (cancelled) return;
+      firstFrame = requestAnimationFrame(() => {
+        secondFrame = requestAnimationFrame(verify);
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      if (verifyTimer) clearTimeout(verifyTimer);
+      cancelAnimationFrame(firstFrame);
+      cancelAnimationFrame(secondFrame);
+    };
+  }, [hasCards, initialNodeCount, liveCount, panel, panelIn]);
   /* every step is reversible: a snapshot of the conversation before it, plus
      the action that produced it, so Back rewinds and Retry runs it again */
   const stepsRef = useRef<Step[]>([]);
@@ -701,6 +777,9 @@ export default function GraphView({
       canvas.height = r.height * devicePixelRatio;
       canvas.style.width = r.width + "px";
       canvas.style.height = r.height + "px";
+      if (r.width > 0 && r.height > 0 && canvas.width > 0 && canvas.height > 0) {
+        reportAtlasBoot(40);
+      }
     };
     fitCanvas();
     const ro = new ResizeObserver(fitCanvas);

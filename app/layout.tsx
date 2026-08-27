@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import DialogProvider from "@/components/DialogProvider";
+import AtlasPreloader from "@/components/AtlasPreloader";
 import { collectionTree, libraryStats } from "@/lib/queries";
 import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
 
@@ -22,15 +23,14 @@ export const dynamic = "force-dynamic";
 const themeScript = `(function(){var t;try{t=localStorage.getItem("atlas-theme")}catch(e){}var m=location.search.match(/[?&]theme=(light|dark)/);if(m)t=m[1];if(t!=="light"&&t!=="dark")t="dark";document.documentElement.setAttribute("data-theme",t);})();`;
 
 /*
-  First visit of a session to the dashboard routes through the preloader.
-  Runs inline before paint so the dashboard never flashes first; the
-  preloader marks the session booted before it hands back to "/", so this
-  never loops. sessionStorage failures skip the boot rather than trap it.
+  Classify the first dashboard visit before paint. The loader now lives in
+  this document; it covers the app while the real server payload, React tree,
+  network canvas and first-view thumbnails finish underneath it.
 */
-const bootScript = `(function(){var root=document.documentElement;try{if(location.pathname==="/"&&!sessionStorage.getItem("atlas-booted")){location.replace("/preloader.html");return}}catch(e){}root.classList.remove("atlas-boot-pending")})();`;
+const bootScript = `(function(){var root=document.documentElement;var loading=false;try{loading=location.pathname==="/"&&!sessionStorage.getItem("atlas-booted")}catch(e){}root.dataset.atlasBoot=loading?"loading":"ready";if(loading){root.dataset.atlasBootProgress="0";root.setAttribute("aria-busy","true")}root.classList.remove("atlas-boot-pending")})();`;
 
-const bootGateStyle = `html.atlas-boot-pending{background:#020202}html.atlas-boot-pending body{visibility:hidden;background:#020202}`;
-const noScriptStyle = `html.atlas-boot-pending body{visibility:visible}`;
+const bootGateStyle = `html.atlas-boot-pending,html[data-atlas-boot="loading"]{background:#020202}html.atlas-boot-pending body,html[data-atlas-boot="loading"]:not([data-atlas-overlay="mounted"]) body{visibility:hidden;background:#020202}`;
+const noScriptStyle = `html.atlas-boot-pending body{visibility:visible}.atlas-preloader{display:none!important}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const tree = collectionTree();
@@ -47,8 +47,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <noscript><style>{noScriptStyle}</style></noscript>
       </head>
       <body data-hosted-demo={IS_HOSTED_READ_ONLY ? "true" : undefined}>
+        <AtlasPreloader />
         <DialogProvider>
-          <div className="app">
+          <div className="app" suppressHydrationWarning>
             <Sidebar tree={tree} stats={stats} hostedDemo={IS_HOSTED_READ_ONLY} />
             <div className="workspace">{children}</div>
           </div>
