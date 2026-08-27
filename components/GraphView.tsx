@@ -94,11 +94,11 @@ const CTA_META: Record<string, CtaOpt> = {
   skills: { key: "skills", label: "Other agent skills", sub: "atlas" },
 };
 const HOME_CTAS: CtaOpt[] = [CTA_META.tag, CTA_META.sort, CTA_META.find, CTA_META.save, CTA_META.skills];
-/* The hosted archive can only offer what never leaves the browser. Tag reads
-   /api/list, find goes to the agent and save writes: all three are refused by
-   the middleware, so offering them is offering a 403. Filter and sort are pure
-   client state and work exactly as they do locally. */
-const READ_ONLY_CTAS: CtaOpt[] = [CTA_META.filter, CTA_META.sort, CTA_META.skills];
+/* The hosted archive reads. The agent runs there, so finding is offered and so
+   is everything the field does on its own. What is not offered is what writes:
+   tag changes the archive and save files a folder, and both are refused by the
+   middleware, so putting them here would be offering a 403. */
+const READ_ONLY_CTAS: CtaOpt[] = [CTA_META.find, CTA_META.filter, CTA_META.sort, CTA_META.skills];
 
 /* everything Atlas can actually do today, under the archetype that owns it */
 const SKILLS: { arch: string; note: string; keys: string[] }[] = [
@@ -2070,7 +2070,7 @@ export default function GraphView({
                             <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                           ) : (
                             <p className="agent-home__say">{readOnly
-                              ? "This is the hosted archive, so I am reading only: filter the field by keyterm and sort what is showing, and every card opens. Asking me to hunt, tag or file needs the local build, where I can actually write."
+                              ? "One agent, three lenses. Ask me to hunt through the archive, filter it by keyterm, or sort what is showing into a grid. This is the public copy, so I can look but not write: tagging and filing need the local build."
                               : "One agent, three lenses. Find or filter to narrow the field, sort what is showing, save what is worth keeping. Type “/” for every command, or just ask."}</p>
                           )}
                         </div>
@@ -2271,14 +2271,14 @@ export default function GraphView({
                            model call, and a composer that takes a question and answers it with a
                            403 is worse than one that says so before you type. */
                         placeholder={readOnly
-                          ? "Reading only here. Filter and sort still work."
+                          ? "Ask me to find something. Filing needs the local build."
                           : "Describe what you are hunting for..."}
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendPrompt(); } }}
-                        disabled={promptBusy || readOnly}
+                        disabled={promptBusy}
                       />
-                      <button className="graph-ci__send" type="submit" disabled={promptBusy || simBusy || readOnly || !draft.trim()} aria-label="Send">
+                      <button className="graph-ci__send" type="submit" disabled={promptBusy || simBusy || !draft.trim()} aria-label="Send">
                         <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                           <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" />
                         </svg>

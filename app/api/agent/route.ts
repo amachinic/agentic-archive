@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { listImages } from "@/lib/queries";
+import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
 import type { ChatMsg } from "@/lib/vision";
 
 export const maxDuration = 120;
@@ -10,6 +11,19 @@ const MODEL = process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-120b";
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1";
 const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+
+/*
+  The hosted archive runs the agent on a small model with a short round budget.
+
+  It is a public URL, so every visitor who types spends tokens on somebody
+  else's key. The work is narrow -- pick two or three tools from a list of six
+  and say one sentence -- and a mini model does it as well as a large one, at a
+  fraction of the cost. Four rounds is enough for search, filter, show; a loop
+  that wants more than that is going in circles rather than converging.
+*/
+const HOSTED_MODEL = process.env.ATLAS_HOSTED_MODEL || "gpt-4.1-mini";
+const HOSTED_ROUNDS = 4;
+const ROUNDS = IS_HOSTED_READ_ONLY ? HOSTED_ROUNDS : 6;
 
 /*
   Two backs for the same agent. Groq is the house model; Claude is here for
@@ -39,7 +53,7 @@ function openAiish(p: Provider) {
   const groq = p === "groq";
   return {
     endpoint: groq ? ENDPOINT : OPENAI_ENDPOINT,
-    model: groq ? MODEL : OPENAI_MODEL,
+    model: groq ? MODEL : IS_HOSTED_READ_ONLY ? HOSTED_MODEL : OPENAI_MODEL,
     key: (groq ? process.env.GROQ_API_KEY : process.env.OPENAI_API_KEY) ?? "",
     maxTokens: groq ? 200 : 1200,
     extra: groq ? { reasoning_format: "hidden" } : {},
@@ -246,7 +260,17 @@ export async function POST(req: Request) {
       }
       case "filter_by_terms": {
         const asked = (Array.isArray(args.terms) ? args.terms : []).map((t) => String(t).toLowerCase()).slice(0, 6);
-        if (!asked.length || !ws.length) return JSON.stringify({ count: ws.length, note: "nothing to filter" });
+        if (!asked.length) return JSON.stringify({ count: ws.length, note: "no terms given" });
+        /* An empty working set means nobody has searched yet. Refusing with
+           "nothing to filter" is technically true and practically useless: the
+           human asked for the images carrying these terms, and the library is
+           the obvious place to take them from. Seeding from it here also stops
+           the whole turn depending on whether the model remembered to search
+           first, which is exactly the instruction a smaller model drops. */
+        if (!ws.length) {
+          const { rows } = listImages({ limit: 4000, sort: "newest" });
+          ws = rows.map((r) => ({ id: r.id, title: (r.ai_title || r.filename).slice(0, 40) }));
+        }
         /* only real vocabulary narrows; made-up words are named, not obeyed */
         const vocab = VOCAB_SET();
         const terms = asked.filter((t) => vocab.has(t));
@@ -325,11 +349,24 @@ export async function POST(req: Request) {
       ", and that field IS your working set already. \"these\", \"them\", \"what is showing\" and \"the current set\" all mean exactly those images: filter, sort, show or propose over them directly. Search again only if they are plainly asking for something new."
     : "";
 
-  const system = SYSTEM + holding + "\n\nKEYTERM VOCABULARY (term(count)):\n" + vocabulary();
+  /* On the hosted archive it can look but not write, and it should say so
+     itself rather than leave the interface apologising afterwards. */
+  const hosted = IS_HOSTED_READ_ONLY
+    ? "\n\nThis is the public, read-only archive. You can search, filter, widen and re-form the field, and that is genuinely useful. You CANNOT file a folder, tag anything, or change the archive in any way, and you have no tool for it. If the human asks you to file, save, tag or organise into folders, say plainly that the hosted archive is read-only and that running the project locally is where those work. Do not apologise at length, and do not offer it as a next step."
+    : "";
+
+  const system = SYSTEM + hosted + holding + "\n\nKEYTERM VOCABULARY (term(count)):\n" + vocabulary();
   const turns = body.messages
     .filter((m) => m.role === "user" || m.role === "assistant")
     .slice(-10)
     .map((m) => ({ role: m.role, content: m.content }));
+
+  /* Nothing here can be written, so propose_folder is not offered: the accept
+     it leads to would be refused by the middleware, and an agent that stages
+     something it cannot finish is worse than one that says it cannot. */
+  const tools = IS_HOSTED_READ_ONLY
+    ? TOOLS.filter((t) => t.function.name !== "propose_folder")
+    : TOOLS;
 
   const msgs: LoopMsg[] = [{ role: "system", content: system }, ...turns];
 
@@ -351,7 +388,7 @@ export async function POST(req: Request) {
       content: m.content,
     }));
 
-    for (let round = 0; round < 6; round++) {
+    for (let round = 0; round < ROUNDS; round++) {
       const res = await client.messages.create({
         model: CLAUDE_MODEL,
         max_tokens: 8000,
@@ -419,7 +456,7 @@ export async function POST(req: Request) {
     }
 
     let reply = "";
-    for (let round = 0; round < 6; round++) {
+    for (let round = 0; round < ROUNDS; round++) {
       const res = await fetch(wire.endpoint, {
         method: "POST",
         headers: { Authorization: "Bearer " + wire.key, "Content-Type": "application/json" },
@@ -428,7 +465,7 @@ export async function POST(req: Request) {
           max_tokens: wire.maxTokens,
           temperature: 0.2,
           ...wire.extra,
-          tools: TOOLS,
+          tools,
           tool_choice: "auto",
           messages: msgs,
         }),
