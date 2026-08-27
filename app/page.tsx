@@ -1,5 +1,6 @@
 import "./library.css";
 import { listTags, graphData } from "@/lib/queries";
+import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
 import GraphView, { FIELD_DEFAULTS } from "@/components/GraphView";
 
 export const dynamic = "force-dynamic";
@@ -23,5 +24,9 @@ export default function HomePage() {
      JSON is what makes them plain. It also drops `membership`, which the field
      never reads, so none of it is paid for in the document. */
   const initialGraph = JSON.parse(JSON.stringify({ nodes: g.nodes, edges: g.edges }));
-  return <GraphView keyterms={listTags()} initialGraph={initialGraph} />;
+  /* On the hosted archive every write and every model call is refused by the
+     middleware. The field still works: it is all client-side. Handing the flag
+     down means the panel can say which half is live rather than inviting a
+     prompt and answering it with a 403. */
+  return <GraphView keyterms={listTags()} initialGraph={initialGraph} readOnly={IS_HOSTED_READ_ONLY} />;
 }
