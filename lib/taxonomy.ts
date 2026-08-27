@@ -45,10 +45,49 @@ export const TAXONOMY: Record<string, string[]> = {
     "eerie", "nostalgic", "romantic", "clinical", "chaotic", "mysterious",
     "energetic", "contemplative", "solemn", "solitary", "ethereal", "raw",
   ],
-  /* how it was made */
-  medium: [
-    "photography", "illustration", "graphic design", "3d render", "painting",
-    "collage", "mixed media", "screenshot", "print",
+  /* WHAT THE WORK IS -- the archival question, not "was a camera involved".
+     A photograph OF a book spread is a book spread; the camera is only its
+     carrier. Values name pictorial or graphic works a digital file can
+     embody. Physical things -- sculpture, garments, buildings -- are
+     subjects DEPICTED by a work, never works here, because a sculpture
+     cannot live in a digital archive; only a photograph or scan of it can.
+     Names deliberately avoid every subject term (one name, one kind):
+     "film frame" not "film still", "record sleeve" not "album cover",
+     "technical diagram" not "diagram". */
+  work: [
+    "photograph", "poster", "book spread", "book cover", "magazine page",
+    "record sleeve", "print", "painting", "illustration", "graphic design",
+    "collage", "screenshot", "meme", "film frame", "3d render",
+    "typeface specimen", "technical diagram", "mixed media",
+    /* a photo or scan whose whole content is another artwork -- a sculpture
+       in a museum, an installation view, a painting on a gallery wall. The
+       depicted thing goes in subjects; the file is a reproduction. */
+    "artwork reproduction",
+  ],
+  /* HOW the work reached this file. "direct" means the file IS the work --
+     native digital design, a photographer's own frame. Everything else is a
+     reproduction of something that exists outside the file, which is the
+     one-bit answer to "is this photographic work or a photo of a thing". */
+  carrier: ["direct", "photographed", "scanned", "screen captured"],
+  /* WHEN the work most likely dates from -- creation, read from evidence
+     (process, dress, typography, printed dates), not the era its style
+     merely evokes. "undated" is an honest answer and a worklist. */
+  period: [
+    "pre-1900", "1900s", "1910s", "1920s", "1930s", "1940s", "1950s",
+    "1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s", "undated",
+  ],
+  /* the physical or displayed substance the work is made of or printed on */
+  material: [
+    "paper", "newsprint", "cardboard", "cloth", "fabric", "metal", "wood",
+    "stone", "ceramic", "glass", "plastic", "film emulsion", "ink", "paint",
+    "thread", "screen display",
+  ],
+  /* the making process, when it can be read off the surface */
+  process: [
+    "offset", "screen print", "letterpress", "risograph", "etching",
+    "lithography", "silver gelatin", "c-print", "polaroid",
+    "digital photograph", "digital painting", "vector art", "photocopy",
+    "cyanotype", "hand drawn", "embroidery",
   ],
   /* the shape of the frame: written from dimensions, never from a model */
   format: ["tall", "wide", "square", "panoramic"],
@@ -78,15 +117,20 @@ export const ALIASES: Record<string, string> = {
   "meditative": "contemplative",
   "conceptual art": "conceptual",
   "graphic": "graphic design",
-  "photographic": "photography",
-  "film photography": "photography",
+  /* medium is gone; photography-family answers land on the work kind */
+  "photographic": "photograph",
+  "photography": "photograph",
+  "film photography": "photograph",
+  "photo": "photograph",
+  "album cover art": "record sleeve",
+  "lp cover": "record sleeve",
   "street photography": "documentary",
   "architectural photography": "architecture",
   "grid-based": "grid",
   "grid layout": "grid",
   "layout": "grid",
   "mixed": "mixed media",
-  "lithograph": "print",
+  "lithograph": "lithography",
   "sketch": "illustration",
   "sketchy": "illustrative",
   "gestural": "expressionist",
@@ -277,7 +321,14 @@ export function canonical(raw: string): { name: string; kind: string } | null {
 
 /** The vocabulary as prompt text, so a model picks instead of inventing. */
 export function vocabularyBlock(): string {
-  return (["subject", "style", "mood", "medium"] as const)
+  return (["subject", "style", "mood"] as const)
     .map((k) => k + ": " + TAXONOMY[k].join(", "))
+    .join("\n");
+}
+
+/** the archival facets, for the prompts that assign them */
+export function facetBlock(): string {
+  return (["work", "carrier", "period", "material", "process"] as const)
+    .map((k) => k.toUpperCase() + ": " + TAXONOMY[k].join(", "))
     .join("\n");
 }

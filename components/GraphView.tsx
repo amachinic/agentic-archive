@@ -17,6 +17,7 @@
 */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TAXONOMY } from "@/lib/taxonomy";
 import { useRouter, useSearchParams } from "next/navigation";
 import Inspector from "./Inspector";
 import { useDialogs } from "./DialogProvider";
@@ -63,7 +64,7 @@ type Action = { kind: "cta"; key: string; label: string } | { kind: "prompt"; te
 type Step = {
   thread: ThreadItem[];
   promptIds: number[] | null;
-  fieldSort: "colour" | "light" | null;
+  fieldSort: FieldSortMode | null;
   action: Action;
 };
 type OutRow = { icon: "folder" | "foldercheck" | "drive" | "check"; text: string };
@@ -83,6 +84,7 @@ type IconFn = (p: React.SVGProps<SVGSVGElement>) => React.ReactElement;
 const CTA_ICON: Record<string, IconFn> = {
   tag: IconTag,
   sort: IconSort, "sort-colour": IconPalette, "sort-light": IconSparkle, "sort-off": IconRefresh,
+  "sort-period": IconSort, "sort-kind": IconFolder,
   find: IconSearch,
   save: IconSave, "save-atlas": IconFolder, "save-disk": IconDrive, "save-both": IconSave,
   timeline: IconClock,
@@ -125,9 +127,11 @@ const SKILLS: { arch: string; note: string; keys: string[] }[] = [
   { arch: "Media Manager", note: "puts things where they live", keys: ["save-new", "save-existing", "save-local"] },
 ];
 
-const KIND_ORDER = ["artist", "style", "subject", "mood", "color", "format", "medium", "tag"] as const;
+type FieldSortMode = "colour" | "light" | "period" | "kind";
+const KIND_ORDER = ["artist", "work", "carrier", "period", "style", "subject", "mood", "color", "material", "process", "format", "medium", "tag"] as const;
 const KIND_LABEL: Record<string, string> = {
-  artist: "Artist", style: "Style", subject: "Subject", mood: "Mood", color: "Color", format: "Format", medium: "Medium", tag: "Manual",
+  artist: "Artist", work: "Work", carrier: "Carrier", period: "Period", style: "Style", subject: "Subject", mood: "Mood",
+  color: "Color", material: "Material", process: "Process", format: "Format", medium: "Medium", tag: "Manual",
 };
 const TERM_COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
@@ -256,21 +260,52 @@ function hexA(hex: string, a: number): string {
   return "rgba(" + ((v >> 16) & 255) + "," + ((v >> 8) & 255) + "," + (v & 255) + "," + a + ")";
 }
 
-/* the Curator's sort keys, computed from the Archivist's stored palette —
-   the hand-off between archetypes is shared data, not messages */
-function sortKey(hex: string, mode: "colour" | "light"): number {
+/* the Curator's sort keys, computed from the Archivist's stored palette and
+   keyterms — the hand-off between archetypes is shared data, not messages */
+
+/** hex -> OKLCh-ish {L, C, h(deg)}: perceptual, cheap, good enough to sort by */
+function oklch(hex: string): { L: number; C: number; h: number } | null {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return 999;
+  if (!m) return null;
   const v = parseInt(m[1], 16);
-  const r = ((v >> 16) & 255) / 255, gc = ((v >> 8) & 255) / 255, b = (v & 255) / 255;
-  const luma = 0.2126 * r + 0.7152 * gc + 0.0722 * b;
-  if (mode === "light") return luma;
-  const max = Math.max(r, gc, b), min = Math.min(r, gc, b), d = max - min;
-  if (d < 0.05) return 130 + luma * 10; // near-greys queue after the wheel, dark to light
-  let h = max === r ? ((gc - b) / d) % 6 : max === gc ? (b - r) / d + 2 : (r - gc) / d + 4;
-  if (h < 0) h += 6;
-  /* 12 hue bands, dark -> bright inside each: the sweep reads as rows */
-  return Math.floor(h * 2) * 10 + luma * 9;
+  const lin = (u: number) => { u /= 255; return u <= 0.04045 ? u / 12.92 : Math.pow((u + 0.055) / 1.055, 2.4); };
+  const r = lin((v >> 16) & 255), g = lin((v >> 8) & 255), b = lin(v & 255);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const mm = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const ss = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  const L = 0.2104542553 * l + 0.793617785 * mm - 0.0040720468 * ss;
+  const A = 1.9779984951 * l - 2.428592205 * mm + 0.4505937099 * ss;
+  const B = 0.0259040371 * l + 0.7827717662 * mm - 0.808675766 * ss;
+  const C = Math.hypot(A, B);
+  let h = (Math.atan2(B, A) * 180) / Math.PI;
+  if (h < 0) h += 360;
+  return { L, C, h };
+}
+
+const PERIOD_RANK = new Map(TAXONOMY.period.map((p, i) => [p, i]));
+const WORK_RANK = new Map(TAXONOMY.work.map((w, i) => [w, i]));
+
+function sortKey(n: { hex: string; tags: string[] }, mode: FieldSortMode): number {
+  const c = oklch(n.hex);
+  const L = c ? c.L : 0.5;
+  if (mode === "light") return L;
+  if (mode === "colour") {
+    /* Perceptual, with a grey lane. 595 of the archive's 925 images are
+       monochrome, and a grey pixel has no meaningful hue: sorting them onto
+       a hue wheel ordered a third of the grid by noise. Greys now open the
+       grid as their own dark-to-light band; chromatic images follow as
+       twelve OKLCh hue bands, dark to light inside each. */
+    if (!c || c.C < 0.03) return L * 9;                       // the grey lane
+    return 10 + Math.floor(c.h / 30) * 10 + L * 9;            // the wheel
+  }
+  if (mode === "period") {
+    /* decade bands top to bottom; undated sinks to the end as a worklist */
+    for (const t of n.tags) { const r = PERIOD_RANK.get(t); if (r !== undefined) return r * 10 + L * 9; }
+    return TAXONOMY.period.length * 10 + L * 9;
+  }
+  /* kind: work-type lanes in taxonomy order, dark-to-light inside each */
+  for (const t of n.tags) { const r = WORK_RANK.get(t); if (r !== undefined) return r * 10 + L * 9; }
+  return TAXONOMY.work.length * 10 + L * 9;
 }
 
 /* a folder name from the hunt that built the set: strip filler, title-case */
@@ -377,7 +412,7 @@ export default function GraphView({
   const [filterSheetOpen, setFilterSheetOpen] = useState(false); // mobile: the filter drawer
   const [openFilterSec, setOpenFilterSec] = useState<string | null>(null); // one drawer section at a time
 
-  const [fieldSort, setFieldSort] = useState<"colour" | "light" | null>(null);
+  const [fieldSort, setFieldSort] = useState<FieldSortMode | null>(null);
   /* the home panel introduces itself: Atlas thinks, speaks, then its
      capabilities arrive one after another */
   const [boot, setBoot] = useState(0);
@@ -660,7 +695,7 @@ export default function GraphView({
 
   const capRef = useRef(cap); capRef.current = cap;
   const showWiresRef = useRef(showWires); showWiresRef.current = showWires;
-  const fieldSortRef = useRef<"colour" | "light" | null>(null);
+  const fieldSortRef = useRef<FieldSortMode | null>(null);
 
   // deep link: /?panel=prompt opens straight into prompt discovery
   useEffect(() => {
@@ -718,7 +753,7 @@ export default function GraphView({
     /* the Curator's sort: homes are handed out pool-order, so ordering the
        pool re-orders the whole layout */
     fieldSortRef.current = fieldSort;
-    if (fieldSort) pool = [...pool].sort((a, b) => sortKey(a.hex, fieldSort) - sortKey(b.hex, fieldSort));
+    if (fieldSort) pool = [...pool].sort((a, b) => sortKey(a, fieldSort) - sortKey(b, fieldSort));
 
     const nodes: GNode[] = pool.map((n) => ({ ...n, x: 0, y: 0 }));
     const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -1274,20 +1309,26 @@ export default function GraphView({
       const scope = poolSize === raw.nodes.length ? "all " + poolSize + " cards" : "just the " + poolSize + " cards showing now";
       pushAtlas("I sort whatever the field is showing: right now that is " + scope + ", laid out as a grid you read top to bottom.");
       pushCtas([
-        { key: "sort-colour", label: "By colour", sub: "hue wheel" },
+        { key: "sort-colour", label: "By colour", sub: "greys, then the wheel" },
         { key: "sort-light", label: "By light", sub: "dark → bright" },
+        { key: "sort-period", label: "By period", sub: "decade bands" },
+        { key: "sort-kind", label: "By kind", sub: "work-type lanes" },
         { key: "sort-off", label: "Release", sub: "original order" },
       ]);
       return;
     }
-    if (key === "sort-colour" || key === "sort-light") {
-      const mode = key === "sort-colour" ? ("colour" as const) : ("light" as const);
+    if (key === "sort-colour" || key === "sort-light" || key === "sort-period" || key === "sort-kind") {
+      const mode = key.slice(5) as FieldSortMode;
       await playToolRow("sort_field", mode, "field re-formed");
       setFieldSort(mode);
       logLedger("curator", "sorted the field by " + mode);
       pushAtlas(mode === "colour"
-        ? "Done. A grid, top to bottom: the hue wheel sweeps the rows, dark to bright inside each band."
-        : "Done. A grid, top to bottom: dark at the top, bright at the bottom.");
+        ? "Done. A grid, top to bottom: the greys first, dark to light, then the hue wheel sweeps the rows."
+        : mode === "light"
+        ? "Done. A grid, top to bottom: dark at the top, bright at the bottom."
+        : mode === "period"
+        ? "Done. A grid in decade bands, earliest at the top; the undated gather at the end."
+        : "Done. A grid in work-type lanes: photographs, posters, spreads, screens, each kind together.");
       pushNext(["save", "find", "post-release"]);
       return;
     }
@@ -1601,7 +1642,8 @@ export default function GraphView({
         /* "off" is the agent undoing its own grid: the set on the canvas is
            untouched, only the arrangement goes back to the field's own order */
         const off = d.sort.by === "off";
-        setFieldSort(off ? null : d.sort.by === "colour" ? "colour" : "light");
+        const m = ["colour", "light", "period", "kind"].includes(d.sort.by) ? (d.sort.by as FieldSortMode) : "light";
+        setFieldSort(off ? null : m);
         logLedger("curator", off ? "put the field back in its own order" : "sorted the field by " + d.sort.by + " · grid");
       }
       if (d.proposal) {

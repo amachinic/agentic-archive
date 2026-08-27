@@ -29,7 +29,9 @@ export function analysisToText(a: Analysis): string {
   const lines: string[] = [];
   if (a.title) lines.push(a.title, "");
   if (a.description) lines.push(a.description, "");
-  if (a.medium) lines.push("Medium: " + a.medium);
+  const kindLine = [a.work, a.carrier && a.carrier !== "direct" ? "via " + a.carrier : "", a.period && a.period !== "undated" ? a.period : ""].filter(Boolean).join(" · ");
+  if (kindLine) lines.push("Work: " + kindLine);
+  else if (a.medium) lines.push("Medium: " + a.medium);
   if (a.style?.length) lines.push("Style: " + a.style.join(", "));
   if (a.mood?.length) lines.push("Mood: " + a.mood.join(", "));
   if (a.subjects?.length) lines.push("Subjects: " + a.subjects.join(", "));
@@ -80,9 +82,10 @@ export default function AnalysisBrief({ a }: { a: Analysis }) {
         {copied ? "Copied" : "Copy"}
       </button>
 
-      {(a.medium || a.style?.length > 0 || a.mood?.length > 0) && (
+      {(a.work || a.medium || a.style?.length > 0 || a.mood?.length > 0) && (
         <div className="chips" style={{ paddingRight: 72 }}>
-          {a.medium && <span className="term is-medium">{a.medium}</span>}
+          {(a.work || a.medium) && <span className="term is-medium">{a.work || a.medium}</span>}
+          {a.period && a.period !== "undated" && <span className="term is-medium">{a.period}</span>}
           {a.style?.map((t) => <span key={"s" + t} className="term">{t}</span>)}
           {a.mood?.map((t) => <span key={"m" + t} className="term is-soft">{t}</span>)}
         </div>

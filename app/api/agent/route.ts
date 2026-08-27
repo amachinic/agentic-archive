@@ -123,10 +123,10 @@ const TOOLS = [
     type: "function",
     function: {
       name: "sort_field",
-      description: "Arrange the canvas as a sorted GRID, read top to bottom. by='colour' sweeps the hue wheel (dark to bright inside each band); by='light' runs dark to bright. by='off' drops the grid and puts the field back in its original order WITHOUT changing which images are on it: that is the answer to unsort, undo the sort, put it back, or original order. Use whenever the human asks to sort, arrange, order or grid the canvas. No search needed first if they mean everything showing.",
+      description: "Arrange the canvas as a sorted GRID, read top to bottom. by='colour' sweeps the hue wheel (dark to bright inside each band); by='light' runs dark to bright. by='period' arranges decade bands from the period keyterms (earliest first, undated last); by='kind' arranges work-type lanes (photographs, posters, spreads, screens). by='off' drops the grid and puts the field back in its original order WITHOUT changing which images are on it: that is the answer to unsort, undo the sort, put it back, or original order. Use whenever the human asks to sort, arrange, order or grid the canvas. No search needed first if they mean everything showing.",
       parameters: {
         type: "object",
-        properties: { by: { type: "string", enum: ["colour", "light", "off"] } },
+        properties: { by: { type: "string", enum: ["colour", "light", "period", "kind", "off"] } },
         required: ["by"],
       },
     },
@@ -274,7 +274,7 @@ export async function POST(req: Request) {
   const out: {
     shownIds: number[] | null;
     proposal: { name: string; note: string; ids: number[] } | null;
-    sort: { by: "colour" | "light" | "off" } | null;
+    sort: { by: "colour" | "light" | "period" | "kind" | "off" } | null;
     release: boolean;
   } = { shownIds: null, proposal: null, sort: null, release: false };
   const toolLog: ToolLogRow[] = [];
@@ -425,7 +425,7 @@ export async function POST(req: Request) {
         return JSON.stringify({ released: true, note: "the whole library is back on the canvas" });
       }
       case "sort_field": {
-        const by = args.by === "colour" ? "colour" : args.by === "off" ? "off" : "light";
+        const by = (["colour", "light", "period", "kind", "off"] as const).find((v) => v === args.by) ?? "light";
         out.sort = { by };
         return JSON.stringify(by === "off"
           ? { sorted: "off", note: "the grid is gone and the field is back in its own order; the same images are still on it" }

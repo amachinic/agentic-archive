@@ -31,6 +31,11 @@ const PUBLIC_SCHEMA = {
 };
 const TABLES = Object.keys(PUBLIC_SCHEMA);
 const REVIEWED_EMPTY_SOURCE_TABLES = new Set(["handtag_claims"]);
+/* Reviewed tables that hold data locally and are PRIVATE BY DESIGN: they are
+   dropped from every snapshot, never published. The events ledger records
+   which files were ingested from where and every action since -- provenance
+   for the owner, not for the public copy. */
+const REVIEWED_PRIVATE_SOURCE_TABLES = new Set(["events"]);
 const RETAINED_IMAGE_FIELDS = ["ai_title", "ai_description", "ai_analysis", "artist"];
 const WEBP_METADATA_CHUNKS = new Set(["EXIF", "XMP ", "ICCP"]);
 const PUBLIC_CATALOGUED_AT = Date.UTC(2026, 7, 26);
@@ -48,7 +53,9 @@ const REVIEWED_UNINDEXED_BY_DERIVATIVE = {
       ["minimalist", "style"],
       ["monochrome", "style"],
       ["glitch", "style"],
-      ["graphic design", "medium"],
+      ["graphic design", "work"],
+      ["direct", "carrier"],
+      ["undated", "period"],
       ["tall", "format"],
     ],
   },
@@ -127,6 +134,7 @@ function verifyApprovedSchema(db, label, { allowReviewedEmptyTables = false } = 
   for (const table of TABLES) assert(found.has(table), `${label} is missing table ${table}.`);
   for (const table of found) {
     if (TABLES.includes(table)) continue;
+    if (allowReviewedEmptyTables && REVIEWED_PRIVATE_SOURCE_TABLES.has(table)) continue; // reviewed: dropped from the snapshot below
     const allowed = allowReviewedEmptyTables && REVIEWED_EMPTY_SOURCE_TABLES.has(table);
     assert(allowed, `${label} contains unapproved table ${table}. Review the public schema before publishing.`);
     const rows = Number(db.prepare(`SELECT COUNT(*) AS n FROM "${table}"`).get().n);
@@ -380,7 +388,7 @@ async function sanitizeSnapshot(snapshotPath, source, unindexedFiles, derivedDir
     let additions;
     try {
       additions = await addUnindexedImages(db, unindexedFiles, derivedDir);
-      for (const table of REVIEWED_EMPTY_SOURCE_TABLES) {
+      for (const table of [...REVIEWED_EMPTY_SOURCE_TABLES, ...REVIEWED_PRIVATE_SOURCE_TABLES]) {
         db.exec(`DROP TABLE IF EXISTS "${table}"`);
       }
       db.exec(`

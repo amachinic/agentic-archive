@@ -1,4 +1,5 @@
 import fsp from "node:fs/promises";
+import { recordEvent } from "@/lib/events";
 import os from "node:os";
 import path from "node:path";
 import { db } from "@/lib/db";
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
       db().prepare("UPDATE images SET source_path = ? WHERE id = ?").run("upload: " + file.name, r.id);
     }
     rebuildSimilarity();
+    recordEvent("you", "ingest", { filename: file.name, bytes: file.size, status: r.status }, r.id);
     return Response.json({ id: r.id, status: r.status });
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : "ingest failed" }, { status: 500 });

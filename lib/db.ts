@@ -166,6 +166,23 @@ function migrate(conn: DatabaseSync) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_img_phash    ON images(phash);
+
+    /* The provenance ledger, PREMIS-shaped: every action that touches the
+       archive is an event -- what happened, which agent did it, to which
+       image, when, with what detail. The session ledger in the UI was
+       always this list; it just evaporated with the tab. This one does not,
+       which is what lets the archive prove its own history -- and it
+       doubles as the corrections stream a future fine-tune trains on. */
+    CREATE TABLE IF NOT EXISTS events (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      at       INTEGER NOT NULL,
+      agent    TEXT NOT NULL,           -- 'archivist' | 'curator' | 'media manager' | 'registrar' | 'you' | 'system'
+      action   TEXT NOT NULL,           -- 'ingest' | 'analyze' | 'tag' | 'file' | 'unfile' | 'delete' | 'export' | 'fixity-verify' | 'fixity-drift' | 'accept' | 'reject' | ...
+      image_id INTEGER REFERENCES images(id) ON DELETE SET NULL,
+      detail   TEXT                     -- small JSON: counts, names, evidence
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_at    ON events(at);
+    CREATE INDEX IF NOT EXISTS idx_events_image ON events(image_id);
   `);
 
   // additive columns (ALTER throws if the column exists; that is fine)

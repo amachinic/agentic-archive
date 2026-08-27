@@ -322,6 +322,13 @@ function analysis(seed: DemoSeed): Analysis {
     style: seed.style,
     mood: seed.mood,
     medium: seed.medium,
+    /* the demo set is native digital design: the file is the work */
+    work: seed.medium === "photography" ? "photograph" : "graphic design",
+    carrier: "direct",
+    period: "2020s",
+    materials: [],
+    processes: [],
+    period_evidence: "synthetic demo set, created for this build",
     material: seed.material,
     lighting: seed.lighting,
     aesthetic: seed.aesthetic,

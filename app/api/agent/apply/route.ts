@@ -1,5 +1,6 @@
 import { db, now } from "@/lib/db";
 import { ensureCollection } from "@/lib/ingest";
+import { recordEvent } from "@/lib/events";
 
 /*
   Commit an ACCEPTED agent proposal: create (or reuse) the folder and file
@@ -19,5 +20,9 @@ export async function POST(req: Request) {
     const r = ins.run(id, collectionId, now());
     filed += Number(r.changes);
   }
+  /* the accept is a human judgement about agent work: exactly the stream a
+     future fine-tune learns from, so it is the first thing the ledger keeps */
+  recordEvent("you", "accept", { proposal: name, proposed: ids.length, filed });
+  recordEvent("media manager", "file", { collection: name, collectionId, filed });
   return Response.json({ collectionId, filed, name });
 }
