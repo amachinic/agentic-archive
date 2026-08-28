@@ -975,7 +975,9 @@
   background: color-mix(in srgb, var(--ok) 12%, var(--surface));
 }
 .toast {
-  display: flex; align-items: flex-start; gap: 10px;
+  /* centred, not flex-start: the mark hangs off a mostly one-line message,
+     and an icon riding high beside a single line reads as a misprint */
+  display: flex; align-items: center; gap: 10px;
   border: 1px solid; border-radius: var(--radius-md);
   padding: 11px var(--space-2);
   font-size: var(--font-body-sm); line-height: 1.5;
@@ -984,7 +986,7 @@
 @keyframes toast-in { from { opacity: 0; transform: translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 
-.toast__mark { flex: none; display: grid; place-items: center; padding-top: 2px; }
+.toast__mark { flex: none; display: grid; place-items: center; }
 .toast__text { min-width: 0; }
 .toast__x {
   margin-left: auto; flex: none; background: none; border: 0; cursor: pointer;
@@ -1123,6 +1125,11 @@
 .conn-cta.is-off {
   background: none; color: var(--text-secondary);
   border: 1px solid var(--border-strong);
+}
+/* where a source lives, on the archive that cannot press anything */
+.conncard__where {
+  font-family: var(--font-mono); font-size: var(--font-input-xs);
+  letter-spacing: 0.05em; color: var(--text-secondary);
 }
 .conncard__more {
   margin-left: auto;
