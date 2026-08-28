@@ -293,17 +293,14 @@
     width: 26px; height: 30px;
     pointer-events: none;
     opacity: 0;
-    transition: transform 430ms cubic-bezier(0.32, 0, 0.18, 1), opacity 260ms ease;
+    transition: opacity 150ms ease;
     will-change: transform;
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55));
   }
   .hand.is-on { opacity: 1; }
   .hand.is-press { animation: hand-press 200ms cubic-bezier(0.4, 0, 0.2, 1); }
   @keyframes hand-press { 40% { scale: 0.82; } }
-  .hand svg { position: absolute; inset: 0; opacity: 0; transition: opacity 120ms; }
-  .hand[data-glyph="arrow"] svg.g-arrow { opacity: 1; }
-  .hand[data-glyph="finger"] svg.g-finger { opacity: 1; }
-  .hand[data-glyph="text"] svg.g-text { opacity: 1; }
+  .hand svg { position: absolute; inset: 0; }
   body.is-film .live__veil { border-radius: 0; }
 
   .glyph { width: 15px; height: 15px; flex: none; display: inline-block; }
@@ -793,10 +790,8 @@
 
   <div class="live">
     <div class="live__vp" id="rvp">
-      <div class="hand" id="rhand" data-glyph="arrow" aria-hidden="true">
-        <svg class="g-arrow" viewBox="0 0 26 30"><path d="M4 2 L4 24 L9.6 19.2 L13 27.4 L16.6 25.8 L13.2 17.8 L20.4 17.2 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <div class="hand" id="rhand" aria-hidden="true">
         <svg class="g-finger" viewBox="0 0 26 30"><path d="M9.2 27.5 C6.8 24.8 4.6 21.9 4.1 20.2 C3.5 18.2 5.8 17 7.2 18.4 L9 20.2 L9 7.4 C9 4.9 12.6 4.9 12.6 7.4 L12.6 13.4 C15.9 13.1 21.6 14 21.6 17.8 C21.6 21.4 20.6 24.6 19.4 27.5 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg>
-        <svg class="g-text" viewBox="0 0 26 30"><path d="M9 4 H17 M13 4 V26 M9 26 H17" fill="none" stroke="#fff" stroke-width="2.6"/><path d="M9 4 H17 M13 4 V26 M9 26 H17" fill="none" stroke="#111" stroke-width="1.2"/></svg>
       </div>
       <iframe id="rframe" title="Atlas, running"></iframe>
       <!-- the standby the closing dissolve fades up from -->
@@ -1258,27 +1253,34 @@ function liveApp(id) {
     const y = fr.top - vr.top + (r.top + r.height * (ay == null ? 0.5 : ay)) * scale;
     return { x, y };
   }
-  async function handTo(sel, opt) {
-    if (!hand) return;
-    const o = opt || {};
+  /* The whole of the hand's job: appear ON the control, hold long enough to
+     be read, press, gone. It never travels and it is never on screen at any
+     other time -- a cursor gliding around between beats is movement the eye
+     has to track for nothing, and it competed with the typing and the
+     camera. Half a second is enough to say "this was chosen", and the
+     moment the click lands there is nothing left to look at. */
+  async function handClick(sel) {
     const el = typeof sel === "string" ? doc() && doc().querySelector(sel) : sel;
-    if (!el) return;
-    const p = handPoint(el, o.ax, o.ay);
-    hand.dataset.glyph = o.glyph || "finger";
-    hand.classList.add("is-on");
-    /* the glyph's hotspot is its top-left tip; nudge so the tip touches */
+    if (!el) return false;
+    if (!hand) { el.click(); return true; }
+    const p = handPoint(el);
+    /* placed, not moved: the transform lands with transitions off so the
+       glyph fades in where it belongs instead of sliding in from wherever
+       it last was */
+    hand.style.transition = "none";
     hand.style.transform = "translate(" + (p.x - 4) + "px, " + (p.y - 2) + "px)";
-    await sleep(o.ms == null ? 460 : o.ms);
-  }
-  async function handPress(el) {
-    if (!hand) return;
+    void hand.offsetWidth;
+    hand.style.transition = "";
+    hand.classList.add("is-on");
+    await sleep(500);
     hand.classList.add("is-press");
     await sleep(170);
     hand.classList.remove("is-press");
-    if (el) el.click();
-    await sleep(90);
+    el.click();
+    hand.classList.remove("is-on");
+    await sleep(140);
+    return true;
   }
-  function handOff() { if (hand) hand.classList.remove("is-on"); }
 
   /* booted the first time its tab is opened, not on page load: this is the
      whole app, and there is no sense paying for it unseen. The app bounces
@@ -1380,12 +1382,7 @@ function liveApp(id) {
     const ta = await until("form.graph-ci textarea");
     /* in for the typing: the composer is the thing being used */
     await push(".graph-below--chat", { max: 1.5, pad: 56, ms: 750 });
-    /* the hand selects the field, then steps to its far end so the words
-       stay readable while they arrive */
-    await handTo(ta, { glyph: "text", ax: 0.22, ay: 0.5, ms: 470 });
-    await handPress();
     await type(ta, text, 16);
-    handTo(ta, { glyph: "text", ax: 0.97, ay: 0.5, ms: 420 });
     await sleep(340);
     say("<b>" + text + "</b>", "you");
     const mirror = watch();
@@ -1456,11 +1453,7 @@ function liveApp(id) {
         if (y === last) still++; else { still = 0; last = y; }
       }
     }
-    await handTo(btn, { glyph: "finger", ms: 430 });
-    await sleep(520);          /* hover: the viewer finds the finger first */
-    await handPress(btn);
-    await sleep(380);          /* and sees it pressed before it leaves */
-    handOff();   /* the write is the star now; the hand returns for Clear */
+    await handClick(btn);
     await until(".agent-prop.is-accepted", 20000);
     /* the apply writes create_collection then add_to_collection; the second
        one landing, finished, is what says the folder exists */
@@ -1587,7 +1580,7 @@ function liveApp(id) {
   }
 
   return { boot, fit, until, byText, ask, say, clear, drive, status, doc,
-           handTo, handPress, handOff,
+           handClick,
            accept, unfile: unfileViaApi, primeStandby, fadeToStandby,
            reload, wide, push, poolReady };
 }
@@ -2512,11 +2505,7 @@ async function playRun() {
     if (clr) {
       /* the hand comes back to do it: travel, press, and only then the
          drain -- the viewer sees WHO cleared it */
-      await run.handTo(clr, { glyph: "finger", ms: 560 });
-      await sleep(420);
-      await run.handPress(clr);
-      await sleep(300);
-      run.handOff();
+      await run.handClick(clr);
     }
     run.say("cleared the conversation at " + mark(), "46s", "step");
 
