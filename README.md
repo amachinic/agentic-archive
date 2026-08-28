@@ -6,7 +6,7 @@
 
 A multi-agentic dashboard for turning loose image folders into an art-direction-ready visual archive.
 
-Agentic Archive helps designers, art directors, photographers, and visual researchers find, compare, sort, collect, and archive reference imagery. **Atlas**, its orchestrating agent, works through three specialized archetypes while the Network, Gallery, Analyze studio, and collection tools remain directly usable by hand.
+Agentic Archive helps designers, art directors, photographers, and visual researchers find, compare, sort, collect, and archive reference imagery. **Atlas**, its orchestrating agent, works through four specialized archetypes while the Network, Gallery, Analyze studio, and collection tools remain directly usable by hand.
 
 > Agentic Archive is the workspace. Atlas is the agent inside it.
 
@@ -22,19 +22,22 @@ Agentic Archive helps designers, art directors, photographers, and visual resear
 - **Archiving:** deduplicate managed copies, organize nested collections, and export selected sets as real files.
 - **Image analysis:** generate structured briefs covering material, lighting, technique, composition, color, context, critique, and differentiation.
 
-## One agent, three archetypes
+## One agent, four archetypes
 
-Atlas is one continuous agent with three capability lenses. They share the same vocabulary, palettes, fingerprints, working set, and visible activity history.
+Atlas is one continuous agent with four capability lenses. They share the same vocabulary, palettes, fingerprints, working set, and visible activity history.
 
 ```mermaid
 flowchart LR
     Human[Human direction] --> Atlas[Atlas orchestrator]
     Atlas --> Archivist[Archivist<br/>names and describes]
     Atlas --> Curator[Curator<br/>finds and arranges]
+    Atlas --> Historian[Historian<br/>hunts beyond the archive]
     Atlas --> Manager[Media Manager<br/>files and exports]
     Archivist --> Data[(Shared vocabulary,<br/>palettes and fingerprints)]
     Curator --> Data
     Manager --> Data
+    Historian --> Sources[(Connected outside sources)]
+    Sources --> Candidates[Candidates<br/>licence read, nothing written]
     Data --> Proposal[Visible proposal]
     Proposal -->|accept| Library[(Image archive)]
     Proposal -->|reject| Stop[No write]
@@ -44,9 +47,10 @@ flowchart LR
 |---|---|---|---|
 | **Archivist** | Names what an image is | controlled keyterms, searchable descriptions, creator attribution, duplicate checks, history | Proposes |
 | **Curator** | Decides what belongs together | find, filter, expand similar, sort the canvas, build working sets and collections | Acts on the canvas |
+| **Historian** | Hunts beyond the archive | plans probes the way art history files a mood (synonyms, iconography, movements, named artists), sweeps connected sources, facets by medium, reads licences | Read-only |
 | **Media Manager** | Puts images where they live | create or append collections, keep sets in Atlas, export copies to disk | Proposes |
 
-The Curator may change what is visible without changing the archive. Folder and library changes are committed only after human acceptance.
+The Curator may change what is visible without changing the archive. The Historian may only look: its candidates open at their source and enter the library through no door but your accept. Folder and library changes are committed only after human acceptance.
 
 ![Atlas agent settings with the Archivist, Curator, Media Manager, and operating guidelines](docs/agents-showcase.png)
 

@@ -266,7 +266,8 @@ const SYSTEM = [
 type ToolLogRow = { tool: string; args: Record<string, unknown>; result: string };
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null) as { messages?: ChatMsg[]; field?: number[] } | null;
+  const body = await req.json().catch(() => null) as
+    { messages?: ChatMsg[]; field?: number[]; historian?: boolean } | null;
   if (!Array.isArray(body?.messages) || !body.messages.length) {
     return Response.json({ error: "messages required" }, { status: 400 });
   }
@@ -318,8 +319,15 @@ export async function POST(req: Request) {
      hosted archive listConnections reports exactly the keyless open
      collections -- no credential of the owner's is reachable there, because
      none is stored there -- so a visitor may search museums but can never
-     ride an account that is not theirs. */
-  const outsideSources = listConnections().filter((c) => c.status !== "off").map((c) => c.id);
+     ride an account that is not theirs.
+
+     The Historian lens is a SETTING: a request that says historian: false
+     has switched it off in Agents, and the tool is genuinely withdrawn for
+     the turn, not hidden client-side. */
+  const historianOff = body.historian === false;
+  const outsideSources = historianOff
+    ? []
+    : listConnections().filter((c) => c.status !== "off").map((c) => c.id);
 
   const sample = () => ws.slice(0, 4).map((r) => r.title).join(", ");
 
@@ -492,7 +500,11 @@ export async function POST(req: Request) {
       }
       case "search_outside": {
         if (!outsideSources.length) {
-          return JSON.stringify({ error: "no outside sources are connected. Tell the human to connect one under Agents → Connections." });
+          return JSON.stringify({
+            error: historianOff
+              ? "the Historian lens is switched off in Agents, so outside search is retired this turn. Say so; do not retry."
+              : "no outside sources are connected. Tell the human to connect one under Agents → Connections.",
+          });
         }
         const q = String(args.query ?? "").slice(0, 200).trim();
         if (!q) return JSON.stringify({ error: "a query is required" });
@@ -562,13 +574,15 @@ export async function POST(req: Request) {
      a tool it was not given will try to call it anyway; a model given a tool
      with no guidance will use it for requests the library already answers. */
   const outside = outsideSources.length
-    ? "\n\nsearch_outside reaches these connected sources: " + outsideSources.join(", ") +
+    ? "\n\nsearch_outside is the HISTORIAN lens: it reaches these connected sources: " + outsideSources.join(", ") +
       ". Use it ONLY when the human asks for images beyond the library — new material, museums, 'find more like this from outside'. " +
       "The library always comes first for anything it can answer. Candidates are not in the library: never file, sort or count them as if they were." +
       "\n- Outside hunts for a MOOD or THEME are a plan of 3 to 5 DIFFERENT probes, because catalogues only match their own words. Probe the synonyms, the iconography (vanitas, lamentation, elegy), and the movements and artists art history files under that mood — a hunt for melancholy that never probes Munch, the Symbolists or Picasso's blue period has only searched the word, not the subject." +
       "\n- One probe sweeps every source at once. Never issue the same query twice, and never once-per-source." +
       "\n- When the human names a kind of work (paintings, prints, photographs), set medium on every probe."
-    : IS_HOSTED_READ_ONLY
+    : historianOff
+      ? "\n\nThe Historian lens is switched off in Agents, so you have no outside-search tool this turn. If the human asks to search museums or outside platforms, say the Historian is switched off and where the switch lives."
+      : IS_HOSTED_READ_ONLY
       ? "\n\nOutside sources (museum and platform search) are a local-runtime capability and are not available on this hosted archive. If the human asks to search museums or outside platforms, say that plainly."
       : "\n\nNo outside source is connected, and you have no tool for reaching one. If the human asks to search museums or outside platforms, say so plainly and point them to Agents → Connections.";
 
