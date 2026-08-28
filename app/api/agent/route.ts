@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { listImages } from "@/lib/queries";
 import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
 import { listConnections } from "@/lib/connections";
-import { searchConnected, type Candidate } from "@/lib/sources";
+import { searchConnected, MEDIUMS, type Candidate } from "@/lib/sources";
 import type { ChatMsg } from "@/lib/vision";
 
 export const maxDuration = 120;
@@ -163,12 +163,13 @@ const TOOLS = [
     type: "function",
     function: {
       name: "search_outside",
-      description: "Search the CONNECTED outside sources (museums, image platforms) for images that are NOT in the library. These APIs are keyword search over catalogue text, so translate mood or theme language into concrete probe words and call this several times with different ones (e.g. melancholy, mourning, solitude, vanitas) rather than once with a vague phrase. Results are CANDIDATES: they appear to the human in the conversation, never join the working set, and nothing is written. Report the keepable count honestly — it is how many carry a licence permitting a copy.",
+      description: "Search the CONNECTED outside sources (museums, image platforms) for images that are NOT in the library. These APIs are keyword search over CATALOGUE TEXT: a probe finds only works whose titles or records carry the word, so a mood or theme is a PLAN of several probes, not one query. Probe three registers: direct synonyms (melancholy, sorrow, mourning, solitude); iconography and genre terms catalogues actually use (vanitas, memento mori, lamentation, elegy, deposition); and the movements and named artists known for it (for melancholy: Munch, Picasso blue period, Caspar David Friedrich, Hammershøi, Hopper, Symbolist). Each call sweeps every connected source at once — NEVER repeat the same query per source, and never the same query twice. Set medium when the human names a kind of work: 'paintings about sorrow' without it returns vases whose descriptions mention grief. Results are CANDIDATES: shown to the human in the conversation, never in the working set, nothing written. Report the keepable count honestly — it is how many carry a licence permitting a copy.",
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "concrete search words a museum catalogue would use" },
-          source: { type: "string", description: "restrict to one connected source id (arena, pinterest, rijks, met, artic, cleveland, europeana); omit to search all" },
+          query: { type: "string", description: "ONE concrete probe: words a museum catalogue would actually contain" },
+          medium: { type: "string", enum: ["painting", "print", "photograph", "sculpture"], description: "facet filter on what the work IS; set it whenever the human names a kind" },
+          source: { type: "string", description: "ONLY to re-check a single source id (met, artic, cleveland, rijks, arena…); omit to sweep all — the default and almost always right" },
         },
         required: ["query"],
       },
@@ -176,11 +177,15 @@ const TOOLS = [
   },
 ];
 
-/* how many candidates one turn may accumulate, across every search_outside
-   call in it: past this the strip stops informing and starts scrolling */
-const CANDIDATE_CAP = 40;
-/* per source, per call: the Met costs one round trip per candidate */
-const OUTSIDE_LIMIT = 6;
+/* How many candidates one turn may accumulate across all its probes: past
+   this the strip stops informing and starts scrolling. 48 leaves room for
+   three or four distinct probes to land after overlap collapses. */
+const CANDIDATE_CAP = 48;
+/* Per source, per call. A full sweep keeps it small so ONE probe cannot fill
+   the strip and crowd out the other registers; a single-source re-check may
+   go deeper. The Met costs one round trip per candidate either way. */
+const OUTSIDE_SWEEP_LIMIT = 4;
+const OUTSIDE_SINGLE_LIMIT = 6;
 
 /* the agent picks filter terms from THIS list; guessing was how a hunt for
    "deep rich colours" zeroed its own working set four times in a row */
@@ -492,8 +497,13 @@ export async function POST(req: Request) {
         const q = String(args.query ?? "").slice(0, 200).trim();
         if (!q) return JSON.stringify({ error: "a query is required" });
         const only = outsideSources.find((id) => id === args.source) ?? null;
+        const medium = MEDIUMS.find((m) => m === args.medium) ?? null;
 
-        const { results, searched, failed } = await searchConnected(q, { limit: OUTSIDE_LIMIT, only });
+        const { results, searched, failed } = await searchConnected(q, {
+          limit: only ? OUTSIDE_SINGLE_LIMIT : OUTSIDE_SWEEP_LIMIT,
+          only,
+          medium,
+        });
 
         /* Accumulate across the turn's probes: the strip the human sees is
            the union, deduped by identity, capped so it stays a strip. */
@@ -554,7 +564,10 @@ export async function POST(req: Request) {
   const outside = outsideSources.length
     ? "\n\nsearch_outside reaches these connected sources: " + outsideSources.join(", ") +
       ". Use it ONLY when the human asks for images beyond the library — new material, museums, 'find more like this from outside'. " +
-      "The library always comes first for anything it can answer. Candidates are not in the library: never file, sort or count them as if they were."
+      "The library always comes first for anything it can answer. Candidates are not in the library: never file, sort or count them as if they were." +
+      "\n- Outside hunts for a MOOD or THEME are a plan of 3 to 5 DIFFERENT probes, because catalogues only match their own words. Probe the synonyms, the iconography (vanitas, lamentation, elegy), and the movements and artists art history files under that mood — a hunt for melancholy that never probes Munch, the Symbolists or Picasso's blue period has only searched the word, not the subject." +
+      "\n- One probe sweeps every source at once. Never issue the same query twice, and never once-per-source." +
+      "\n- When the human names a kind of work (paintings, prints, photographs), set medium on every probe."
     : IS_HOSTED_READ_ONLY
       ? "\n\nOutside sources (museum and platform search) are a local-runtime capability and are not available on this hosted archive. If the human asks to search museums or outside platforms, say that plainly."
       : "\n\nNo outside source is connected, and you have no tool for reaching one. If the human asks to search museums or outside platforms, say so plainly and point them to Agents → Connections.";
