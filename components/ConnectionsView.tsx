@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { IconCaret, IconCheck, IconX, IconLink } from "./icons";
+import { IconAlert, IconCaret, IconCheck, IconX, IconLink } from "./icons";
 
 type Grade = "full" | "partial" | "none";
 type Auth = "none" | "key" | "oauth";
@@ -161,6 +161,8 @@ function demand(s: Source): string {
 
 export default function ConnectionsView() {
   const [states, setStates] = useState<Record<string, State>>({});
+  /* the public archive: open sources are available, nothing connects */
+  const [hosted, setHosted] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -178,10 +180,11 @@ export default function ConnectionsView() {
   const load = useCallback(async () => {
     try {
       const r = await fetch("/api/connections");
-      const d = await r.json() as { connections?: State[] };
+      const d = await r.json() as { hosted?: boolean; connections?: State[] };
       const next: Record<string, State> = {};
       for (const c of d.connections ?? []) next[c.id] = c;
       setStates(next);
+      setHosted(d.hosted === true);
     } catch { /* the page still renders; every row simply reads off */ }
   }, []);
 
@@ -250,7 +253,9 @@ export default function ConnectionsView() {
           <span className={"conn-live" + (liveCount ? " is-on" : "")}>
             <i />{liveCount ? liveCount + " of " + ALL.length + " connected" : "nothing connected"}
           </span>
-          <span>Runs locally. Credentials live in <code>.env.local</code>, never in the browser.</span>
+          {hosted
+            ? <span>The open collections are searchable here. Accounts and keys connect only in the local runtime.</span>
+            : <span>Runs locally. Credentials live in <code>.env.local</code>, never in the browser.</span>}
         </div>
       </header>
 
@@ -261,7 +266,7 @@ export default function ConnectionsView() {
         <div className="conns__toasts">
           {toasts.filter((t) => t.kind === "bad").map((t) => (
             <div key={t.id} className="toast is-bad" role="alert">
-              <span className="toast__mark" aria-hidden="true"><IconX width={12} height={12} /></span>
+              <span className="toast__mark" aria-hidden="true"><IconAlert width={13} height={13} /></span>
               <span className="toast__text">{t.text}</span>
               <button className="toast__x" onClick={() => drop(t.id)} aria-label="Dismiss">
                 <IconX width={11} height={11} />
@@ -322,7 +327,9 @@ export default function ConnectionsView() {
                     ))}
                   </div>
 
-                  {st && !st.ready && !on && (
+                  {/* which env var is missing is the owner's business, not a
+                      visitor's: hosted cards say where a thing runs instead */}
+                  {!hosted && st && !st.ready && !on && (
                     <p className="conncard__missing">
                       Needs{" "}
                       {st.missing.map((v, i) => (
@@ -335,21 +342,31 @@ export default function ConnectionsView() {
                   {!on && st?.lastError && <p className="conncard__fail">{st.lastError}</p>}
 
                   <div className="conncard__foot">
-                    <button
-                      className={"conn-cta" + (on ? " is-off" : "")}
-                      disabled={busy === s.id}
-                      onClick={() => act(s, on)}
-                    >
-                      {on
-                        ? <><IconX width={11} height={11} />Disconnect</>
-                        : <><IconCheck width={11} height={11} />{busy === s.id ? "…" : demand(s)}</>}
-                    </button>
+                    {/* On the public archive nothing connects or disconnects:
+                        the open sources are simply available, and offering a
+                        button whose answer is a 403 is the page lying about
+                        what a press would do. */}
+                    {hosted ? (
+                      <span className="conncard__where">
+                        {on ? "available on this archive" : "connects in the local runtime"}
+                      </span>
+                    ) : (
+                      <button
+                        className={"conn-cta" + (on ? " is-off" : "")}
+                        disabled={busy === s.id}
+                        onClick={() => act(s, on)}
+                      >
+                        {on
+                          ? <><IconX width={11} height={11} />Disconnect</>
+                          : <><IconCheck width={11} height={11} />{busy === s.id ? "…" : demand(s)}</>}
+                      </button>
+                    )}
                     <button
                       className={"conncard__more" + (open ? " is-open" : "")}
                       onClick={() => setOpenId((v) => (v === s.id ? null : s.id))}
                       aria-expanded={open}
                     >
-                      Setup<IconCaret width={11} height={11} />
+                      {hosted ? "Details" : "Setup"}<IconCaret width={11} height={11} />
                     </button>
                   </div>
 

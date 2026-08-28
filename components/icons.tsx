@@ -64,6 +64,10 @@ export const IconWaterfall = (p: P) => (
 export const IconInfo = (p: P) => (
   <svg {...base(p)}><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r="0.6" fill="currentColor" stroke="none"/></svg>
 );
+/* a bare exclamation: IconInfo's dot-and-stem vocabulary, inverted */
+export const IconAlert = (p: P) => (
+  <svg {...base(p)}><path d="M12 5v9"/><circle cx="12" cy="18.5" r="0.9" fill="currentColor" stroke="none"/></svg>
+);
 /* The Atlas mark (from ATLAS.svg). Body follows currentColor; the cut-through
    stroke takes the surface token, so it holds in both themes. */
 export const AtlasMark = (p: React.SVGProps<SVGSVGElement>) => (

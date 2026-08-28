@@ -1,12 +1,15 @@
 import { listConnections, enable, disconnect, noteError, SOURCE_BY_ID, type SourceId } from "@/lib/connections";
 import { ADAPTERS, reason } from "@/lib/sources";
+import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-/** GET /api/connections -> what is on, what is missing a credential */
+/** GET /api/connections -> what is on, what is missing a credential.
+ *  `hosted` tells the page which world it is rendering: on the public
+ *  archive the open sources are simply available and nothing connects. */
 export async function GET() {
-  return Response.json({ connections: listConnections() });
+  return Response.json({ hosted: IS_HOSTED_READ_ONLY, connections: listConnections() });
 }
 
 /**

@@ -11,6 +11,7 @@
 */
 import { db, now } from "./db";
 import { recordEvent } from "./events";
+import { IS_HOSTED_READ_ONLY } from "./runtime";
 
 export type SourceId =
   | "arena" | "pinterest"
@@ -63,6 +64,25 @@ type Row = {
 };
 
 export function listConnections(): ConnectionState[] {
+  /* The hosted archive has no connections table -- the publisher drops it as
+     private-by-design, and the demo has no SQLite at all -- and no way to
+     hold a credential. What it DOES have is the open half of the roster: a
+     keyless source needs no state, no secret and no writes, so it is simply
+     available, statically. Anything credentialed reports off, and stays off:
+     a shared public deployment has no visitor accounts, so a token would
+     have nowhere safe to live. */
+  if (IS_HOSTED_READ_ONLY) {
+    return SOURCES.map((def) => ({
+      id: def.id,
+      status: def.auth === "none" ? "enabled" as const : "off" as const,
+      account: null,
+      ready: def.auth === "none",
+      missing: def.env,
+      detail: null,
+      lastError: null,
+    }));
+  }
+
   const rows = db().prepare(
     "SELECT source, status, account, expires_at, last_error, detail FROM connections"
   ).all() as Row[];
@@ -135,6 +155,8 @@ export function noteError(id: SourceId, message: string): void {
 
 /** The bearer a connector should send. Null means do not call this source. */
 export function tokenFor(id: SourceId): string | null {
+  /* hosted holds no credentials, and its DB could not answer this anyway */
+  if (IS_HOSTED_READ_ONLY) return null;
   const row = db().prepare(
     "SELECT access_token, expires_at FROM connections WHERE source = ? AND status = 'connected'"
   ).get(id) as { access_token: string | null; expires_at: number | null } | undefined;

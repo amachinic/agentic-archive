@@ -309,11 +309,12 @@ export async function POST(req: Request) {
   } = { shownIds: null, proposal: null, sort: null, release: false, candidates: null };
   const toolLog: ToolLogRow[] = [];
 
-  /* the sources the agent may reach this turn. Fixed per request: a public
-     visitor must never trigger outbound calls on the host's connections */
-  const outsideSources = IS_HOSTED_READ_ONLY
-    ? []
-    : listConnections().filter((c) => c.status !== "off").map((c) => c.id);
+  /* The sources the agent may reach this turn, fixed per request. On the
+     hosted archive listConnections reports exactly the keyless open
+     collections -- no credential of the owner's is reachable there, because
+     none is stored there -- so a visitor may search museums but can never
+     ride an account that is not theirs. */
+  const outsideSources = listConnections().filter((c) => c.status !== "off").map((c) => c.id);
 
   const sample = () => ws.slice(0, 4).map((r) => r.title).join(", ");
 

@@ -8,6 +8,18 @@ const SAFE_DEMO_GET = [
   /^\/api\/images\/\d+$/,
   /^\/api\/img\/\d+$/,
   /^\/api\/compare$/,
+  /* Connections, the read-only half. Listing states is a static read on the
+     hosted archive (no table, no secret -- lib/connections answers without
+     touching the DB there). Outside SEARCH is deliberately public: the open
+     museum APIs need no credential, return only links and thumbnails, and
+     write nothing -- the same bargain as the hosted agent itself. The thumb
+     proxy is fetch-through with a strict host allowlist, so it cannot be
+     pointed anywhere but the sources that refuse browsers. What stays
+     blocked is everything stateful: POST /api/connections and the whole
+     /api/connect OAuth flow, which exist only in the local runtime. */
+  /^\/api\/connections$/,
+  /^\/api\/sources\/search$/,
+  /^\/api\/sources\/thumb$/,
 ];
 
 /**
