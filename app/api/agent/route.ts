@@ -504,10 +504,12 @@ export async function POST(req: Request) {
           const key = c.source + ":" + c.remoteId;
           if (!seen.has(key)) { seen.add(key); held.push(c); }
         }
-        out.candidates = {
-          query: out.candidates ? out.candidates.query + ", " + q : q,
-          items: held,
-        };
+        /* the label joins DISTINCT probes: a per-source sweep calls this five
+           times with one query, and "melancholy" five times over is not a
+           title, it is a stutter */
+        const probes = new Set(out.candidates ? out.candidates.query.split(", ") : []);
+        probes.add(q);
+        out.candidates = { query: [...probes].join(", "), items: held };
 
         const perSource: Record<string, number> = {};
         for (const c of results) perSource[c.source] = (perSource[c.source] ?? 0) + 1;
