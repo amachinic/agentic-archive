@@ -1188,6 +1188,10 @@ function liveApp(id) {
     const minW = VP_W / maxZoom, minH = VP_H / maxZoom;
     if (w < minW) { x -= (minW - w) / 2; w = minW; }
     if (h < minH) { y -= (minH - h) / 2; h = minH; }
+    /* ay biases where the subject sits in the frame: 0.5 centres it, higher
+       values push the shot down the subject. Used to follow a reply as it
+       is written, when the newest line would otherwise fall off the bottom. */
+    if (opt.ay != null) y += (opt.ay - 0.5) * h;
     return { x, y, w, h };
   }
 
@@ -1497,11 +1501,20 @@ function liveApp(id) {
     const opened = performance.now();
     while (!busy() && performance.now() - opened < 4000) await sleep(60);
 
-    /* hold close for the thinking and the first tool rows, then pull back so
-       the field re-forming is the thing on screen. Tight on purpose: three
-       acts share this beat, so every 100ms here is 300ms off the mark the
-       ending has to hit. */
-    await sleep(1500);
+    /* Hold close for the thinking and the first tool rows, then pull back
+       so the field re-forming is the thing on screen. Tight on purpose:
+       three acts share this beat, so every 100ms here is 300ms off the mark
+       the ending has to hit.
+
+       The shot drifts DOWN before it pulls out. The panel grows as the
+       reply is written, and a fixed frame leaves the newest line sliding
+       off the bottom edge just as it becomes worth reading. Re-framing the
+       same subject a little lower follows the words rather than chasing
+       them: same push, nudged down, slowly enough to read as the camera
+       settling rather than a second move. */
+    await sleep(900);
+    await push(".graph-below--chat", { max: 1.5, pad: 56, ms: 1500, ay: 0.66 });
+    await sleep(500);
     await wide(1200);
 
     /* 90s is far past any healthy turn (they run 2-3s), so a stall fails the
@@ -2585,9 +2598,9 @@ async function playRun() {
     await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 1200 });
     run.say("<b>" + FOLDER + "</b> is in the sidebar — a real folder, in the real library", "sidebar", "step");
 
-    await at(43.5);
-    await run.wide(1300);                     // out by ~44.8s
-    run.say("panned out at " + mark(), "44.8s", "step");
+    await at(44.5);
+    await run.wide(1300);                     // out by ~45.8s
+    run.say("panned out at " + mark(), "45.8s", "step");
 
     /* The closing marks are floors, not absolutes. A slow model pushes the
        pan-out late, and a mark that has already passed fires at once -- one

@@ -1830,7 +1830,7 @@ export default function GraphView({
     /* keyed on panelIn: the panel mounts AFTER the field has painted, so an
        effect that looked for .chatscroll once at mount found nothing and
        silently never attached */
-    const scroll = document.querySelector(".chatscroll");
+    const scroll = document.querySelector(".chatscroll") as HTMLElement | null;
     if (!scroll || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
     const known = new WeakMap<Element, number>();
@@ -1863,6 +1863,8 @@ export default function GraphView({
     const endAnim = () => { animating = Math.max(0, animating - 1); };
 
     const ro = new ResizeObserver((entries) => {
+      /* the drain owns every height in here while it runs */
+      if (scroll.dataset.draining) return;
       for (const e of entries) {
         const el = e.target as HTMLElement;
         /* While one of OUR animations drives this element, every reading is
@@ -1955,42 +1957,54 @@ export default function GraphView({
     if (conversationCollapsed || !scroll || thread.length === 0 || matchMedia("(prefers-reduced-motion: reduce)").matches) { finish(); return; }
     clearingRef.current = true;
 
+    scroll.dataset.draining = "1";
     const items = Array.from(scroll.children) as HTMLElement[];
-    /* read everything, then write everything: no interleaved reflows */
-    const heights = items.map((el) => el.offsetHeight);
-    items.forEach((el, i) => {
-      el.style.height = heights[i] + "px";
-      el.style.minHeight = "0";
-      el.style.overflow = "hidden";
-    });
-    void scroll.offsetHeight; // commit the pinned heights before they move
+    const heights = items.map((el) => el.offsetHeight);   // read before any write
 
-    const DUR = 240;
+    const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+    const DUR = 300;
     /* the sweep climbs the thread at a fixed step, capped so a long
        conversation drains in about half a second rather than scrolling
        credits */
     const step = Math.min(26, Math.max(8, Math.round(320 / items.length)));
     const total = (items.length - 1) * step + DUR;
+
     items.forEach((el, i) => {
-      const delay = (items.length - 1 - i) * step; // the newest folds first
-      el.style.transition = ["height", "opacity", "margin", "padding"]
-        .map((p) => p + " " + DUR + "ms var(--motion-ease) " + delay + "ms").join(", ");
-      el.style.height = "0px";
-      el.style.opacity = "0";
-      el.style.marginTop = "0"; el.style.marginBottom = "0";
-      el.style.paddingTop = "0"; el.style.paddingBottom = "0";
+      /* Cancel what is already animating this element FIRST. Every message
+         still carries its entry fade, and any that grew in place carries a
+         glide too -- both fill forwards, and a filled animation outranks
+         inline styles. That is why the fade looked broken: the CSS
+         transition set here could never run, so opacity did not ease at
+         all, it snapped to zero the moment the old fill was dropped, and
+         the height was left crawling down on its own afterwards. Measured
+         on the first frame of a drain: four of six messages already at
+         opacity 0 while still at their full 57, 32, 32 and 90 pixels. */
+      el.getAnimations().forEach((a) => a.cancel());
+      el.style.minHeight = "0";
+      el.style.overflow = "hidden";
+      /* ONE animation per element, carrying height and opacity together, so
+         they cannot come apart again: the row shrinks exactly as it fades. */
+      el.animate(
+        [
+          { height: heights[i] + "px", opacity: 1, marginTop: "0px", marginBottom: "0px", paddingTop: getComputedStyle(el).paddingTop, paddingBottom: getComputedStyle(el).paddingBottom },
+          { height: "0px", opacity: 0, marginTop: "0px", marginBottom: "0px", paddingTop: "0px", paddingBottom: "0px" },
+        ],
+        { duration: DUR, delay: (items.length - 1 - i) * step, easing: EASE, fill: "both" },
+      );
     });
-    scroll.style.transition = "gap " + total + "ms var(--motion-ease)";
-    scroll.style.gap = "0px";
+    /* the row gaps go with them, over the whole sweep, or fourteen pixels
+       per message would be left standing after the messages had gone */
+    scroll.animate([{ rowGap: "14px" }, { rowGap: "0px" }], { duration: total, easing: EASE, fill: "both" });
+
     window.setTimeout(() => {
       finish();
-      /* the container styles come back only after React has swapped the
-         zeroed items for the home block: restored in the same tick, the
-         fourteen-pixel gaps reappeared under six zero-height messages for
-         one frame and the panel visibly bounced before settling */
+      /* the container is released only after React has swapped the zeroed
+         items for the home block: released in the same tick, the gaps
+         reappeared under zero-height messages for one frame and the panel
+         visibly bounced before settling */
       requestAnimationFrame(() => {
-        scroll.style.transition = "";
-        scroll.style.gap = "";
+        scroll.getAnimations().forEach((a) => a.cancel());
+        delete scroll.dataset.draining;
       });
     }, total + 60);
   }
