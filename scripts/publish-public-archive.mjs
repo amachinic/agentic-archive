@@ -34,8 +34,10 @@ const REVIEWED_EMPTY_SOURCE_TABLES = new Set(["handtag_claims"]);
 /* Reviewed tables that hold data locally and are PRIVATE BY DESIGN: they are
    dropped from every snapshot, never published. The events ledger records
    which files were ingested from where and every action since -- provenance
-   for the owner, not for the public copy. */
-const REVIEWED_PRIVATE_SOURCE_TABLES = new Set(["events"]);
+   for the owner, not for the public copy. The connections table holds which
+   outside sources are enabled AND the OAuth tokens that authorise them --
+   credentials, the single most dangerous thing a snapshot could carry. */
+const REVIEWED_PRIVATE_SOURCE_TABLES = new Set(["events", "connections"]);
 const RETAINED_IMAGE_FIELDS = ["ai_title", "ai_description", "ai_analysis", "artist"];
 const WEBP_METADATA_CHUNKS = new Set(["EXIF", "XMP ", "ICCP"]);
 const PUBLIC_CATALOGUED_AT = Date.UTC(2026, 7, 26);

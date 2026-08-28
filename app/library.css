@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Library grid + inspector + wall + graph. Consumes foundation tokens only.
    ============================================================ */
 
@@ -360,7 +360,7 @@
 .graph-switch:hover > i { border-color: var(--text-primary); }
 .graph-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
 
-/* the ⓘ info bubble: every field interaction in one place, far right */
+/* the â“˜ info bubble: every field interaction in one place, far right */
 .info-i {
   font-style: normal;
   font-family: "Times New Roman", Times, serif;
@@ -802,7 +802,7 @@
 .chatbox { display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-5); }
 .chatbox__hint { margin: 0; font-size: var(--font-body-sm); color: var(--text-muted); }
 /* the thread reads like a conversation: what YOU say sits in a bubble, what
-   Atlas says is simply on the page — it is the room talking, not a card */
+   Atlas says is simply on the page â€” it is the room talking, not a card */
 .chat-msg {
   animation: content-in 200ms var(--motion-ease) both;
   max-width: 88%;
@@ -910,144 +910,246 @@
 }
 .agentcard__switch.on::after { transform: translateX(15px); background: var(--accent); }
 
-/* ---- Connections: the sources Atlas may look at ----
-   ROWS, not the archetypes' card grid. Every source has to answer the same
-   three questions in the same three places, and only a full-width row lets
-   those line up into columns the eye can compare down. */
-.conns__rows { display: flex; flex-direction: column; gap: 10px; }
+/* ============================================================
+   CONNECTIONS — the sources Atlas may look at.
 
-.conns__legend {
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  padding: var(--space-2);
-  margin-bottom: 12px;
+   Reads as a library, not a document: an introduction in plain text, then
+   two columns of compact cards. Every card answers the same four things in
+   the same four places — what it is, what Atlas gets from it, whether it is
+   on, and how to turn it on — so the eye can compare down a column.
+
+   DESIGN-SYSTEM RULE observed here: no accent border-left on any card or
+   panel. Planes are separated by a uniform hairline and a surface change,
+   never by a directional bar.
+   ============================================================ */
+.conns {
+  max-width: 1080px; margin: 0 auto;
+  padding: var(--space-3);
+  display: flex; flex-direction: column; gap: var(--space-5);
 }
-.conns__legend p {
-  margin: 6px 0 0;
-  font-size: var(--font-body-sm);
+
+/* ---- introduction: text, not a card ---- */
+.conns__intro { display: flex; flex-direction: column; gap: 10px; }
+.conns__intro h1 {
+  margin: 0; font-size: var(--font-heading-lg);
+  font-weight: var(--weight-regular); letter-spacing: var(--tracking-heading);
+}
+.conns__intro p {
+  margin: 0; max-width: 74ch;
+  font-size: var(--font-body-md); line-height: var(--leading-body);
   color: var(--text-secondary);
-  max-width: 84ch;
 }
-.conns__legend strong { color: var(--text-primary); font-weight: var(--weight-medium); }
+.conns__meta {
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  padding-top: 4px;
+  font-family: var(--font-mono); font-size: var(--font-input-xs);
+  letter-spacing: 0.04em; color: var(--text-muted);
+}
+.conns__meta code { font-family: var(--font-mono); color: var(--text-secondary); }
 
-.conn-row {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+/* ---- toasts ----
+   Outline plus a transparent wash of the same hue, so the state reads on the
+   near-black page and on the white one without a second palette. Semantic
+   colour, deliberately separate from the monochrome interaction accent.
+
+   A confirmation clears itself after five seconds. A failure does not: the
+   reason a connection was refused is the one thing the reader needs, and
+   hiding it on a timer would be the page deciding they had finished with it. */
+.conns__toasts { display: flex; flex-direction: column; gap: 8px; }
+
+/* Confirmations float over the bottom corner and clear themselves. They get
+   a solid surface underneath the wash: an in-flow banner sits on the page
+   ground, but a floating one can land on anything, and a 12% tint over a
+   busy card is unreadable. */
+.conns__float {
+  position: fixed; right: var(--space-3); bottom: var(--space-3);
+  z-index: 80;
+  display: flex; flex-direction: column; gap: 8px;
+  width: min(420px, calc(100vw - 2 * var(--space-3)));
+}
+.conns__float .toast {
   background: var(--surface);
-  padding: var(--space-2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+.conns__float .toast.is-ok {
+  background: color-mix(in srgb, var(--ok) 12%, var(--surface));
+}
+.toast {
+  display: flex; align-items: flex-start; gap: 10px;
+  border: 1px solid; border-radius: var(--radius-md);
+  padding: 11px var(--space-2);
+  font-size: var(--font-body-sm); line-height: 1.5;
+  animation: toast-in 200ms var(--motion-ease) both;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+.toast__mark { flex: none; display: grid; place-items: center; padding-top: 2px; }
+.toast__text { min-width: 0; }
+.toast__x {
+  margin-left: auto; flex: none; background: none; border: 0; cursor: pointer;
+  color: currentColor; opacity: 0.55; display: grid; place-items: center; padding: 3px;
+}
+.toast__x:hover { opacity: 1; }
+
+.toast.is-ok {
+  color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok) 55%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+.toast.is-bad {
+  color: var(--bad-fg);
+  border-color: color-mix(in srgb, var(--bad) 55%, transparent);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
+.conncard__detail {
+  margin: 0; font-family: var(--font-mono);
+  font-size: var(--font-input-xs); letter-spacing: 0.03em; color: var(--text-secondary);
+}
+.conncard__fail {
+  margin: 0; font-size: var(--font-body-sm); line-height: 1.45;
+  color: var(--bad-fg);
+}
+
+/* ---- category ---- */
+.conns__cat { display: flex; flex-direction: column; gap: var(--space-2); }
+.conns__cathead {
+  display: flex; align-items: baseline; gap: var(--space-2);
+  border-bottom: 1px solid var(--border); padding-bottom: 9px;
+}
+.conns__cathead h2 {
+  margin: 0; font-size: var(--font-heading-sm);
+  font-weight: var(--weight-regular); letter-spacing: var(--tracking-body);
+}
+.conns__catcount {
+  margin-left: auto; font-family: var(--font-mono);
+  font-size: var(--font-input-label); letter-spacing: 0.08em;
+  color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.conns__catlede {
+  margin: 0; max-width: 78ch;
+  font-size: var(--font-body-sm); color: var(--text-secondary);
+}
+
+/* ---- the card grid: two columns ---- */
+.conns__grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  /* start, not stretch: opening one card's setup steps must not inflate the
+     card beside it into a column of empty surface */
+  align-items: start;
+}
+@media (max-width: 900px) { .conns__grid { grid-template-columns: 1fr; } }
+
+.conncard {
   display: flex; flex-direction: column; gap: 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-xl);
+  background: var(--surface); padding: var(--space-2);
+  transition: border-color var(--motion-duration) var(--motion-ease);
 }
-.conn-row.is-live { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
-/* A source that cannot be used is still worth showing -- it records a decision.
-   It reads as retired rather than broken: dimmed, never alarming. */
-.conn-row.is-blocked { opacity: 0.68; }
-.conn-row.is-blocked .agentcard__glyph { color: var(--text-muted); }
+.conncard.is-live { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
 
-.conn-row__head { display: flex; align-items: center; gap: 10px; }
-.conn-row__id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.conn-row__host {
-  font-family: var(--font-mono);
-  font-size: var(--font-input-xs);
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-.conn-row__access { margin-left: auto; }
-.conn-row__access.is-blocked { border-style: dashed; color: var(--text-muted); }
-.conn-row__state { flex: none; }
-
-.conn-row__blurb {
-  margin: 0;
-  font-size: var(--font-body-sm);
-  color: var(--text-secondary);
-  max-width: 92ch;
-}
-
-/* The three readouts. Fixed columns so Data/Images/Keep sit at the same x on
-   every row and can be scanned down the page as a table would be. */
-.conn-row__reads {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding: 10px;
-  border-radius: var(--radius-md);
-  background: var(--bg);
-}
-@media (max-width: 760px) { .conn-row__reads { grid-template-columns: 1fr; } }
-
-/* minmax(0,1fr), never max-content: these notes are full sentences, and a
-   max-content track refuses to wrap and pushes the third column out past the
-   card's own edge. */
-.conn-read { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 2px 7px; align-items: baseline; }
-.conn-read__mark { font-size: 11px; line-height: 1.2; }
-.conn-read.is-full .conn-read__mark { color: var(--accent); }
-.conn-read.is-partial .conn-read__mark { color: var(--text-secondary); }
-.conn-read.is-none .conn-read__mark { color: var(--text-muted); }
-.conn-read__label {
-  font-family: var(--font-mono); font-size: var(--font-input-2xs);
-  text-transform: uppercase; letter-spacing: 0.1em;
-  color: var(--text-muted);
-}
-.conn-read__note {
-  grid-column: 2; margin: 0;
-  font-size: var(--font-body-xs);
-  color: var(--text-secondary);
-  line-height: 1.45;
-}
-
-.conn-row__actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.conn-row__connect {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: none; border: 0; padding: 0;
-  font-family: var(--font-mono);
-  font-size: var(--font-input-xs);
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.conn-row__connect:hover { color: var(--text-primary); }
-.conn-row__connect svg { transition: transform var(--motion-duration) var(--motion-ease); }
-.conn-row__connect.is-open svg { transform: rotate(180deg); }
-.conn-row__env code {
+.conncard__top { display: flex; align-items: center; gap: 10px; }
+.conncard__id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.conncard__name { font-size: var(--font-body-md); }
+.conncard__host {
   font-family: var(--font-mono); font-size: var(--font-input-2xs);
   letter-spacing: 0.04em; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.conncard__line {
+  margin: 0; font-size: var(--font-body-sm);
+  line-height: 1.5; color: var(--text-secondary);
+}
+
+/* the three answers, compact: the sentence behind each lives in the title */
+.conncard__reads { display: flex; flex-wrap: wrap; gap: 6px; }
+.conn-read {
+  display: inline-flex; align-items: baseline; gap: 5px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 3px 6px 2px;
+  padding: 4px 8px 3px; cursor: help;
+  font-family: var(--font-mono); font-size: var(--font-input-2xs);
+  text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-muted);
 }
+.conn-read i { font-style: normal; font-size: 9px; }
+.conn-read.is-full i { color: var(--accent); }
+.conn-read.is-partial i { color: var(--text-secondary); }
+.conn-read.is-none i { color: var(--text-muted); }
 
-.conn-row__setup {
-  display: flex; flex-direction: column; gap: 10px;
-  padding: var(--space-2);
-  border-radius: var(--radius-md);
-  background: var(--bg);
-  animation: content-in 160ms var(--motion-ease) both;
+.conncard__missing {
+  margin: 0; font-family: var(--font-mono);
+  font-size: var(--font-input-xs); letter-spacing: 0.03em; color: var(--text-muted);
 }
-.conn-row__setup ol { margin: 0; padding-left: 1.15em; display: flex; flex-direction: column; gap: 5px; }
-.conn-row__setup li { font-size: var(--font-body-sm); color: var(--text-secondary); }
-.conn-row__setup li::marker { font-family: var(--font-mono); font-size: var(--font-input-2xs); color: var(--text-muted); }
+.conncard__missing code { color: var(--text-secondary); }
 
-.conn-row__cta {
-  align-self: flex-start;
+/* ---- the live dot: Atlas's one green, meaning exactly "this is on" ---- */
+.conn-live {
+  display: inline-flex; align-items: center; gap: 6px;
+  flex: none; margin-left: auto; white-space: nowrap;
+  font-family: var(--font-mono); font-size: var(--font-input-2xs);
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted);
+}
+.conn-live i {
+  width: 6px; height: 6px; flex: none; position: relative; top: -1px;
+  border-radius: 50%; background: var(--border-strong);
+  transition: background var(--motion-duration) var(--motion-ease), box-shadow var(--motion-duration) var(--motion-ease);
+}
+.conn-live.is-on { color: var(--text-primary); }
+.conn-live.is-on i {
+  background: var(--processing-accent);
+  /* a held halo, never a pulse: the claim is "this is on", not "this is
+     working", and eight blinking dots would be a nervous page */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--processing-accent) 22%, transparent);
+}
+.conns__meta .conn-live { margin-left: 0; }
+
+/* ---- actions ---- */
+.conncard__foot {
+  display: flex; align-items: center; gap: var(--space-2);
+  border-top: 1px solid var(--border); padding-top: 10px;
+}
+.conn-cta {
   display: inline-flex; align-items: center; gap: 6px;
   background: var(--accent); color: var(--on-accent);
-  border: 0; border-radius: var(--radius-md);
-  padding: 7px 12px;
+  border: 0; border-radius: var(--radius-md); padding: 7px 12px;
   font-family: var(--font-mono); font-size: var(--font-input-sm);
   letter-spacing: 0.03em; cursor: pointer;
   transition: opacity var(--motion-duration) var(--motion-ease);
 }
-.conn-row__cta:hover { opacity: 0.85; }
-.conn-row__cta.is-off {
+.conn-cta:hover { opacity: 0.85; }
+.conn-cta:disabled { opacity: 0.5; cursor: default; }
+.conn-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.conn-cta.is-off {
   background: none; color: var(--text-secondary);
   border: 1px solid var(--border-strong);
 }
-.conn-row__docs {
+.conncard__more {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: 0; padding: 0; cursor: pointer;
   font-family: var(--font-mono); font-size: var(--font-input-xs);
-  letter-spacing: 0.04em; color: var(--text-muted);
-  text-decoration: none;
+  letter-spacing: 0.05em; color: var(--text-muted);
 }
-.conn-row__docs:hover { color: var(--text-primary); }
+.conncard__more:hover { color: var(--text-primary); }
+.conncard__more svg { transition: transform var(--motion-duration) var(--motion-ease); }
+.conncard__more.is-open svg { transform: rotate(180deg); }
+
+.conncard__setup {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: var(--space-2); border-radius: var(--radius-md);
+  background: var(--bg);
+  animation: content-in 160ms var(--motion-ease) both;
+}
+.conncard__setup ol { margin: 0; padding-left: 1.15em; display: flex; flex-direction: column; gap: 5px; }
+.conncard__setup li { font-size: var(--font-body-sm); line-height: 1.5; color: var(--text-secondary); }
+.conncard__setup li::marker { font-family: var(--font-mono); font-size: var(--font-input-2xs); color: var(--text-muted); }
+.conncard__setup a {
+  font-family: var(--font-mono); font-size: var(--font-input-xs);
+  letter-spacing: 0.04em; color: var(--text-muted); text-decoration: none;
+}
+.conncard__setup a:hover { color: var(--text-primary); }
+
 
 /* Guidelines: one full-width card (the card grid's width), every rule its
    own accordion, set at reading size rather than caption size */
@@ -1115,6 +1217,48 @@
 .agent-tool__label b { color: var(--text-primary); font-weight: var(--weight-regular); }
 .agent-tool__res { margin-left: auto; color: var(--accent); white-space: nowrap; flex: none; }
 .agent-tool.is-running .agent-tool__res { color: var(--text-muted); }
+
+/* ---- candidates from outside: a strip in the thread, not the canvas ----
+   Solid hairline where the proposal is dashed: a proposal awaits a decision,
+   a strip of candidates is just evidence. Thumbnails come from the sources'
+   own servers (or the artic proxy) and open at the source on click. */
+.agent-cands {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  padding: 11px 12px;
+  display: flex; flex-direction: column; gap: 9px;
+  animation: content-in 220ms var(--motion-ease) both;
+}
+.agent-cands__t {
+  font-family: var(--font-mono); font-size: var(--font-input-xs);
+  letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary);
+}
+.agent-cands__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 7px;
+}
+.agent-cand {
+  position: relative; display: block;
+  aspect-ratio: 1; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.agent-cand img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.agent-cand:hover { border-color: var(--border-strong); }
+.agent-cand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.agent-cand__src {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 8px 6px 4px;
+  font-family: var(--font-mono); font-size: var(--font-input-2xs);
+  letter-spacing: 0.05em; color: #f0f0f0;
+  background: linear-gradient(transparent, rgba(2, 2, 2, 0.72));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.agent-cands__note {
+  margin: 0; font-size: var(--font-body-xs); color: var(--text-muted);
+}
 
 .agent-prop {
   border: 1px dashed var(--accent);
