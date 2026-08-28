@@ -304,9 +304,20 @@
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55));
   }
   /* is-on is a marker for tests and for reading the take; it paints nothing */
-  .hand.is-press { animation: hand-press 200ms cubic-bezier(0.4, 0, 0.2, 1); }
-  @keyframes hand-press { 40% { scale: 0.82; } }
+  /* The dip scales the GLYPH, never the hand.
+
+     This was the jolt. CSS applies the individual transform properties --
+     translate, rotate, scale -- BEFORE the transform property, so a
+     standalone "scale: 0.82" on an element whose transform is
+     translate(316px, 676px) does not shrink it in place: it multiplies the
+     translation, and the cursor teleports to (259, 554), eighteen per cent
+     of the way back to the origin. Measured in the take, the glyph left
+     [316,676] for [269,557] for two frames on every single press and came
+     straight back. Scaling the inner svg, which carries no translation of
+     its own, dips exactly the same way and cannot touch the position. */
   .hand svg { position: absolute; inset: 0; }
+  .hand.is-press svg { animation: hand-press 200ms cubic-bezier(0.4, 0, 0.2, 1); }
+  @keyframes hand-press { 40% { scale: 0.82; } }
   body.is-film .live__veil { border-radius: 0; }
 
   .glyph { width: 15px; height: 15px; flex: none; display: inline-block; }
