@@ -651,13 +651,48 @@ export default function GraphView({
 
 
   /* thinking (0) -> the greeting (1) -> the capabilities, in sequence (2) */
+  const skipBootRef = useRef(false);
+  /** the home block's own height, remembered so a drain can land ON it */
+  const homeHRef = useRef(0);
   useEffect(() => {
     if (!panelIn || panel !== "prompt" || thread.length > 0) return;
+    /* Straight to the finished state after a Clear. The intro is a
+       first-impression sequence -- Atlas thinks, speaks, then its
+       capabilities arrive -- and each stage makes the panel taller. Replayed
+       after a drain it read as the window collapsing and then swelling back
+       up over more than a second, which is not a greeting, it is a bounce.
+       Seen once per visit is the point of it. */
+    if (skipBootRef.current) {
+      skipBootRef.current = false;
+      setBoot(2);
+      return;
+    }
     setBoot(0);
     const a = setTimeout(() => setBoot(1), 900);
     const b = setTimeout(() => setBoot(2), 1320);
     return () => { clearTimeout(a); clearTimeout(b); };
   }, [panel, thread.length, panelIn]);
+
+  /* Remember what the resting panel measures, while it is resting.
+
+     Sampled to a settled value rather than read once: boot reaching 2 is
+     the moment the capabilities START arriving, each on its own staggered
+     reveal, so a single reading there caught the block half built -- 84px
+     against a true 173 -- and floored the drain at less than half the
+     right height. Keeping the largest reading over the following second
+     lands on the finished size. */
+  useEffect(() => {
+    if (thread.length > 0 || boot < 2) return;
+    let raf = 0;
+    const until = performance.now() + 1200;
+    const sample = () => {
+      const sc = document.querySelector(".chatscroll") as HTMLElement | null;
+      if (sc && !sc.style.minHeight) homeHRef.current = Math.max(homeHRef.current, sc.scrollHeight);
+      if (performance.now() < until) raf = requestAnimationFrame(sample);
+    };
+    raf = requestAnimationFrame(sample);
+    return () => cancelAnimationFrame(raf);
+  }, [thread.length, boot]);
 
   /* the composer starts one line tall and grows only when the draft does
      (Shift+Enter adds lines), like the chatgpt field */
@@ -1786,12 +1821,25 @@ export default function GraphView({
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "apply failed");
+      /* The write is DONE the moment this resolves -- 361ms, measured.
+         What used to make the folder crawl in was everything after it:
+         first the tool rows, which held it 4.8 seconds, and then
+         router.refresh(), which re-renders the whole page server-side --
+         including the 925-node graph and its 4133 edges -- and takes about
+         2.9 seconds to deliver one new sidebar row.
+
+         So the sidebar is told directly and immediately. The refresh still
+         runs, to reconcile counts and anything else the server knows, but
+         nothing waits for it. */
+      window.dispatchEvent(new CustomEvent("atlas:folder-created", {
+        detail: { id: d.collectionId, name: d.name, count: d.filed },
+      }));
+      router.refresh();
       await playToolRow("create_collection", "“" + d.name + "”", "created");
       await playToolRow("add_to_collection", d.filed + " ids → " + d.name, "filed · " + d.filed);
       logLedger("media manager", "filed " + d.filed + " into “" + d.name + "”");
       setThread((it) => [...it, { type: "msg", role: "assistant", content: "Filed. " + d.name + " is in your folders now." }]);
       pushNext(["save", "find", "sort"]);
-      router.refresh(); // the sidebar folder list grows
     } catch (e) {
       setThread((it) => [...it, { type: "msg", role: "assistant", content: "Applying failed: " + (e instanceof Error ? e.message.slice(0, 120) : "unknown") }]);
     }
@@ -1892,6 +1940,13 @@ export default function GraphView({
     });
 
     const open = (el: HTMLElement) => {
+      /* Nothing opens during a drain. The home block lands in the same
+         commit the thread is emptied, and playing its entry animation
+         there meant it grew from nothing INSIDE the space the drain had
+         just floored -- the panel dipped for a frame and sprang back. It
+         belongs at full height immediately: the floor is already holding
+         exactly its size. */
+      if (scroll.dataset.draining) return;
       const h = el.getBoundingClientRect().height;
       if (h < 2) return;
       known.set(el, h);
@@ -1945,7 +2000,10 @@ export default function GraphView({
          for one frame in its finished state -- text and all four
          capabilities at full height -- before snapping back to "thinking".
          After a 300px collapse, that flash read as the panel bouncing. */
-      setBoot(0);
+      /* the home block arrives finished, and the drain below has already
+         floored the panel at its height, so this settles rather than grows */
+      skipBootRef.current = true;
+      setBoot(2);
       setThread([]);
       setPromptIds(null);
       setFieldSort(null);
@@ -1958,6 +2016,12 @@ export default function GraphView({
     clearingRef.current = true;
 
     scroll.dataset.draining = "1";
+    /* Floor the collapse at the height the home block is about to occupy.
+       Without it the panel fell all the way to nothing and then climbed
+       back as home mounted -- collapse, pause, expand. With it the descent
+       simply stops where home begins, and the swap changes no height at
+       all. */
+    if (homeHRef.current) scroll.style.minHeight = homeHRef.current + "px";
     const items = Array.from(scroll.children) as HTMLElement[];
     const heights = items.map((el) => el.offsetHeight);   // read before any write
 
@@ -2002,9 +2066,15 @@ export default function GraphView({
          items for the home block: released in the same tick, the gaps
          reappeared under zero-height messages for one frame and the panel
          visibly bounced before settling */
+      /* The flag outlives the swap by a frame so the home block mounts
+         under it and skips its entry animation, then the floor and the
+         flag come off together -- home is already filling the space. */
       requestAnimationFrame(() => {
         scroll.getAnimations().forEach((a) => a.cancel());
-        delete scroll.dataset.draining;
+        requestAnimationFrame(() => {
+          delete scroll.dataset.draining;
+          scroll.style.minHeight = "";
+        });
       });
     }, total + 60);
   }

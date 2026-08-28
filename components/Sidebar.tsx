@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -47,6 +47,44 @@ export default function Sidebar({
      the folder appeared at full height for a frame and then collapsed to
      animate back. Measured, that flash was 60ms of finished row before the
      open began. useLayoutEffect lands the class in the same paint. */
+  /* Folders the agent has just written, shown before the server render
+     catches up. router.refresh() needs about three seconds here because it
+     rebuilds the whole page, the 925-node graph included, and a folder that
+     lands three seconds after Atlas says it is filed reads as the app
+     lagging. These come straight from the write's own response and are
+     dropped again the moment the real tree carries them. */
+  const [pending, setPending] = useState<CollectionNode[]>([]);
+  useEffect(() => {
+    const onCreated = (e: Event) => {
+      const d = (e as CustomEvent).detail as { id: number; name: string; count: number };
+      if (!d || typeof d.id !== "number") return;
+      setPending((p) => (p.some((x) => x.id === d.id) ? p : [...p, {
+        id: d.id, name: d.name, parent_id: null, note: null, count: d.count ?? 0, children: [],
+      }]));
+    };
+    window.addEventListener("atlas:folder-created", onCreated);
+    return () => window.removeEventListener("atlas:folder-created", onCreated);
+  }, []);
+
+  const serverIds = useMemo(() => {
+    const have = new Set<number>();
+    const walk = (ns: CollectionNode[]) => { for (const n of ns) { have.add(n.id); walk(n.children); } };
+    walk(tree);
+    return have;
+  }, [tree]);
+
+  const shownTree = useMemo(() => {
+    const extra = pending.filter((p) => !serverIds.has(p.id));
+    return extra.length ? [...tree, ...extra] : tree;
+  }, [tree, pending, serverIds]);
+
+  /* let them go once the server render has them */
+  useEffect(() => {
+    if (pending.some((p) => serverIds.has(p.id))) {
+      setPending((p) => p.filter((x) => !serverIds.has(x.id)));
+    }
+  }, [serverIds, pending]);
+
   const known = useRef<Set<number> | null>(null);
   /* The height to open to, read off a row already on screen. The animation
      needs a real number: a grid track of 0fr still leaves the row as tall
@@ -61,7 +99,7 @@ export default function Sidebar({
     const walk = (nodes: CollectionNode[]) => {
       for (const n of nodes) { ids.add(n.id); walk(n.children); }
     };
-    walk(tree);
+    walk(shownTree);
 
     if (known.current === null) { known.current = ids; return; }
     const fresh = [...ids].filter((id) => !known.current!.has(id));
@@ -77,7 +115,7 @@ export default function Sidebar({
        anything else re-rendered, and the class would stay on for good. */
     if (settle.current) clearTimeout(settle.current);
     settle.current = setTimeout(() => setArrival({ ids: new Set(), h: 0 }), 1100);
-  }, [tree]);
+  }, [shownTree]);
 
   /* ---- Resizable / collapsible sidebar ----
      The right edge is a handle: drag to stretch (200-420px), click to
@@ -214,10 +252,10 @@ export default function Sidebar({
               <IconPlus width={12} height={12} />
             </button>
           </div>
-          {tree.map((node) => (
+          {shownTree.map((node) => (
             <TreeItem key={node.id} node={node} depth={0} activeId={activeCollection} arrival={arrival} onNewChild={newCollection} onDelete={deleteCollection} />
           ))}
-          {tree.length === 0 && (
+          {shownTree.length === 0 && (
             <div style={{ padding: "4px 8px", fontSize: "var(--font-body-xs)", color: "var(--text-muted)" }}>
               No folders yet
             </div>

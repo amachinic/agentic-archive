@@ -2598,9 +2598,14 @@ async function playRun() {
     await run.push('.sidebar .nav-group[aria-label="Folders"]', { max: 2, pad: 40, ms: 1200 });
     run.say("<b>" + FOLDER + "</b> is in the sidebar — a real folder, in the real library", "sidebar", "step");
 
-    await at(44.5);
-    await run.wide(1300);                     // out by ~45.8s
-    run.say("panned out at " + mark(), "45.8s", "step");
+    /* Two seconds ON the folder, counted from the moment the camera
+       arrives -- not to an absolute mark. The mark was the bug: when the
+       agent answered slowly the push finished after it had already passed,
+       so at() returned at once and the look lasted no time at all. A
+       duration cannot be overtaken by a slow turn. */
+    await sleep(2000);
+    await run.wide(1300);
+    run.say("panned out at " + mark(), "out", "step");
 
     /* The closing marks are floors, not absolutes. A slow model pushes the
        pan-out late, and a mark that has already passed fires at once -- one
