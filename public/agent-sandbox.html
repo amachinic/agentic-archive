@@ -1308,13 +1308,25 @@ function liveApp(id) {
     const card = el.closest(".agent-prop") || el.parentElement;
     el.click();
 
-    /* The two seconds it stays, dead still. A real cursor does not chase
-       the page: you click, the content reflows under your hand, and your
-       hand is where you left it. Following the target instead looked like
-       drifting -- measured, it slid nearly 300px while the thread grew --
-       so the cursor makes exactly ONE movement per press, the rise, and
-       nothing after it. */
-    await sleep(2000);
+    /* It stays while the thing it pressed is still there, two seconds at
+       most, and it never moves while it waits.
+
+       The cursor was already still: measured in page coordinates it held
+       its landing spot to the pixel for the whole hold. What moved was the
+       PAGE. Accept unmounts its own button, the card collapses, and the
+       thread pins itself to the bottom as the next rows land -- so a cursor
+       waiting out a fixed two seconds ends up over text that slid beneath
+       it, and reads as having jumped somewhere random.
+
+       Following the content instead is worse, not better: measured, that
+       dragged the cursor nearly 300px up the panel. So it simply leaves
+       when its target does. A cursor is not an annotation; the gesture is
+       finished when the thing it pressed is gone. */
+    const leaveBy = performance.now() + 2000;
+    while (performance.now() < leaveBy) {
+      if (!el.isConnected || el.getBoundingClientRect().height < 1) break;
+      await sleep(60);
+    }
 
     const away = hand.animate(
       [
