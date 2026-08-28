@@ -935,9 +935,9 @@
   flex: none;
   scrollbar-width: thin;
 }
-.analyze__picker .btn { flex: none; }
-.analyze__picker .field { flex: none; width: 220px; }
-.analyze__upload { width: auto; }
+/* search rides the topbar now, beside Upload; the strip is pictures only */
+.analyze__find { flex: none; width: 230px; }
+@media (max-width: 900px) { .analyze__find { display: none; } }
 /* the empty studio's inline dropzone: a standard square, upload begins on
    drop, no modal */
 .analyze__drop {
@@ -947,18 +947,37 @@
   margin-bottom: var(--space-2);
 }
 .analyze__drop .mono-xs { text-align: center; line-height: 1.5; }
-.analyze__grid { display: flex; flex-direction: row; gap: 8px; align-items: center; }
+/* The paged strip (variant C, chosen from the sandbox line-up): tight square
+   crops, no scrollbar — the ends fade to say there is more, and two carets
+   stay pinned at the edges to walk a screenful at a time. */
+.analyze__picker { scrollbar-width: none; }
+.analyze__picker::-webkit-scrollbar { display: none; }
+.analyze__grid { display: flex; flex-direction: row; gap: 6px; align-items: center; }
 .analyze__thumb {
-  display: block; flex: none; height: 56px; width: auto;
+  display: block; flex: none; width: 48px; height: 48px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
   padding: 0; background: var(--bg); cursor: pointer;
   transition: border-color var(--motion-duration) var(--motion-ease);
 }
-.analyze__thumb img { height: 100%; width: auto; display: block; }
+.analyze__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .analyze__thumb:hover { border-color: var(--border-strong); }
 .analyze__thumb.is-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+.analyze__page {
+  position: sticky; z-index: 3; flex: none;
+  height: 34px; width: 34px; align-self: center;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(4px);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong); border-radius: 50%;
+  cursor: pointer;
+}
+.analyze__page:hover { color: var(--text-primary); border-color: var(--accent); }
+.analyze__page--prev { left: 0; }
+.analyze__page--next { right: 0; }
 
 .analyze__main { min-width: 0; overflow-y: auto; }
 .analyze__scroll {
@@ -1671,14 +1690,7 @@
     scrollbar-width: none;
   }
   .analyze__picker::-webkit-scrollbar { display: none; }
-  .analyze__picker .btn { flex: none; }
-  .analyze__picker .field { display: none; } /* stripped down: carousel + upload */
-  .analyze__grid {
-    columns: auto; column-gap: 0;
-    display: flex; gap: 8px; align-items: center;
-  }
-  .analyze__thumb { width: 54px; height: 54px; flex: none; margin: 0; }
-  .analyze__thumb img { width: 100%; height: 100%; object-fit: cover; }
+  /* the strip is already square crops at every size; nothing to override */
   .analyze__scroll { padding: var(--space-2); }
 
   /* edge bubbles can't follow a finger: keep them modest */
@@ -1687,12 +1699,7 @@
   /* stripped down: header hint copy steps back on small screens */
   .topbar .mono-xs { display: none; }
 
-  /* the carousel's upload CTA collapses to its icon */
-  .analyze__upload {
-    font-size: 0; gap: 0;
-    width: auto; flex: none;
-    padding: 0 13px; height: 44px;
-  }
+  /* upload lives in the topbar now; the strip carries no controls to shrink */
 }
 
 @media (max-width: 350px) {
