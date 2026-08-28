@@ -855,9 +855,11 @@
 }
 .gal-stage {
   flex: 1; min-height: 0;
-  display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px;
+  display: grid; grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center; gap: var(--space-1);
 }
+/* previous over next, one cluster on the right edge */
+.gal-stage__navs { display: flex; flex-direction: column; gap: 8px; align-self: center; }
 .gal-stage__frame {
   height: 100%; min-height: 0;
   display: flex; align-items: center; justify-content: center;
