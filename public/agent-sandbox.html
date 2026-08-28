@@ -1281,26 +1281,43 @@ function liveApp(id) {
     const el = typeof sel === "string" ? doc() && doc().querySelector(sel) : sel;
     if (!el) return false;
     if (!hand) { el.click(); return true; }
-    const p = handPoint(el);
-    const ex = p.x - 4, ey = p.y - 2;                 // the glyph tip on the control
+    /* The rise is driven against the button's LIVE position, not a snapshot
+       of it.
+
+       A fixed end point was the bug behind the jump. The proposal card
+       settles late -- measured, the Accept button travels 268px down the
+       panel as the thread grows and pins itself -- and any of that landing
+       inside the 700ms rise left the cursor sitting where the button HAD
+       been, up and to the left of where it now was. Whether a take looked
+       right came down to whether the agent's reply happened to arrive
+       before or during the travel, which is exactly the kind of thing that
+       differs run to run.
+
+       Reading the target every frame removes the race: the offset shrinks
+       along the diagonal, the target is wherever it currently is, so at the
+       last frame the cursor is ON it by construction. */
     const off = HAND_TRAVEL * Math.SQRT1_2;           // equal parts across and up
-    const sx = ex + off, sy = ey + off;               // start: below and right
-
+    const spot = () => { const q = handPoint(el); return { x: q.x - 4, y: q.y - 2 }; };
+    let g = spot();
+    hand.style.opacity = "0";
+    hand.style.transform = "translate(" + (g.x + off) + "px, " + (g.y + off) + "px)";
     hand.classList.add("is-on");
-    const rise = hand.animate(
-      [
-        { transform: "translate(" + sx + "px, " + sy + "px)", opacity: 0 },
-        { transform: "translate(" + ex + "px, " + ey + "px)", opacity: 1 },
-      ],
-      { duration: 700, easing: "cubic-bezier(0.22, 0.61, 0.36, 1)", fill: "forwards" },
-    );
-    await rise.finished;
+    void hand.offsetWidth;
 
-    /* Take the travel's end state into inline style and let the animation
-       go, so the hold below can steer the transform without two authors
-       fighting over it. */
-    rise.commitStyles();
-    rise.cancel();
+    const DUR = 700;
+    const ease = (u) => 1 - Math.pow(1 - u, 3);       // the same shape as the old bezier
+    const began = performance.now();
+    for (;;) {
+      const u = Math.min(1, (performance.now() - began) / DUR);
+      const k = ease(u);
+      g = spot();
+      const d = off * (1 - k);
+      hand.style.transform = "translate(" + (g.x + d) + "px, " + (g.y + d) + "px)";
+      hand.style.opacity = String(k);
+      if (u >= 1) break;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    const ex = g.x, ey = g.y;                          // where it actually landed
 
     hand.classList.add("is-press");
     await sleep(170);
@@ -1325,7 +1342,10 @@ function liveApp(id) {
     const leaveBy = performance.now() + 2000;
     while (performance.now() < leaveBy) {
       if (!el.isConnected || el.getBoundingClientRect().height < 1) break;
-      await sleep(60);
+      /* checked every frame, not every 60ms: the sooner the departure
+         starts after the button unmounts, the less of the reflow the
+         cursor is still on screen for */
+      await new Promise((r) => requestAnimationFrame(r));
     }
 
     const away = hand.animate(
@@ -1333,13 +1353,17 @@ function liveApp(id) {
         { transform: "translate(" + ex + "px, " + ey + "px)", opacity: 1 },
         { transform: "translate(" + ex + "px, " + ey + "px)", opacity: 0 },
       ],
-      { duration: 340, easing: "ease", fill: "forwards" },
+      { duration: 220, easing: "ease", fill: "forwards" },
     );
     await away.finished;
     hand.classList.remove("is-on");
-    /* hand the properties back so the next call starts from a clean slate */
     away.cancel();
-    hand.style.transform = "";
+    /* The transform is deliberately LEFT where it landed. Clearing it sent
+       the glyph back to the corner -- invisible at opacity 0, but a jump
+       waiting to be seen the moment anything changed the ordering. The next
+       press writes its own start position before it makes the hand visible,
+       so nothing needs resetting here. */
+    hand.style.opacity = "";
     return true;
   }
 
