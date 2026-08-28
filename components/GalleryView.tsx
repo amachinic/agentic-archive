@@ -171,19 +171,23 @@ export default function GalleryView({ items }: { items: GalleryItem[] }) {
           {view === "carousel" && current && (
             <div className="gal-carousel">
               <div className="gal-stage">
-                <button
-                  className="gal-stage__nav" aria-label="Previous"
-                  disabled={cursor === 0}
-                  onClick={() => setCursor((c) => Math.max(0, c - 1))}
-                ><IconCaret width={15} height={15} style={{ transform: "rotate(90deg)" }} /></button>
                 <button className="gal-stage__frame" onClick={() => open(current.id)} title="Open in Analyze">
                   <img key={current.id} src={"/api/img/" + current.id} alt={current.title} decoding="async" />
                 </button>
-                <button
-                  className="gal-stage__nav" aria-label="Next"
-                  disabled={cursor === items.length - 1}
-                  onClick={() => setCursor((c) => Math.min(items.length - 1, c + 1))}
-                ><IconCaret width={15} height={15} style={{ transform: "rotate(-90deg)" }} /></button>
+                {/* both arrows ride the right edge as one cluster, the way a
+                    viewer's hand stays in one place while walking a deck */}
+                <div className="gal-stage__navs">
+                  <button
+                    className="gal-stage__nav" aria-label="Previous"
+                    disabled={cursor === 0}
+                    onClick={() => setCursor((c) => Math.max(0, c - 1))}
+                  ><IconCaret width={15} height={15} style={{ transform: "rotate(90deg)" }} /></button>
+                  <button
+                    className="gal-stage__nav" aria-label="Next"
+                    disabled={cursor === items.length - 1}
+                    onClick={() => setCursor((c) => Math.min(items.length - 1, c + 1))}
+                  ><IconCaret width={15} height={15} style={{ transform: "rotate(-90deg)" }} /></button>
+                </div>
               </div>
               <div className="gal-meta">
                 <span className="gal-meta__title">{current.title}</span>
