@@ -738,20 +738,195 @@
 .diptych__analysis { grid-column: 1 / -1; }
 
 /* ---- Analyze studio ---- */
-.analyze {
+/* ============================================================
+   SUBNAV — the horizontal second row under a topbar. One visual language
+   for every page that offers ways of standing in front of the same data:
+   the Gallery's views, the Analyze studio's picker strip.
+   ============================================================ */
+.subnav {
+  display: flex; align-items: center; gap: 4px;
+  padding: 8px var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex: none;
+}
+.subnav__item {
+  background: none; border: 0; cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono); font-size: var(--font-input-sm);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-secondary);
+  transition: background-color var(--motion-duration) var(--motion-ease), color var(--motion-duration) var(--motion-ease);
+}
+.subnav__item:hover { color: var(--text-primary); }
+.subnav__item.is-on { background: var(--accent); color: var(--on-accent); }
+.subnav__item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---- Gallery: three more ways of standing in front of the archive ---- */
+
+/* ICONS — the Finder icon grid. The whole image shows (contain, never crop):
+   this view is about recognising files, not composing a wall. */
+.gal-icons {
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 6px;
+  padding: var(--space-2);
+  overflow-y: auto;
+  height: 100%;
+  align-content: start;
+}
+.gal-icon {
+  display: flex; flex-direction: column; gap: 7px;
+  background: none; border: 0; padding: 9px; cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background-color var(--motion-duration) var(--motion-ease);
+}
+.gal-icon:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.gal-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.gal-icon__frame {
+  display: flex; align-items: center; justify-content: center;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+}
+.gal-icon__frame img {
+  max-width: 100%; max-height: 100%;
+  border-radius: 3px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.gal-icon__name {
+  font-size: var(--font-body-xs); line-height: 1.3;
+  color: var(--text-secondary); text-align: center;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; word-break: break-word;
+}
+.gal-icon:hover .gal-icon__name { color: var(--text-primary); }
+
+/* DETAILS — the ledger. Fixed columns so fifty rows scan as a table. */
+.gal-list {
+  display: flex; flex-direction: column;
+  padding: 0 var(--space-2) var(--space-2);
+  overflow-y: auto; height: 100%;
+}
+.gal-list__row {
+  display: grid;
+  grid-template-columns: 44px minmax(180px, 1.6fr) minmax(90px, 1fr) 110px 64px 78px 110px;
+  gap: var(--space-2); align-items: center;
+  padding: 5px var(--space-1);
+  background: none; border: 0; border-bottom: 1px solid var(--border);
+  text-align: left; cursor: pointer;
+  font-size: var(--font-body-sm); color: var(--text-secondary);
+}
+.gal-list__row:hover { background: color-mix(in srgb, var(--text-primary) 5%, transparent); }
+.gal-list__row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.gal-list__row--head {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--bg); cursor: default;
+  padding: 10px var(--space-1) 8px;
+  font-family: var(--font-mono); font-size: var(--font-input-2xs);
+  text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);
+}
+.gal-list__row--head:hover { background: var(--bg); }
+.gal-list__row .num { text-align: right; font-variant-numeric: tabular-nums; }
+.gal-list__thumb {
+  width: 36px; height: 36px; display: grid; place-items: center;
+  border-radius: var(--radius-sm); overflow: hidden; background: var(--surface);
+}
+.gal-list__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gal-list__title {
+  color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gal-list__dim {
+  font-size: var(--font-body-xs); color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .gal-list__row { grid-template-columns: 44px 1.6fr 1fr 110px; }
+  .gal-list__row > :nth-child(n+5) { display: none; }
+}
+
+/* CAROUSEL — one work at a time, the filmstrip to walk it */
+.gal-carousel {
+  display: flex; flex-direction: column;
+  height: 100%; min-height: 0;
+  padding: var(--space-2) var(--space-2) 0;
+  gap: 10px;
+}
+.gal-stage {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center; gap: var(--space-1);
+}
+.gal-stage__frame {
+  height: 100%; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; padding: 0; cursor: zoom-in;
+}
+.gal-stage__frame img {
+  max-width: 100%; max-height: 100%;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+  animation: content-in 200ms var(--motion-ease) both;
+}
+.gal-stage__nav {
+  height: 44px; width: 44px;
+  display: grid; place-items: center;
+  background: var(--surface); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 50%;
+  cursor: pointer;
+  transition: color var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease);
+}
+.gal-stage__nav:hover:not(:disabled) { color: var(--text-primary); border-color: var(--border-strong); }
+.gal-stage__nav:disabled { opacity: 0.3; cursor: default; }
+.gal-meta {
+  display: flex; align-items: baseline; gap: var(--space-2);
+  justify-content: center; flex-wrap: wrap;
+  padding: 0 52px;
+}
+.gal-meta__title { font-size: var(--font-body-md); color: var(--text-primary); }
+.gal-meta__rest {
+  font-family: var(--font-mono); font-size: var(--font-input-xs);
+  letter-spacing: 0.03em; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.gal-strip {
+  flex: none; display: flex; gap: 6px;
+  overflow-x: auto; overflow-y: hidden;
+  padding: 4px 2px 12px;
+  scrollbar-width: thin;
+}
+.gal-strip__cell {
+  flex: none; width: 52px; height: 52px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden; padding: 0; background: var(--surface); cursor: pointer;
+  opacity: 0.62;
+  transition: opacity var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease);
+}
+.gal-strip__cell:hover { opacity: 1; }
+.gal-strip__cell.is-on { opacity: 1; border-color: var(--accent); }
+.gal-strip__cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ---- Analyze: the picker is a STRIP under the topbar now, not a column.
+   The two-column studio put a 300px rail between the reader and the brief;
+   the strip keeps every picking affordance one glance up instead. ---- */
+.analyze {
+  display: flex; flex-direction: column;
   height: 100%;
   min-height: 0;
 }
 .analyze__picker {
-  display: flex; flex-direction: column; gap: var(--space-2);
-  padding: var(--space-2);
-  border-right: 1px solid var(--border);
-  overflow-y: auto;
+  display: flex; flex-direction: row; align-items: center; gap: 10px;
+  padding: 8px var(--space-2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto; overflow-y: hidden;
   background: var(--surface);
+  flex: none;
+  scrollbar-width: thin;
 }
-.analyze__upload { width: 100%; }
+.analyze__picker .btn { flex: none; }
+.analyze__picker .field { flex: none; width: 220px; }
+.analyze__upload { width: auto; }
 /* the empty studio's inline dropzone: a standard square, upload begins on
    drop, no modal */
 .analyze__drop {
@@ -761,19 +936,18 @@
   margin-bottom: var(--space-2);
 }
 .analyze__drop .mono-xs { text-align: center; line-height: 1.5; }
-.analyze__grid { columns: 2 110px; column-gap: 8px; }
+.analyze__grid { display: flex; flex-direction: row; gap: 8px; align-items: center; }
 .analyze__thumb {
-  display: block; width: 100%; margin-bottom: 8px;
-  break-inside: avoid;
+  display: block; flex: none; height: 56px; width: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
   padding: 0; background: var(--bg); cursor: pointer;
   transition: border-color var(--motion-duration) var(--motion-ease);
 }
+.analyze__thumb img { height: 100%; width: auto; display: block; }
 .analyze__thumb:hover { border-color: var(--border-strong); }
 .analyze__thumb.is-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.analyze__thumb img { display: block; width: 100%; height: auto; }
 
 .analyze__main { min-width: 0; overflow-y: auto; }
 .analyze__scroll {

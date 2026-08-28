@@ -130,18 +130,9 @@ export default function WallView({ items }: { items: Item[] }) {
     return () => cancelAnimationFrame(raf);
   }, [columns, colW]);
 
+  /* Chrome-free on purpose: the Gallery owns the topbar and the view subnav
+     now, and the wall is one view among four rather than the whole page. */
   return (
-    <>
-      <header className="topbar">
-        <div className="topbar__lede">
-          <h1 className="topbar__title">Gallery</h1>
-          <span className="pill pill--static">{items.length} pieces</span>
-        </div>
-        <div className="topbar__spacer" />
-        <span className="mono-xs">hover to pause / scroll to scrub / click to analyze</span>
-      </header>
-      <div className="work">
-        <main className="pane pane--flush" tabIndex={-1}>
           <div
             className="wall"
             ref={wrapRef}
@@ -202,8 +193,5 @@ export default function WallView({ items }: { items: Item[] }) {
             ))}
             <div className="wall__veil" />
           </div>
-        </main>
-      </div>
-    </>
   );
 }
