@@ -68,7 +68,14 @@ The Curator can arrange the visible set as a row-major grid:
 
 ### Gallery
 
-A continuously moving visual wall for broad scanning. Hover to pause, scroll or drag to scrub, and open any image directly in Analyze.
+Four ways of standing in front of the same archive, switched from a subnav:
+
+- **Wall:** the continuously moving mosaic for broad scanning — hover to pause, scroll or drag to scrub
+- **Icons:** a Finder-style grid, every piece shown whole and named
+- **Details:** the archive as a ledger — one row per file with dimensions, kind, size, and date
+- **Carousel:** one work at a time with a filmstrip, walked by arrow keys
+
+Any view opens any image directly in Analyze, and the chosen view persists.
 
 ### Analyze
 
