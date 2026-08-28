@@ -1308,7 +1308,11 @@ export default function GraphView({
     if (tool === "filter_by_terms") return (Array.isArray(args.terms) ? args.terms.join(", ") : "");
     if (tool === "propose_folder") return "“" + String(args.name ?? "") + "”";
     if (tool === "sort_field") return String(args.by ?? "");
-    if (tool === "search_outside") return "“" + String(args.query ?? "") + "”" + (args.source ? " · " + String(args.source) : "");
+    if (tool === "search_outside") {
+      return "“" + String(args.query ?? "") + "”"
+        + (args.medium ? " · " + String(args.medium) + "s" : "")
+        + (args.source ? " · " + String(args.source) : "");
+    }
     return "";
   };
   const fmtResult = (raw: string): string => {

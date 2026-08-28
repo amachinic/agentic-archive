@@ -30,10 +30,17 @@ export type Candidate = {
 
 export type Probe = { detail: string; account?: string | null };
 
+/* The four work-kinds every museum API here can facet on. A keyword can only
+   find what catalogue text says; a facet narrows to what the thing IS, which
+   is how "paintings about sorrow" stops returning terracotta vases whose
+   descriptions mention grief. */
+export type Medium = "painting" | "print" | "photograph" | "sculpture";
+export const MEDIUMS: Medium[] = ["painting", "print", "photograph", "sculpture"];
+
 export type Adapter = {
   id: SourceId;
   probe(): Promise<Probe>;
-  search(q: string, limit: number): Promise<Candidate[]>;
+  search(q: string, limit: number, medium?: Medium): Promise<Candidate[]>;
 };
 
 /** Every outbound call is bounded. A slow source must not hold a request open. */
@@ -113,9 +120,15 @@ const met: Adapter = {
       "https://collectionapi.metmuseum.org/public/collection/v1/objects");
     return { detail: n(d.total) + " objects catalogued" };
   },
-  async search(q, limit) {
+  async search(q, limit, medium) {
+    /* medium=Paintings cut a "sorrow" probe from 337 hits to 113, measured:
+       the difference between works about sorrow and works that mention it */
+    const facet: Record<Medium, string> = {
+      painting: "Paintings", print: "Prints", photograph: "Photographs", sculpture: "Sculpture",
+    };
     const s = await getJson<{ objectIDs?: number[] | null }>(
-      "https://collectionapi.metmuseum.org/public/collection/v1/search?hasImages=true&q=" + encodeURIComponent(q));
+      "https://collectionapi.metmuseum.org/public/collection/v1/search?hasImages=true" +
+      (medium ? "&medium=" + facet[medium] : "") + "&q=" + encodeURIComponent(q));
     const ids = (s.objectIDs ?? []).slice(0, limit);
     const out: Candidate[] = [];
     for (const id of ids) {
@@ -150,13 +163,19 @@ const artic: Adapter = {
       "https://api.artic.edu/api/v1/artworks?limit=1");
     return { detail: n(d.pagination?.total) + " artworks catalogued" };
   },
-  async search(q, limit) {
+  async search(q, limit, medium) {
     const fields = "id,title,artist_title,image_id,is_public_domain";
+    /* the .keyword suffix matters: the analysed field matches nothing for an
+       exact term, and "The Old Guitarist" only surfaces with it — measured */
+    const facet: Record<Medium, string> = {
+      painting: "Painting", print: "Print", photograph: "Photograph", sculpture: "Sculpture",
+    };
     const d = await getJson<{ data?: Array<{
       id: number; title?: string; artist_title?: string | null;
       image_id?: string | null; is_public_domain?: boolean;
     }>; config?: { iiif_url?: string } }>(
       "https://api.artic.edu/api/v1/artworks/search?q=" + encodeURIComponent(q) +
+      (medium ? "&query%5Bterm%5D%5Bartwork_type_title.keyword%5D=" + facet[medium] : "") +
       "&limit=" + limit + "&fields=" + fields);
     const iiif = d.config?.iiif_url || "https://www.artic.edu/iiif/2";
     return (d.data ?? []).filter((a) => a.image_id).map((a) => ({
@@ -182,15 +201,18 @@ const cleveland: Adapter = {
       "https://openaccess-api.clevelandart.org/api/artworks/?cc0=1&has_image=1&limit=1");
     return { detail: n(cc0.info?.total) + " CC0 images of " + n(all.info?.total) + " records" };
   },
-  async search(q, limit) {
+  async search(q, limit, medium) {
     /* cc0=1 and has_image=1 at the query, so nothing unkeepable is ever even
        offered as a candidate */
+    const facet: Record<Medium, string> = {
+      painting: "Painting", print: "Print", photograph: "Photograph", sculpture: "Sculpture",
+    };
     const d = await getJson<{ data?: Array<{
       id: number; title?: string; creators?: Array<{ description?: string }>;
       url?: string; images?: { web?: { url?: string }; print?: { url?: string } };
       share_license_status?: string;
     }> }>("https://openaccess-api.clevelandart.org/api/artworks/?cc0=1&has_image=1&limit=" +
-      limit + "&q=" + encodeURIComponent(q));
+      limit + (medium ? "&type=" + facet[medium] : "") + "&q=" + encodeURIComponent(q));
     return (d.data ?? []).map((a) => ({
       source: "cleveland" as const, remoteId: String(a.id),
       title: a.title || "Untitled",
@@ -223,9 +245,10 @@ const rijks: Adapter = {
       RIJKS_SEARCH + "?imageAvailable=True&type=painting");
     return { detail: n(d.partOf?.totalItems) + " paintings with images" };
   },
-  async search(q, limit) {
+  async search(q, limit, medium) {
     const d = await getJson<{ orderedItems?: Array<{ id: string }> }>(
-      RIJKS_SEARCH + "?imageAvailable=True&title=" + encodeURIComponent(q));
+      RIJKS_SEARCH + "?imageAvailable=True" + (medium ? "&type=" + medium : "") +
+      "&title=" + encodeURIComponent(q));
     const ids = (d.orderedItems ?? []).slice(0, Math.min(limit, 8));
     const out: Candidate[] = [];
     for (const it of ids) {
@@ -413,7 +436,7 @@ export type OutsideSearch = {
  */
 export async function searchConnected(
   q: string,
-  opts: { limit?: number; only?: SourceId | null } = {},
+  opts: { limit?: number; only?: SourceId | null; medium?: Medium | null } = {},
 ): Promise<OutsideSearch> {
   const limit = Math.max(1, Math.min(40, opts.limit ?? 12));
   const live = listConnections().filter((c) => c.status !== "off").map((c) => c.id);
@@ -421,7 +444,7 @@ export async function searchConnected(
 
   const settled = await Promise.all(targets.map(async (id) => {
     try {
-      return { id, items: await ADAPTERS[id].search(q, limit) };
+      return { id, items: await ADAPTERS[id].search(q, limit, opts.medium ?? undefined) };
     } catch (e) {
       return { id, items: [] as Candidate[], error: reason(e) };
     }

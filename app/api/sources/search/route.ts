@@ -1,5 +1,5 @@
 import { listConnections, SOURCE_BY_ID, type SourceId } from "@/lib/connections";
-import { searchConnected } from "@/lib/sources";
+import { searchConnected, MEDIUMS, type Medium } from "@/lib/sources";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 45;
@@ -18,6 +18,9 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();
   const only = url.searchParams.get("source") as SourceId | null;
+  const medium = (MEDIUMS as string[]).includes(url.searchParams.get("medium") ?? "")
+    ? url.searchParams.get("medium") as Medium
+    : null;
   const limit = Math.max(1, Math.min(40, Number(url.searchParams.get("limit")) || 12));
   if (!q) return Response.json({ error: "a query is required" }, { status: 400 });
 
@@ -28,7 +31,7 @@ export async function GET(req: Request) {
     return Response.json({ error: "no sources are connected yet" }, { status: 400 });
   }
 
-  const { results, searched, failed } = await searchConnected(q, { limit, only });
+  const { results, searched, failed } = await searchConnected(q, { limit, only, medium });
 
   return Response.json({
     query: q,
