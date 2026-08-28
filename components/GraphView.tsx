@@ -2827,8 +2827,29 @@ export default function GraphView({
                                   rel="noreferrer noopener"
                                   title={c.title + (c.creator ? " — " + c.creator : "") + (c.licence ? " · " + c.licence : "")}
                                 >
-                                  {/* remote thumbs, so decoding stays off the main thread */}
-                                  <img src={c.thumbUrl!} alt={c.title} loading="lazy" decoding="async" />
+                                  {/* Remote thumbs, so decoding stays off the main thread.
+                                      A source's edge protection can refuse a burst (the AIC
+                                      does, measured), so a failed tile retries once after a
+                                      breath and then becomes a title card rather than a
+                                      broken glyph -- the candidate is still real and still
+                                      opens at its source. */}
+                                  <img
+                                    src={c.thumbUrl!}
+                                    alt={c.title}
+                                    loading="lazy"
+                                    decoding="async"
+                                    onError={(e) => {
+                                      const img = e.currentTarget;
+                                      if (!img.dataset.retried) {
+                                        img.dataset.retried = "1";
+                                        const src = img.src;
+                                        window.setTimeout(() => { img.src = src; }, 3500 + Math.random() * 2500);
+                                        return;
+                                      }
+                                      img.closest(".agent-cand")?.classList.add("is-dead");
+                                    }}
+                                  />
+                                  <span className="agent-cand__fallback" aria-hidden="true">{c.title}</span>
                                   <span className="agent-cand__src">{c.source}{c.keepable ? " · CC0" : ""}</span>
                                 </a>
                               ))}

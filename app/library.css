@@ -1253,6 +1253,19 @@
   background: var(--surface);
 }
 .agent-cand img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* A tile whose source refused the thumbnail: the picture yields to its own
+   title rather than a broken-image glyph. The candidate is still real and
+   the link out still works -- only the preview is missing. */
+.agent-cand__fallback {
+  display: none;
+  position: absolute; inset: 0;
+  padding: 8px;
+  align-items: center; justify-content: center; text-align: center;
+  font-size: var(--font-body-xs); line-height: 1.35; color: var(--text-secondary);
+  overflow: hidden;
+}
+.agent-cand.is-dead img { display: none; }
+.agent-cand.is-dead .agent-cand__fallback { display: flex; }
 .agent-cand:hover { border-color: var(--border-strong); }
 .agent-cand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .agent-cand__src {
