@@ -292,12 +292,18 @@
     position: absolute; left: 0; top: 0; z-index: 6;
     width: 26px; height: 30px;
     pointer-events: none;
+    /* Position and opacity are animated from script, as ONE compositor
+       animation. No transition here: a CSS transition and a script both
+       writing transform are two authors of one property, and whichever
+       wrote last wins mid-flight -- which is what made the travel stutter.
+       transform and opacity are the two properties the compositor can run
+       without the main thread, so the move stays smooth even while the app
+       inside the frame is busy. */
     opacity: 0;
-    transition: opacity 150ms ease;
-    will-change: transform;
+    will-change: transform, opacity;
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55));
   }
-  .hand.is-on { opacity: 1; }
+  /* is-on is a marker for tests and for reading the take; it paints nothing */
   .hand.is-press { animation: hand-press 200ms cubic-bezier(0.4, 0, 0.2, 1); }
   @keyframes hand-press { 40% { scale: 0.82; } }
   .hand svg { position: absolute; inset: 0; }
@@ -1259,26 +1265,69 @@ function liveApp(id) {
      has to track for nothing, and it competed with the typing and the
      camera. Half a second is enough to say "this was chosen", and the
      moment the click lands there is nothing left to look at. */
+  /* One move, the same every time: rise to the control on a 45-degree
+     diagonal from below-right, fading in over the travel; press it; hold
+     two seconds; fade out. Nothing is relative to where the cursor was
+     last, so there is no drifting across the screen between beats and no
+     arrival from a random direction -- the start point is computed from
+     the target, every time.
+
+     One WAAPI animation carries transform and opacity together. Both are
+     compositor properties, so the travel cannot be jittered by whatever
+     the app is doing on the main thread, and one animation means one
+     author: nothing else writes these while it runs. */
+  const HAND_TRAVEL = 96;   // px along the diagonal: ~68px on each axis
   async function handClick(sel) {
     const el = typeof sel === "string" ? doc() && doc().querySelector(sel) : sel;
     if (!el) return false;
     if (!hand) { el.click(); return true; }
     const p = handPoint(el);
-    /* placed, not moved: the transform lands with transitions off so the
-       glyph fades in where it belongs instead of sliding in from wherever
-       it last was */
-    hand.style.transition = "none";
-    hand.style.transform = "translate(" + (p.x - 4) + "px, " + (p.y - 2) + "px)";
-    void hand.offsetWidth;
-    hand.style.transition = "";
+    const ex = p.x - 4, ey = p.y - 2;                 // the glyph tip on the control
+    const off = HAND_TRAVEL * Math.SQRT1_2;           // equal parts across and up
+    const sx = ex + off, sy = ey + off;               // start: below and right
+
     hand.classList.add("is-on");
-    await sleep(500);
+    const rise = hand.animate(
+      [
+        { transform: "translate(" + sx + "px, " + sy + "px)", opacity: 0 },
+        { transform: "translate(" + ex + "px, " + ey + "px)", opacity: 1 },
+      ],
+      { duration: 700, easing: "cubic-bezier(0.22, 0.61, 0.36, 1)", fill: "forwards" },
+    );
+    await rise.finished;
+
+    /* Take the travel's end state into inline style and let the animation
+       go, so the hold below can steer the transform without two authors
+       fighting over it. */
+    rise.commitStyles();
+    rise.cancel();
+
     hand.classList.add("is-press");
     await sleep(170);
     hand.classList.remove("is-press");
+    const card = el.closest(".agent-prop") || el.parentElement;
     el.click();
+
+    /* The two seconds it stays, dead still. A real cursor does not chase
+       the page: you click, the content reflows under your hand, and your
+       hand is where you left it. Following the target instead looked like
+       drifting -- measured, it slid nearly 300px while the thread grew --
+       so the cursor makes exactly ONE movement per press, the rise, and
+       nothing after it. */
+    await sleep(2000);
+
+    const away = hand.animate(
+      [
+        { transform: "translate(" + ex + "px, " + ey + "px)", opacity: 1 },
+        { transform: "translate(" + ex + "px, " + ey + "px)", opacity: 0 },
+      ],
+      { duration: 340, easing: "ease", fill: "forwards" },
+    );
+    await away.finished;
     hand.classList.remove("is-on");
-    await sleep(140);
+    /* hand the properties back so the next call starts from a clean slate */
+    away.cancel();
+    hand.style.transform = "";
     return true;
   }
 
@@ -2509,7 +2558,9 @@ async function playRun() {
     }
     run.say("cleared the conversation at " + mark(), "46s", "step");
 
-    await after(48, 2);
+    /* the Clear press holds two seconds and fades: the stitch waits for
+       the cursor to be gone rather than dissolving over it */
+    await after(48, 0.6);
   } catch (e) {
     run.say(String((e && e.message) || e), "stopped", "warn");
   }
