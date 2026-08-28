@@ -857,6 +857,7 @@
   flex: 1; min-height: 0;
   display: grid;
   align-items: center;
+  position: relative;   /* the walk arrows overlay the stage itself */
 }
 .gal-stage__frame {
   height: 100%; min-height: 0;
@@ -869,25 +870,30 @@
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
   animation: content-in 200ms var(--motion-ease) both;
 }
+/* Overlay walk arrows: large, riding the stage's far edges over whatever the
+   image is, so they get a translucent ground and a blur to stay legible on
+   any picture without ever fully covering it. */
 .gal-stage__nav {
-  height: 44px; width: 44px;
+  position: absolute; top: 50%; transform: translateY(-50%);
+  height: 58px; width: 58px;
   display: grid; place-items: center;
-  background: var(--surface); color: var(--text-secondary);
-  border: 1px solid var(--border); border-radius: 50%;
-  cursor: pointer;
-  transition: color var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong); border-radius: 50%;
+  cursor: pointer; z-index: 2;
+  transition: background-color var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease);
 }
-.gal-stage__nav:hover:not(:disabled) { color: var(--text-primary); border-color: var(--border-strong); }
-.gal-stage__nav:disabled { opacity: 0.3; cursor: default; }
-/* the walk row: previous | the work's facts | next, under the image */
+.gal-stage__nav--prev { left: 14px; }
+.gal-stage__nav--next { right: 14px; }
+.gal-stage__nav:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  border-color: var(--accent);
+}
+.gal-stage__nav:disabled { opacity: 0.25; cursor: default; }
 .gal-meta {
-  display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px;
-  align-items: center; gap: var(--space-2);
-}
-.gal-meta__line {
   display: flex; align-items: baseline; gap: var(--space-2);
   justify-content: center; flex-wrap: wrap;
-  min-width: 0; text-align: center;
 }
 .gal-meta__title { font-size: var(--font-body-md); color: var(--text-primary); }
 .gal-meta__rest {
