@@ -855,11 +855,9 @@
 }
 .gal-stage {
   flex: 1; min-height: 0;
-  display: grid; grid-template-columns: minmax(0, 1fr) 44px;
-  align-items: center; gap: var(--space-1);
+  display: grid;
+  align-items: center;
 }
-/* previous over next, one cluster on the right edge */
-.gal-stage__navs { display: flex; flex-direction: column; gap: 8px; align-self: center; }
 .gal-stage__frame {
   height: 100%; min-height: 0;
   display: flex; align-items: center; justify-content: center;
@@ -881,10 +879,15 @@
 }
 .gal-stage__nav:hover:not(:disabled) { color: var(--text-primary); border-color: var(--border-strong); }
 .gal-stage__nav:disabled { opacity: 0.3; cursor: default; }
+/* the walk row: previous | the work's facts | next, under the image */
 .gal-meta {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center; gap: var(--space-2);
+}
+.gal-meta__line {
   display: flex; align-items: baseline; gap: var(--space-2);
   justify-content: center; flex-wrap: wrap;
-  padding: 0 52px;
+  min-width: 0; text-align: center;
 }
 .gal-meta__title { font-size: var(--font-body-md); color: var(--text-primary); }
 .gal-meta__rest {

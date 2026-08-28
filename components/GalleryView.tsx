@@ -174,32 +174,29 @@ export default function GalleryView({ items }: { items: GalleryItem[] }) {
                 <button className="gal-stage__frame" onClick={() => open(current.id)} title="Open in Analyze">
                   <img key={current.id} src={"/api/img/" + current.id} alt={current.title} decoding="async" />
                 </button>
-                {/* both arrows ride the right edge as one cluster, the way a
-                    viewer's hand stays in one place while walking a deck */}
-                <div className="gal-stage__navs">
-                  {/* a vertical cluster speaks vertically: up walks back, down
-                      walks on. IconCaret's base glyph points RIGHT (›), so up
-                      is -90 and down is +90 -- measured on the rendered path,
-                      not assumed, after assuming cost this cluster two tries. */}
-                  <button
-                    className="gal-stage__nav" aria-label="Previous"
-                    disabled={cursor === 0}
-                    onClick={() => setCursor((c) => Math.max(0, c - 1))}
-                  ><IconCaret width={15} height={15} style={{ transform: "rotate(-90deg)" }} /></button>
-                  <button
-                    className="gal-stage__nav" aria-label="Next"
-                    disabled={cursor === items.length - 1}
-                    onClick={() => setCursor((c) => Math.min(items.length - 1, c + 1))}
-                  ><IconCaret width={15} height={15} style={{ transform: "rotate(90deg)" }} /></button>
-                </div>
               </div>
+              {/* The walk lives BELOW the image: previous at the left end,
+                  next at the right, the meta line between them. IconCaret's
+                  base glyph points RIGHT, so left is the 180. */}
               <div className="gal-meta">
-                <span className="gal-meta__title">{current.title}</span>
-                <span className="gal-meta__rest">
-                  {current.artist ? current.artist + " · " : ""}{current.w} × {current.h} ·{" "}
-                  {(current.format ?? "image").toUpperCase()} · {fmtBytes(current.bytes)} · {fmtDate(current.createdAt)} ·{" "}
-                  {cursor + 1} / {items.length}
-                </span>
+                <button
+                  className="gal-stage__nav" aria-label="Previous"
+                  disabled={cursor === 0}
+                  onClick={() => setCursor((c) => Math.max(0, c - 1))}
+                ><IconCaret width={15} height={15} style={{ transform: "rotate(180deg)" }} /></button>
+                <div className="gal-meta__line">
+                  <span className="gal-meta__title">{current.title}</span>
+                  <span className="gal-meta__rest">
+                    {current.artist ? current.artist + " · " : ""}{current.w} × {current.h} ·{" "}
+                    {(current.format ?? "image").toUpperCase()} · {fmtBytes(current.bytes)} · {fmtDate(current.createdAt)} ·{" "}
+                    {cursor + 1} / {items.length}
+                  </span>
+                </div>
+                <button
+                  className="gal-stage__nav" aria-label="Next"
+                  disabled={cursor === items.length - 1}
+                  onClick={() => setCursor((c) => Math.min(items.length - 1, c + 1))}
+                ><IconCaret width={15} height={15} /></button>
               </div>
               <div className="gal-strip" ref={stripRef} {...stripDrag}>
                 {items.map((it, i) => (
