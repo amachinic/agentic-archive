@@ -78,7 +78,16 @@ type ThreadItem =
   | { type: "ctas"; options: CtaOpt[]; picked: string | null }
   | { type: "timeline" }
   | { type: "outcome"; rows: OutRow[] }
-  | { type: "skills" };
+  | { type: "skills" }
+  /* what search_outside found: outside the library, so shown here in the
+     conversation rather than on the canvas, which draws by image id */
+  | { type: "candidates"; query: string; items: Candidate[] };
+
+type Candidate = {
+  source: string; remoteId: string; title: string;
+  creator: string | null; pageUrl: string | null; thumbUrl: string | null;
+  licence: string | null; keepable: boolean;
+};
 
 type CtaOpt = { key: string; label: string; sub?: string };
 type Action = { kind: "cta"; key: string; label: string } | { kind: "prompt"; text: string };
@@ -1299,6 +1308,7 @@ export default function GraphView({
     if (tool === "filter_by_terms") return (Array.isArray(args.terms) ? args.terms.join(", ") : "");
     if (tool === "propose_folder") return "“" + String(args.name ?? "") + "”";
     if (tool === "sort_field") return String(args.by ?? "");
+    if (tool === "search_outside") return "“" + String(args.query ?? "") + "”" + (args.source ? " · " + String(args.source) : "");
     return "";
   };
   const fmtResult = (raw: string): string => {
@@ -1307,6 +1317,8 @@ export default function GraphView({
       if (r.staged) return "staged · " + r.count;
       if (r.sorted) return r.sorted === "off" ? "grid dropped" : "grid re-formed";
       if (r.shown != null) return "field re-formed · " + r.shown;
+      /* search_outside: found/keepable, checked before the generic count */
+      if (r.found != null) return r.found + " outside · " + (r.keepable ?? 0) + " keepable";
       if (r.count != null) return r.count + " in set";
       if (r.released) return "field released";
     } catch { /* opaque */ }
@@ -1790,6 +1802,10 @@ export default function GraphView({
       if (d.proposal) {
         setThread((it) => [...it, { type: "proposal", name: d.proposal.name, note: d.proposal.note ?? "", ids: d.proposal.ids, status: "pending" }]);
         logLedger("curator", "proposed “" + d.proposal.name + "” · " + d.proposal.ids.length + " images");
+      }
+      if (d.candidates && Array.isArray(d.candidates.items) && d.candidates.items.length) {
+        setThread((it) => [...it, { type: "candidates", query: String(d.candidates.query ?? ""), items: d.candidates.items }]);
+        logLedger("curator", "searched outside · " + d.candidates.items.length + " candidates");
       }
       setThread((it) => [...it, { type: "msg", role: "assistant", content: d.reply }]);
       if (Array.isArray(d.ids) && d.ids.length) {
@@ -2785,6 +2801,38 @@ export default function GraphView({
                                 <span>{r.text}</span>
                               </div>
                             ))}
+                          </div>
+                        );
+                      }
+                      if (m.type === "candidates") {
+                        const withThumb = m.items.filter((c) => c.thumbUrl);
+                        const metaOnly = m.items.length - withThumb.length;
+                        return (
+                          <div key={i} className="agent-cands">
+                            <div className="agent-cands__t">
+                              from outside · “{m.query}” · {m.items.length} candidate{m.items.length === 1 ? "" : "s"},{" "}
+                              {m.items.filter((c) => c.keepable).length} keepable
+                            </div>
+                            <div className="agent-cands__grid">
+                              {withThumb.map((c) => (
+                                <a
+                                  key={c.source + c.remoteId}
+                                  className="agent-cand"
+                                  href={c.pageUrl ?? undefined}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                  title={c.title + (c.creator ? " — " + c.creator : "") + (c.licence ? " · " + c.licence : "")}
+                                >
+                                  {/* remote thumbs, so decoding stays off the main thread */}
+                                  <img src={c.thumbUrl!} alt={c.title} loading="lazy" decoding="async" />
+                                  <span className="agent-cand__src">{c.source}{c.keepable ? " · CC0" : ""}</span>
+                                </a>
+                              ))}
+                            </div>
+                            <p className="agent-cands__note">
+                              {metaOnly > 0 ? metaOnly + " more matched as records without a reachable image. " : ""}
+                              Not in the library — a candidate opens at its source.
+                            </p>
                           </div>
                         );
                       }

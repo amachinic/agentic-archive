@@ -165,6 +165,29 @@ function migrate(conn: DatabaseSync) {
       created_at INTEGER NOT NULL
     );
 
+    /* Outside sources this archive may look at, and the credentials for the
+       ones that need them.
+
+       Tokens live here rather than in the browser for the obvious reason: a
+       page that stashed a bearer token in localStorage would be the one
+       genuinely dangerous surface in the app. atlas.db is local, gitignored
+       and never published -- the sanitising publisher does not carry this
+       table -- so a token in it is exactly as exposed as the library itself.
+
+       status: 'enabled' for a source that needs nothing, 'connected' once an
+       account has authorised. Absent row means off. */
+    CREATE TABLE IF NOT EXISTS connections (
+      source        TEXT PRIMARY KEY,
+      status        TEXT NOT NULL,
+      account       TEXT,
+      access_token  TEXT,
+      refresh_token TEXT,
+      expires_at    INTEGER,
+      scopes        TEXT,
+      connected_at  INTEGER NOT NULL,
+      last_error    TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_img_phash    ON images(phash);
 
     /* The provenance ledger, PREMIS-shaped: every action that touches the
@@ -192,6 +215,8 @@ function migrate(conn: DatabaseSync) {
     "ALTER TABLE images ADD COLUMN ocr_refined INTEGER", // text-classification marker
     "ALTER TABLE images ADD COLUMN artist TEXT",          // identified creator
     "ALTER TABLE images ADD COLUMN artist_at INTEGER",    // identification marker
+    // what the source said about itself on the probe that connected it
+    "ALTER TABLE connections ADD COLUMN detail TEXT",
   ]) {
     try { conn.exec(ddl); } catch { /* already there */ }
   }

@@ -3,13 +3,17 @@ import { canonical } from "@/lib/taxonomy";
 import { db } from "@/lib/db";
 import { listImages } from "@/lib/queries";
 import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
+import { listConnections } from "@/lib/connections";
+import { searchConnected, type Candidate } from "@/lib/sources";
 import type { ChatMsg } from "@/lib/vision";
 
 export const maxDuration = 120;
 
 const ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-120b";
-const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+/* overridable so the loop can run against a local OpenAI-compatible server —
+   LM Studio, ollama, or a test fixture — without touching this file */
+const OPENAI_ENDPOINT = process.env.OPENAI_ENDPOINT || "https://api.openai.com/v1/chat/completions";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1";
 const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
 
@@ -155,7 +159,28 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "search_outside",
+      description: "Search the CONNECTED outside sources (museums, image platforms) for images that are NOT in the library. These APIs are keyword search over catalogue text, so translate mood or theme language into concrete probe words and call this several times with different ones (e.g. melancholy, mourning, solitude, vanitas) rather than once with a vague phrase. Results are CANDIDATES: they appear to the human in the conversation, never join the working set, and nothing is written. Report the keepable count honestly — it is how many carry a licence permitting a copy.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "concrete search words a museum catalogue would use" },
+          source: { type: "string", description: "restrict to one connected source id (arena, pinterest, rijks, met, artic, cleveland, europeana); omit to search all" },
+        },
+        required: ["query"],
+      },
+    },
+  },
 ];
+
+/* how many candidates one turn may accumulate, across every search_outside
+   call in it: past this the strip stops informing and starts scrolling */
+const CANDIDATE_CAP = 40;
+/* per source, per call: the Met costs one round trip per candidate */
+const OUTSIDE_LIMIT = 6;
 
 /* the agent picks filter terms from THIS list; guessing was how a hunt for
    "deep rich colours" zeroed its own working set four times in a row */
@@ -278,12 +303,23 @@ export async function POST(req: Request) {
     proposal: { name: string; note: string; ids: number[] } | null;
     sort: { by: "colour" | "light" | "period" | "kind" | "off" } | null;
     release: boolean;
-  } = { shownIds: null, proposal: null, sort: null, release: false };
+    /* what search_outside found this turn: shown in the conversation, never
+       on the canvas — candidates have no image id and no place in ws */
+    candidates: { query: string; items: Candidate[] } | null;
+  } = { shownIds: null, proposal: null, sort: null, release: false, candidates: null };
   const toolLog: ToolLogRow[] = [];
+
+  /* the sources the agent may reach this turn. Fixed per request: a public
+     visitor must never trigger outbound calls on the host's connections */
+  const outsideSources = IS_HOSTED_READ_ONLY
+    ? []
+    : listConnections().filter((c) => c.status !== "off").map((c) => c.id);
 
   const sample = () => ws.slice(0, 4).map((r) => r.title).join(", ");
 
-  function runTool(name: string, args: Record<string, unknown>): string {
+  /* async because search_outside genuinely goes to the network; every other
+     case is a local SQLite query and returns on the same tick as before */
+  async function runTool(name: string, args: Record<string, unknown>): Promise<string> {
     switch (name) {
       case "search_library": {
         const q = String(args.query ?? "").slice(0, 200);
@@ -448,6 +484,44 @@ export async function POST(req: Request) {
         };
         return JSON.stringify({ staged: true, count: out.proposal.ids.length });
       }
+      case "search_outside": {
+        if (!outsideSources.length) {
+          return JSON.stringify({ error: "no outside sources are connected. Tell the human to connect one under Agents → Connections." });
+        }
+        const q = String(args.query ?? "").slice(0, 200).trim();
+        if (!q) return JSON.stringify({ error: "a query is required" });
+        const only = outsideSources.find((id) => id === args.source) ?? null;
+
+        const { results, searched, failed } = await searchConnected(q, { limit: OUTSIDE_LIMIT, only });
+
+        /* Accumulate across the turn's probes: the strip the human sees is
+           the union, deduped by identity, capped so it stays a strip. */
+        const held = out.candidates?.items ?? [];
+        const seen = new Set(held.map((c) => c.source + ":" + c.remoteId));
+        for (const c of results) {
+          if (held.length >= CANDIDATE_CAP) break;
+          const key = c.source + ":" + c.remoteId;
+          if (!seen.has(key)) { seen.add(key); held.push(c); }
+        }
+        out.candidates = {
+          query: out.candidates ? out.candidates.query + ", " + q : q,
+          items: held,
+        };
+
+        const perSource: Record<string, number> = {};
+        for (const c of results) perSource[c.source] = (perSource[c.source] ?? 0) + 1;
+        return JSON.stringify({
+          query: q,
+          searched: searched.length,
+          found: results.length,
+          keepable: results.filter((c) => c.keepable).length,
+          per_source: perSource,
+          sample: results.slice(0, 4).map((c) => c.title).join(", "),
+          gathered_this_turn: held.length,
+          ...(failed.length ? { failed } : {}),
+          note: "candidates appear to the human as a strip in the conversation. They are NOT in the library and NOT on the canvas; say what you found and how much of it is keepable.",
+        });
+      }
       default:
         return JSON.stringify({ error: "unknown tool" });
     }
@@ -471,18 +545,34 @@ export async function POST(req: Request) {
     ? "\n\nThis is the public, read-only archive. You can search, filter, widen and re-form the field, and that is genuinely useful. You CANNOT file a folder, tag anything, or change the archive in any way, and you have no tool for it. If the human asks you to file, save, tag or organise into folders, say plainly that the hosted archive is read-only and that running the project locally is where those work. Do not apologise at length, and do not offer it as a next step."
     : "";
 
-  const system = SYSTEM + hosted + holding + "\n\nKEYTERM VOCABULARY (term(count)):\n" + vocabulary();
+  /* The outside tool is spoken about only when it exists. A model told about
+     a tool it was not given will try to call it anyway; a model given a tool
+     with no guidance will use it for requests the library already answers. */
+  const outside = outsideSources.length
+    ? "\n\nsearch_outside reaches these connected sources: " + outsideSources.join(", ") +
+      ". Use it ONLY when the human asks for images beyond the library — new material, museums, 'find more like this from outside'. " +
+      "The library always comes first for anything it can answer. Candidates are not in the library: never file, sort or count them as if they were."
+    : IS_HOSTED_READ_ONLY
+      ? "\n\nOutside sources (museum and platform search) are a local-runtime capability and are not available on this hosted archive. If the human asks to search museums or outside platforms, say that plainly."
+      : "\n\nNo outside source is connected, and you have no tool for reaching one. If the human asks to search museums or outside platforms, say so plainly and point them to Agents → Connections.";
+
+  const system = SYSTEM + hosted + holding + outside + "\n\nKEYTERM VOCABULARY (term(count)):\n" + vocabulary();
   const turns = body.messages
     .filter((m) => m.role === "user" || m.role === "assistant")
     .slice(-10)
     .map((m) => ({ role: m.role, content: m.content }));
 
-  /* Nothing here can be written, so propose_folder is not offered: the accept
-     it leads to would be refused by the middleware, and an agent that stages
-     something it cannot finish is worse than one that says it cannot. */
-  const tools = IS_HOSTED_READ_ONLY
-    ? TOOLS.filter((t) => t.function.name !== "propose_folder")
-    : TOOLS;
+  /* Nothing on the hosted archive can be written, so propose_folder is not
+     offered there: the accept it leads to would be refused by the middleware.
+     search_outside is offered only when a source is actually connected --
+     and never hosted, where outbound calls would spend the host's quota on
+     anonymous traffic. One list, used by BOTH provider paths: the Anthropic
+     loop mapping the unfiltered constant is how a tool escapes its gate. */
+  const tools = TOOLS.filter((t) => {
+    if (t.function.name === "propose_folder") return !IS_HOSTED_READ_ONLY;
+    if (t.function.name === "search_outside") return outsideSources.length > 0;
+    return true;
+  });
 
   const msgs: LoopMsg[] = [{ role: "system", content: system }, ...turns];
 
@@ -494,7 +584,9 @@ export async function POST(req: Request) {
   */
   async function runClaude(): Promise<string> {
     const client = new Anthropic({ timeout: 90_000 });
-    const tools: Anthropic.Tool[] = TOOLS.map((t) => ({
+    /* the FILTERED list, not the constant: both provider paths must offer
+       exactly the same tools or the gates above only guard one of them */
+    const claudeTools: Anthropic.Tool[] = tools.map((t) => ({
       name: t.function.name,
       description: t.function.description,
       input_schema: t.function.parameters as Anthropic.Tool.InputSchema,
@@ -509,7 +601,7 @@ export async function POST(req: Request) {
         model: CLAUDE_MODEL,
         max_tokens: 8000,
         system,
-        tools,
+        tools: claudeTools,
         /* the job is picking two or three tools off a list of six, so the
            cheap, fast end of the effort scale is the right one here */
         thinking: { type: "adaptive" },
@@ -539,7 +631,7 @@ export async function POST(req: Request) {
         const args = (c.input ?? {}) as Record<string, unknown>;
         let result: string;
         try {
-          result = runTool(c.name, args);
+          result = await runTool(c.name, args);
         } catch (err) {
           result = JSON.stringify({ error: (err instanceof Error ? err.message : "tool failed").slice(0, 120) });
         }
@@ -568,6 +660,10 @@ export async function POST(req: Request) {
         ids: out.shownIds ?? out.proposal?.ids ?? null,
         proposal: out.proposal,
         sort: out.sort,
+        /* release was missing from this return for as long as the two paths
+           existed, which made release_field a silent no-op on Anthropic */
+        release: out.release,
+        candidates: out.candidates,
       });
     }
 
@@ -606,7 +702,7 @@ export async function POST(req: Request) {
           try { args = JSON.parse(tc.function.arguments || "{}"); } catch { /* leave empty */ }
           let result: string;
           try {
-            result = runTool(tc.function.name, args);
+            result = await runTool(tc.function.name, args);
           } catch (err) {
             result = JSON.stringify({ error: (err instanceof Error ? err.message : "tool failed").slice(0, 120) });
           }
@@ -633,6 +729,7 @@ export async function POST(req: Request) {
       reply, toolLog,
       ids: out.shownIds ?? out.proposal?.ids ?? null,
       proposal: out.proposal, sort: out.sort, release: out.release,
+      candidates: out.candidates,
     });
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : "agent failed" }, { status: 502 });

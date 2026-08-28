@@ -94,6 +94,17 @@
   --border-strong:  var(--neutral-300);  /* #c0c0c0  control outline */
   --network-line:   var(--neutral-600);  /* #555    node-network threads — darker so they read on the light page */
   --accent-wash-solid: color-mix(in srgb, var(--accent) 8%, var(--surface));
+
+  /* ---- Status: the ONLY hues allowed outside the monochrome contract ----
+     The interaction accent stays black-or-white; these say whether a thing
+     succeeded or failed and nothing else, so they never compete with it.
+     Each ships a hue (for outlines and washes, mixed at low alpha) and a
+     foreground tuned for text on that wash. Consumers should reach for
+     color-mix on --ok / --bad rather than hard-coding a second tint. */
+  --ok:      #2f8a48;
+  --ok-fg:   #1f6135;
+  --bad:     #c5322c;
+  --bad-fg:  #a32620;
 }
 
 /* ---- Semantic: DARK ---- */
@@ -116,6 +127,14 @@
   --border-strong:  var(--neutral-600);  /* #555    */
   --network-line:   var(--neutral-300);  /* #c0c0c0  node-network threads — soft grey on the black page */
   --accent-wash-solid: color-mix(in srgb, var(--accent) 8%, var(--surface));
+
+  /* Status, lifted for the near-black page: the light-theme greens and reds
+     go muddy against #020202, so both hue and foreground brighten rather than
+     the wash being asked to carry more alpha. */
+  --ok:      #4cc26a;
+  --ok-fg:   #7ee08f;
+  --bad:     #f0524d;
+  --bad-fg:  #ff9a95;
 }
 
 /* Theme cross-fade — useTheme.ts flips data-theme inside a View Transition, so the whole page
