@@ -10,7 +10,7 @@
 
 import { useEffect, useRef } from "react";
 
-export type PixMode = "forms" | "scan" | "drop";
+export type PixMode = "forms" | "scan" | "drop" | "seek";
 
 function hash(a: number, b: number) {
   let h = (a * 374761393 + b * 668265263) >>> 0;
@@ -85,6 +85,16 @@ function opacityAt(mode: PixMode, i: number, t: number, step: number): number {
     return isLine ? 1 : behind ? 0.75 : 0.05 + hash(i, step) * 0.5;
   }
 
+  if (mode === "seek") {
+    /* Historian: a ring leaves home and goes out, again and again — the
+       hunt departs, the centre stays lit, what it passed keeps a low glow */
+    const d = Math.abs(r - 2) + Math.abs(c - 2);       // Manhattan ring 0..4
+    const ring = ((t % 1900) / 1900) * 6 - 0.5;
+    if (d === 0) return 0.9;
+    if (Math.abs(d - ring) < 0.55) return 1;
+    return d < ring ? 0.3 : 0.05 + hash(i, step) * 0.25;
+  }
+
   /* Media Manager: a payload drops into a tray, again and again */
   const ph = (t % 1600) / 1600;
   const y = ph * 5.4 - 0.7;
@@ -111,6 +121,8 @@ export default function ArchetypePix({ mode, size = 30 }: { mode: PixMode; size?
         Array.from({ length: 25 }, (_, i) => {
           const { r, c } = cellOf(i);
           if (mode === "scan") return r === 2;
+          /* the Historian's still: centre plus its middle ring, mid-departure */
+          if (mode === "seek") return Math.abs(r - 2) + Math.abs(c - 2) === 2 || (r === 2 && c === 2);
           return r === 4 || (r === 3 && (c === 0 || c === 4)) || (c === 2 && r === 1);
         });
       rects.forEach((r, i) => r.setAttribute("fill-opacity", still[i] ? "0.95" : "0.06"));

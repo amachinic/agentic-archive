@@ -1,11 +1,12 @@
 "use client";
 
 /*
-  One agent, three lenses. Atlas is the only mind; the archetypes below are
+  One agent, four lenses. Atlas is the only mind; the archetypes below are
   capability namespaces it reasons through — the Archivist names things, the
-  Curator decides what belongs together, the Media Manager files and ships.
-  Hand-off between them is shared data (vocabulary, palettes, fingerprints),
-  never messages you can't see. Autonomy is a SETTING per archetype.
+  Curator decides what belongs together, the Historian hunts beyond the
+  archive, the Media Manager files and ships. Hand-off between them is shared
+  data (vocabulary, palettes, fingerprints), never messages you can't see.
+  Autonomy is a SETTING per archetype.
 */
 
 import { useEffect, useState } from "react";
@@ -38,6 +39,12 @@ const ARCHETYPES: Archetype[] = [
     status: "live · in the Network panel", budget: "per turn · ~2k tokens",
   },
   {
+    key: "historian", mode: "seek", name: "Historian", autonomy: "read-only",
+    desc: "Hunts beyond the archive. Plans a search the way art history files a mood — synonyms, iconography, movements and named artists — sweeps the connected sources' own catalogues, and reads the licence on everything that comes back. Candidates open at their source; nothing enters the library.",
+    tools: ["search_outside", "plan_probes", "medium_facet", "read_licence"],
+    status: "live · via Connections", budget: "per probe · sources' APIs",
+  },
+  {
     key: "manager", mode: "drop", name: "Media Manager", autonomy: "proposes",
     desc: "Files and ships. Keeps folders digital in Atlas, mirrors them to disk as real files under ~/Atlas Exports when you ask, and always asks where a thing should live. Originals are never touched.",
     tools: ["keep_digital", "export_disk", "create_folder", "collect"],
@@ -46,11 +53,11 @@ const ARCHETYPES: Archetype[] = [
 ];
 
 const GUIDELINES: [string, string][] = [
-  ["One brain, three lenses", "There is exactly one agent. The archetypes are capability namespaces Atlas reasons through, not separate minds: nothing has to be explained twice and no archetype can disagree with another."],
-  ["Hand-off is shared data", "Archetypes coordinate through the same vocabulary, palettes and fingerprints, never through messages you can't see. The Curator sorts with the Archivist's keys; the Media Manager files what the Curator built."],
-  ["Autonomy is a setting", "Every archetype holds one of two levels today. ACTS may change what you see (the field, an arrangement) but never the library. PROPOSES may only stage changes for your accept."],
+  ["One brain, four lenses", "There is exactly one agent. The archetypes are capability namespaces Atlas reasons through, not separate minds: nothing has to be explained twice and no archetype can disagree with another."],
+  ["Hand-off is shared data", "Archetypes coordinate through the same vocabulary, palettes and fingerprints, never through messages you can't see. The Curator sorts with the Archivist's keys; the Media Manager files what the Curator built; what the Historian brings home is catalogued by the same vocabulary as everything else."],
+  ["Autonomy is a setting", "Every archetype holds one of three levels. ACTS may change what you see (the field, an arrangement) but never the library. PROPOSES may only stage changes for your accept. READ-ONLY may only look: the Historian searches the outside sources and shows candidates, and cannot write at all."],
   ["The library is written once", "Exactly one door writes agent intentions into the library: an accepted proposal. Atlas never creates, files, merges or deletes directly: you accept, or nothing happens."],
-  ["Local first", "Fingerprints, keyterms, palettes and similarity are free. Atlas reasons against local tools by default and spends model tokens only where language or vision genuinely helps."],
+  ["Local first", "Fingerprints, keyterms, palettes and similarity are free. Atlas reasons against local tools by default and spends model tokens only where language or vision genuinely helps. Outside sources are reached read-only through Connections, and what they hold enters the library only through the accept door."],
   ["Everything is visible", "Four doors (conversation, CTAs, “/” commands, contextual triggers) route into the same actions. Every tool call renders in the thread as it happens, and /history keeps the session’s record."],
 ];
 
@@ -82,7 +89,7 @@ export default function AgentsView() {
           <span className="agentcard__auto is-proposes">proposes</span>
         </div>
         <p className="agentcard__desc">
-          One agent with three lenses. Atlas plans in the Network conversation, works the
+          One agent with four lenses. Atlas plans in the Network conversation, works the
           library&apos;s own local tools first, and stages every write as a proposal you accept
           or reject. The archetypes below are its capability namespaces, not separate minds.
         </p>

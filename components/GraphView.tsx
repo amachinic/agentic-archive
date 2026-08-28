@@ -1349,6 +1349,16 @@ export default function GraphView({
     } catch { return true; }
   }
 
+  /* The Historian's switch travels WITH the request: the server drops the
+     outside-search tool for a turn that says false, so switching the lens off
+     in Agents genuinely retires the capability rather than hiding a button. */
+  function historianEnabled(): boolean {
+    try {
+      const v = JSON.parse(localStorage.getItem("atlas-agents-enabled") || "{}");
+      return v.historian !== false;
+    } catch { return true; }
+  }
+
   /** every id currently forming the field, in the order it is laid out */
   function fieldIds(): number[] {
     return sim.current.nodes.map((n) => n.id);
@@ -1777,7 +1787,7 @@ export default function GraphView({
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, field: fieldIds() }),
+        body: JSON.stringify({ messages: history, field: fieldIds(), historian: historianEnabled() }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "the agent failed");
@@ -1809,7 +1819,7 @@ export default function GraphView({
       }
       if (d.candidates && Array.isArray(d.candidates.items) && d.candidates.items.length) {
         setThread((it) => [...it, { type: "candidates", query: String(d.candidates.query ?? ""), items: d.candidates.items }]);
-        logLedger("curator", "searched outside · " + d.candidates.items.length + " candidates");
+        logLedger("historian", "searched outside · " + d.candidates.items.length + " candidates");
       }
       setThread((it) => [...it, { type: "msg", role: "assistant", content: d.reply }]);
       if (Array.isArray(d.ids) && d.ids.length) {
