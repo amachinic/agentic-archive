@@ -13,7 +13,7 @@ import AnalysisBrief from "./AnalysisBrief";
 import UploadModal from "./UploadModal";
 import GlyphLoader from "./GlyphLoader";
 import { useDragScroll } from "./useDragScroll";
-import { IconPlus, IconSearch, IconUpload, IconX } from "./icons";
+import { IconCaret, IconPlus, IconSearch, IconUpload, IconX } from "./icons";
 
 type PickerItem = { id: number; title: string; w: number; h: number };
 type Detail = { id: number; ai_at: number | null; ai_analysis: Analysis | null; ai_title: string | null; filename: string };
@@ -184,21 +184,29 @@ export default function AnalyzeView({
           <span className="mono-xs">upload or pick an image · complete visual analysis · ask anything about it</span>
         </div>
         <div className="topbar__spacer" />
+        {/* the strip below is pictures only: the acts of adding and finding
+            live up here with the page's name */}
+        <div className="field analyze__find">
+          <IconSearch width={13} height={13} />
+          <input placeholder="Search the library..." value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search library" />
+        </div>
+        <button className="btn is-primary" onClick={() => setShowUpload(true)}>
+          <IconUpload width={13} height={13} />
+          Upload
+        </button>
       </header>
 
       <div className="work">
         <main className="pane pane--flush" tabIndex={-1}>
           <div className="analyze">
             {/* ---- picker ---- */}
+            {/* the picker: a paged strip of pictures and nothing else — the
+                carets stay pinned at the ends and walk a screenful at a time */}
             <div className="analyze__picker" {...pickerDrag}>
-              <button className="btn is-primary analyze__upload" onClick={() => setShowUpload(true)}>
-                <IconUpload width={13} height={13} />
-                Upload images
-              </button>
-              <div className="field">
-                <IconSearch width={13} height={13} />
-                <input placeholder="Search the library..." value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search library" />
-              </div>
+              <button
+                className="analyze__page analyze__page--prev" aria-label="Scroll back"
+                onClick={(e) => e.currentTarget.parentElement?.scrollBy({ left: -420, behavior: "smooth" })}
+              ><IconCaret width={13} height={13} style={{ transform: "rotate(180deg)" }} /></button>
               <div className="analyze__grid">
                 {picker.map((p) => (
                   <button
@@ -211,6 +219,10 @@ export default function AnalyzeView({
                   </button>
                 ))}
               </div>
+              <button
+                className="analyze__page analyze__page--next" aria-label="Scroll on"
+                onClick={(e) => e.currentTarget.parentElement?.scrollBy({ left: 420, behavior: "smooth" })}
+              ><IconCaret width={13} height={13} /></button>
             </div>
 
             {/* ---- brief + conversation ---- */}
@@ -284,17 +296,8 @@ export default function AnalyzeView({
                     </div>
                   )}
 
-                  {a && !analyzing && (
-                    <>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                        <h2 className="insp-title">{detail?.ai_title}</h2>
-                        <div className="topbar__spacer" />
-                        <button className="btn is-ghost" onClick={() => runAnalysis(selected)}>Re-analyze</button>
-                      </div>
-                      <AnalysisBrief a={a} />
-                    </>
-                  )}
-
+                  {/* the conversation rides ABOVE the details: the question you
+                      are about to ask beats the brief you have already read */}
                   <div className="chatbox">
                     <span className="mono-label">Conversation</span>
                     {thread.length === 0 && !chatBusy && (
@@ -347,6 +350,17 @@ export default function AnalyzeView({
                       </button>
                     </form>
                   </div>
+
+                  {a && !analyzing && (
+                    <>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                        <h2 className="insp-title">{detail?.ai_title}</h2>
+                        <div className="topbar__spacer" />
+                        <button className="btn is-ghost" onClick={() => runAnalysis(selected)}>Re-analyze</button>
+                      </div>
+                      <AnalysisBrief a={a} />
+                    </>
+                  )}
                 </div>
               )}
             </div>
