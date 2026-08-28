@@ -46,8 +46,14 @@ export async function GET(req: Request) {
   return new Response(upstream.body, {
     headers: {
       "Content-Type": type,
-      /* the bytes behind a given IIIF URL do not change */
-      "Cache-Control": "public, max-age=86400",
+      /* The bytes behind a given IIIF URL do not change, and the ORIGIN is
+         the scarce resource: the AIC asks for one request a second and runs
+         edge protection that will flag a burst (measured -- it flagged two
+         of ours). s-maxage puts Vercel's CDN in front, so a thumbnail is
+         fetched from the museum once a day per URL globally, however many
+         people look at it; stale-while-revalidate keeps tiles up while the
+         refresh happens behind. */
+      "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
     },
   });
 }
