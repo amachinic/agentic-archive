@@ -27,6 +27,7 @@ import Select from "./Select";
 import { IconX, IconPlus, IconCheck, IconCaret, IconChevronDown, IconTag, IconSearch, IconSave, IconSort, IconClock, IconDrive, IconPalette, IconRefresh, IconFolder, IconSparkle, IconUndo, IconCopy, IconTrash, IconAgent } from "./icons";
 import ThemeToggle from "./ThemeToggle";
 import ToolCheck from "./ToolCheck";
+import type { PixMode } from "./ArchetypePix";
 import type { ChatMsg } from "@/lib/vision";
 
 export type Keyterm = { id: number; name: string; kind: string; count: number };
@@ -74,6 +75,10 @@ const REVEAL_SPAN = REVEAL_LEAD + REVEAL_FADE;
 type ThreadItem =
   | { type: "msg"; role: "user" | "assistant"; content: string }
   | { type: "tool"; tool: string; detail: string; result: string; status: "running" | "done" }
+  /* the turn's head: ATLAS speaking from inside the thread, narrating what
+     is being done; the tool rows nest beneath it and the reply closes the
+     block (treatment I from the presence sandbox) */
+  | { type: "head"; what: string; status: "running" | "done" }
   | { type: "proposal"; name: string; note: string; ids: number[]; status: "pending" | "accepted" | "rejected" }
   | { type: "ctas"; options: CtaOpt[]; picked: string | null }
   | { type: "timeline" }
@@ -109,6 +114,26 @@ const COMMANDS = [
   { cmd: "/save", key: "save", label: "Save a folder", hint: "keep digital, mirror to disk, or both", arch: "media manager" },
   { cmd: "/history", key: "timeline", label: "History", hint: "everything from this session, in order", arch: "atlas" },
 ];
+
+/* Every tool the panel can show, attributed to the lens doing it and spoken
+   as a task rather than a call. The row leads with the lens's own ident —
+   ArchetypePix verb while running, pixel check once done — and the raw
+   tool(args) form survives on hover and in the ledger. */
+const TOOL_META: Record<string, { who: string; mode: PixMode; task: string }> = {
+  search_library: { who: "curator", mode: "forms", task: "hunting the library" },
+  filter_by_terms: { who: "curator", mode: "forms", task: "narrowing by keyterms" },
+  expand_similar: { who: "curator", mode: "forms", task: "widening to what resembles it" },
+  show_field: { who: "curator", mode: "forms", task: "re-forming the field" },
+  sort_field: { who: "curator", mode: "forms", task: "re-ordering the grid" },
+  release_field: { who: "curator", mode: "forms", task: "releasing the field" },
+  search_outside: { who: "historian", mode: "seek", task: "searching the connected sources" },
+  propose_folder: { who: "media manager", mode: "drop", task: "staging a folder for your accept" },
+  create_collection: { who: "media manager", mode: "drop", task: "filing the folder" },
+  add_to_collection: { who: "media manager", mode: "drop", task: "placing the images in it" },
+  export_folder: { who: "media manager", mode: "drop", task: "mirroring real files to disk" },
+  scan_duplicates: { who: "archivist", mode: "scan", task: "scanning for doubles" },
+  remove_duplicates: { who: "archivist", mode: "scan", task: "removing the lesser copies" },
+};
 /* the verb each capability performs, drawn rather than spelled */
 type IconFn = (p: React.SVGProps<SVGSVGElement>) => React.ReactElement;
 const CTA_ICON: Record<string, IconFn> = {
@@ -715,6 +740,21 @@ export default function GraphView({
   /* the first thing asked becomes the conversation's TOPIC: the rail input
      locks read-only around it and titles the chat below */
   const topic = thread.find((m): m is Extract<ThreadItem, { type: "msg" }> => m.type === "msg" && m.role === "user")?.content ?? null;
+
+  /* which items sit inside a turn: everything after a head, until the
+     conversation returns to the user — their message, or choices offered
+     to them. The reply is part of the block; the head names the speaker. */
+  const nestedFlags = useMemo(() => {
+    const flags: boolean[] = [];
+    let inTurn = false;
+    for (const x of thread) {
+      if (x.type === "head") { inTurn = true; flags.push(false); continue; }
+      if (x.type === "ctas" || x.type === "skills" || x.type === "timeline" || (x.type === "msg" && x.role === "user")) inTurn = false;
+      flags.push(inTurn);
+    }
+    return flags;
+  }, [thread]);
+  const headRunning = thread.some((x) => x.type === "head" && x.status === "running");
 
   /* the conversation keeps its newest message in view, like the analysis chat */
   useEffect(() => {
@@ -1329,9 +1369,43 @@ export default function GraphView({
     return "done";
   };
 
-  /* a tool row lives on screen: it appears RUNNING with the dither boiling,
-     holds ~2s so the work is visible, then resolves into the pixel check */
+  /* The turn's head: ATLAS appears in the thread and narrates; whatever
+     follows until the conversation returns to the user nests beneath it.
+     One head per stretch of work — a user interjection (Accept) closes the
+     block and the next work opens a new one, so the chat order stays honest. */
+  function pushHead(what: string) {
+    setThread((it) => [...it, { type: "head", what, status: "running" }]);
+  }
+  /* both walk back to the LAST head and touch it only while it still runs */
+  function retitleHead(what: string) {
+    setThread((it) => {
+      for (let k = it.length - 1; k >= 0; k--) {
+        const x = it[k];
+        if (x.type !== "head") continue;
+        if (x.status !== "running") break;
+        return it.map((y, j) => (j === k && y.type === "head" ? { ...y, what } : y));
+      }
+      return it;
+    });
+  }
+  function closeHead(what: string) {
+    setThread((it) => {
+      for (let k = it.length - 1; k >= 0; k--) {
+        const x = it[k];
+        if (x.type !== "head") continue;
+        if (x.status !== "running") break;
+        return it.map((y, j) => (j === k && y.type === "head" ? { ...y, what, status: "done" as const } : y));
+      }
+      return it;
+    });
+  }
+
+  /* a tool row lives on screen: it appears RUNNING with the lens's ident
+     working, holds ~2s so the work is visible, then resolves into the pixel
+     check. The head narrates whatever the row is doing. */
   async function playToolRow(tool: string, detail: string, result: string, holdMs = 2000) {
+    const meta = TOOL_META[tool];
+    if (meta) retitleHead(meta.task);
     let index = -1;
     setThread((it) => {
       index = it.length;
@@ -1783,6 +1857,7 @@ export default function GraphView({
       return;
     }
     setPromptBusy(true);
+    pushHead("sifting the archive");
     try {
       const res = await fetch("/api/agent", {
         method: "POST",
@@ -1793,7 +1868,7 @@ export default function GraphView({
       if (!res.ok) throw new Error(d.error || "the agent failed");
       for (const t of (d.toolLog ?? []) as { tool: string; args: Record<string, unknown>; result: string }[]) {
         await playToolRow(t.tool, fmtDetail(t.tool, t.args), fmtResult(t.result));
-        logLedger("curator", t.tool + " " + fmtDetail(t.tool, t.args));
+        logLedger(TOOL_META[t.tool]?.who ?? "curator", t.tool + " " + fmtDetail(t.tool, t.args));
       }
       /* Releasing is the one case where the agent hands back NO ids on
          purpose: it is asking the field to stop being narrowed rather than to
@@ -1821,6 +1896,7 @@ export default function GraphView({
         setThread((it) => [...it, { type: "candidates", query: String(d.candidates.query ?? ""), items: d.candidates.items }]);
         logLedger("historian", "searched outside · " + d.candidates.items.length + " candidates");
       }
+      closeHead("replied");
       setThread((it) => [...it, { type: "msg", role: "assistant", content: d.reply }]);
       if (Array.isArray(d.ids) && d.ids.length) {
         pushCtas([
@@ -1832,6 +1908,7 @@ export default function GraphView({
         pushNext(["find", "sort", "save"]);
       }
     } catch (e) {
+      closeHead("stalled");
       setThread((it) => [...it, { type: "msg", role: "assistant", content: "That failed: " + (e instanceof Error ? e.message.slice(0, 140) : "unknown") + ". Try again." }]);
     } finally {
       setPromptBusy(false);
@@ -1865,9 +1942,12 @@ export default function GraphView({
         detail: { id: d.collectionId, name: d.name, count: d.filed },
       }));
       router.refresh();
+      /* your Accept closed the last block; the filing opens a new one */
+      pushHead("filing the accepted folder");
       await playToolRow("create_collection", "“" + d.name + "”", "created");
       await playToolRow("add_to_collection", d.filed + " ids → " + d.name, "filed · " + d.filed);
       logLedger("media manager", "filed " + d.filed + " into “" + d.name + "”");
+      closeHead("filed");
       setThread((it) => [...it, { type: "msg", role: "assistant", content: "Filed. " + d.name + " is in your folders now." }]);
       pushNext(["save", "find", "sort"]);
     } catch (e) {
@@ -2712,9 +2792,19 @@ export default function GraphView({
                         }
                         return -1;
                       })();
+                      const nested = nestedFlags[i] ? " is-nested" : "";
+                      if (m.type === "head") {
+                        return (
+                          <div key={i} className="agent-turnhead">
+                            <ToolCheck running={m.status === "running"} size={15} />
+                            <span className="agent-turnhead__who">atlas</span>
+                            <span className="agent-turnhead__what">· {m.what}</span>
+                          </div>
+                        );
+                      }
                       if (m.type === "msg") {
                         return (
-                          <div key={i} className={"chat-msg " + (m.role === "user" ? "is-user" : "is-ai")}>
+                          <div key={i} className={"chat-msg " + (m.role === "user" ? "is-user" : "is-ai" + nested)}>
                             <span className="mono-xs">{m.role === "user" ? "you" : "atlas"}</span>
                             <p>{m.content}</p>
                             {m.role === "assistant" && (
@@ -2742,10 +2832,21 @@ export default function GraphView({
                         );
                       }
                       if (m.type === "tool") {
+                        /* the row says WHO is at work and WHAT the work is;
+                           the call itself survives on hover and in the ledger */
+                        const meta = TOOL_META[m.tool];
                         return (
-                          <div key={i} className={"agent-tool" + (m.status === "running" ? " is-running" : "")}>
-                            <ToolCheck running={m.status === "running"} />
-                            <span className="agent-tool__label"><b>{m.tool}</b>{m.detail ? "(" + m.detail + ")" : "()"}</span>
+                          <div
+                            key={i}
+                            className={"agent-tool" + (m.status === "running" ? " is-running" : "") + nested}
+                            title={m.tool + (m.detail ? "(" + m.detail + ")" : "()")}
+                          >
+                            <ToolCheck running={m.status === "running"} mode={meta?.mode} />
+                            <span className="agent-tool__label">
+                              {meta && <i className="agent-tool__who">{meta.who}</i>}
+                              <b>{meta ? meta.task : m.tool}</b>
+                              {!meta && (m.detail ? "(" + m.detail + ")" : "()")}
+                            </span>
                             <span className="agent-tool__res">{m.status === "running" ? "working…" : m.result}</span>
                           </div>
                         );
@@ -2808,7 +2909,7 @@ export default function GraphView({
                       }
                       if (m.type === "outcome") {
                         return (
-                          <div key={i} className="agent-out">
+                          <div key={i} className={"agent-out" + nested}>
                             {m.rows.map((r, j) => (
                               <div key={j} className="agent-out__row">
                                 <OutIcon kind={r.icon} />
@@ -2822,7 +2923,7 @@ export default function GraphView({
                         const withThumb = m.items.filter((c) => c.thumbUrl);
                         const metaOnly = m.items.length - withThumb.length;
                         return (
-                          <div key={i} className="agent-cands">
+                          <div key={i} className={"agent-cands" + nested}>
                             <div className="agent-cands__t">
                               from outside · “{m.query}” · {m.items.length} candidate{m.items.length === 1 ? "" : "s"},{" "}
                               {m.items.filter((c) => c.keepable).length} keepable
@@ -2872,7 +2973,7 @@ export default function GraphView({
                         );
                       }
                       return (
-                        <div key={i} className={"agent-prop" + (m.status !== "pending" ? " is-" + m.status : "")}>
+                        <div key={i} className={"agent-prop" + (m.status !== "pending" ? " is-" + m.status : "") + nested}>
                           <div className="agent-prop__t">proposal · needs you</div>
                           <p>
                             Create <b>{m.name}</b> and file {m.ids.length} image{m.ids.length === 1 ? "" : "s"} into it.
@@ -2891,7 +2992,10 @@ export default function GraphView({
                         </div>
                       );
                     })}
-                    {(promptBusy || simBusy) && (
+                    {/* the turn's head narrates a prompt turn; this line only
+                        stands in when no head is running (image matching,
+                        scripted flows) */}
+                    {(promptBusy || simBusy) && !headRunning && (
                       <div className="chat-msg is-ai">
                         <span className="mono-xs">atlas</span>
                         <p style={{ display: "flex", alignItems: "center", gap: 8 }}>

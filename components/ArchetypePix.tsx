@@ -47,8 +47,9 @@ const smoothstep = (v: number) => {
 };
 const mix = (from: number, to: number, amount: number) => from + (to - from) * amount;
 
-/* opacity for cell i at time t, per mode */
-function opacityAt(mode: PixMode, i: number, t: number, step: number): number {
+/* opacity for cell i at time t, per mode — exported so ToolCheck can run a
+   lens's verb while its tool works, then resolve it into the pixel check */
+export function opacityAt(mode: PixMode, i: number, t: number, step: number): number {
   const { r, c } = cellOf(i);
 
   if (mode === "forms") {
@@ -103,6 +104,17 @@ function opacityAt(mode: PixMode, i: number, t: number, step: number): number {
   return c === 2 && Math.abs(r - y) < 0.6 && r < 4 ? 1 : 0.04 + hash(i, step) * 0.15;
 }
 
+/* the mode's most characteristic frame, for reduced motion and for anything
+   that needs the ident at rest */
+export function stillAt(mode: PixMode, i: number): boolean {
+  const { r, c } = cellOf(i);
+  if (mode === "forms") return PLUS_FORM[i];
+  if (mode === "scan") return r === 2;
+  /* the Historian's still: centre plus its middle ring, mid-departure */
+  if (mode === "seek") return Math.abs(r - 2) + Math.abs(c - 2) === 2 || (r === 2 && c === 2);
+  return r === 4 || (r === 3 && (c === 0 || c === 4)) || (c === 2 && r === 1);
+}
+
 const CELL = 17;
 const PAD = (100 - CELL * 5) / 2;
 
@@ -117,15 +129,7 @@ export default function ArchetypePix({ mode, size = 30 }: { mode: PixMode; size?
 
     if (reduced) {
       /* static: the mode's most characteristic frame */
-      const still = mode === "forms" ? PLUS_FORM :
-        Array.from({ length: 25 }, (_, i) => {
-          const { r, c } = cellOf(i);
-          if (mode === "scan") return r === 2;
-          /* the Historian's still: centre plus its middle ring, mid-departure */
-          if (mode === "seek") return Math.abs(r - 2) + Math.abs(c - 2) === 2 || (r === 2 && c === 2);
-          return r === 4 || (r === 3 && (c === 0 || c === 4)) || (c === 2 && r === 1);
-        });
-      rects.forEach((r, i) => r.setAttribute("fill-opacity", still[i] ? "0.95" : "0.06"));
+      rects.forEach((r, i) => r.setAttribute("fill-opacity", stillAt(mode, i) ? "0.95" : "0.06"));
       return;
     }
 
