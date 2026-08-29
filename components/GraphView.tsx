@@ -451,6 +451,12 @@ export default function GraphView({
   const [thread, setThread] = useState<ThreadItem[]>([]);
   const [draft, setDraft] = useState("");
   const [promptBusy, setPromptBusy] = useState(false);
+  /* the light table: outside finds on a TEMPORARY canvas docked to the
+     panel's right edge, slid out from behind it. It opens DURING the turn —
+     the moment the historian's row starts playing — and holds the images;
+     the thread keeps only a one-line trace that can reopen it. */
+  const [lightTable, setLightTable] = useState<{ query: string; items: Candidate[] } | null>(null);
+  const [ltOpen, setLtOpen] = useState(false);
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const toggleFilterTag = useCallback((name: string) => {
     setFilterTags((current) => current.includes(name)
@@ -1866,7 +1872,15 @@ export default function GraphView({
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "the agent failed");
+      let ltShown = false;
       for (const t of (d.toolLog ?? []) as { tool: string; args: Record<string, unknown>; result: string }[]) {
+        /* the light table slides out AS the historian's row starts playing,
+           so the finds are on the canvas while the work is still visible */
+        if (!ltShown && t.tool === "search_outside" && d.candidates?.items?.length) {
+          ltShown = true;
+          setLightTable({ query: String(d.candidates.query ?? ""), items: d.candidates.items });
+          setLtOpen(true);
+        }
         await playToolRow(t.tool, fmtDetail(t.tool, t.args), fmtResult(t.result));
         logLedger(TOOL_META[t.tool]?.who ?? "curator", t.tool + " " + fmtDetail(t.tool, t.args));
       }
@@ -2117,6 +2131,8 @@ export default function GraphView({
       setThread([]);
       setPromptIds(null);
       setFieldSort(null);
+      setLightTable(null);
+      setLtOpen(false);
       stepsRef.current = [];
       setSteps(0);
     };
@@ -2715,6 +2731,10 @@ export default function GraphView({
               )}
 
               {panelIn && panel === "prompt" && (
+                /* chatdock: the panel plus its light-table drawer, one piece
+                   of furniture — the drawer docks behind the panel's right
+                   edge and slides out when outside finds arrive */
+                <div className="chatdock">
                 <div className={"graph-below graph-below--chat" + (conversationCollapsed ? " is-collapsed" : "") + (sheetOpen && !filterSheetOpen ? " is-open" : "")}>
                   <div
                     className="sheet-grab"
@@ -2923,55 +2943,21 @@ export default function GraphView({
                         );
                       }
                       if (m.type === "candidates") {
-                        const withThumb = m.items.filter((c) => c.thumbUrl);
-                        const metaOnly = m.items.length - withThumb.length;
+                        /* the images live on the light table, docked to the
+                           panel's right; the thread keeps a one-line trace
+                           that can put them back on it */
                         return (
-                          <div key={i} className={"agent-cands" + nested}>
+                          <div key={i} className={"agent-cands agent-cands--line" + nested}>
                             <div className="agent-cands__t">
                               from outside · “{m.query}” · {m.items.length} candidate{m.items.length === 1 ? "" : "s"},{" "}
                               {m.items.filter((c) => c.keepable).length} keepable
                             </div>
-                            <div className="agent-cands__grid">
-                              {withThumb.map((c) => (
-                                <a
-                                  key={c.source + c.remoteId}
-                                  className="agent-cand"
-                                  href={c.pageUrl ?? undefined}
-                                  target="_blank"
-                                  rel="noreferrer noopener"
-                                  title={c.title + (c.creator ? " — " + c.creator : "") + (c.licence ? " · " + c.licence : "")}
-                                >
-                                  {/* Remote thumbs, so decoding stays off the main thread.
-                                      A source's edge protection can refuse a burst (the AIC
-                                      does, measured), so a failed tile retries once after a
-                                      breath and then becomes a title card rather than a
-                                      broken glyph -- the candidate is still real and still
-                                      opens at its source. */}
-                                  <img
-                                    src={c.thumbUrl!}
-                                    alt={c.title}
-                                    loading="lazy"
-                                    decoding="async"
-                                    onError={(e) => {
-                                      const img = e.currentTarget;
-                                      if (!img.dataset.retried) {
-                                        img.dataset.retried = "1";
-                                        const src = img.src;
-                                        window.setTimeout(() => { img.src = src; }, 3500 + Math.random() * 2500);
-                                        return;
-                                      }
-                                      img.closest(".agent-cand")?.classList.add("is-dead");
-                                    }}
-                                  />
-                                  <span className="agent-cand__fallback" aria-hidden="true">{c.title}</span>
-                                  <span className="agent-cand__src">{c.source}{c.keepable ? " · CC0" : ""}</span>
-                                </a>
-                              ))}
-                            </div>
-                            <p className="agent-cands__note">
-                              {metaOnly > 0 ? metaOnly + " more matched as records without a reachable image. " : ""}
-                              Not in the library — a candidate opens at its source.
-                            </p>
+                            <button
+                              className="agent-cands__open"
+                              onClick={() => { setLightTable({ query: m.query, items: m.items }); setLtOpen(true); }}
+                            >
+                              on the light table
+                            </button>
                           </div>
                         );
                       }
@@ -3060,6 +3046,58 @@ export default function GraphView({
                     </form>
                     </div>
                   </div>
+                </div>
+                {lightTable && (
+                  <aside className={"lighttable" + (ltOpen ? " is-in" : "")} aria-label="Outside finds, temporary">
+                    <div className="lt__head">
+                      <span className="lt__t">from outside · temporary</span>
+                      <span className="lt__sub">nothing is written</span>
+                    </div>
+                    <div className="lt__grid">
+                      {lightTable.items.filter((c) => c.thumbUrl).map((c) => (
+                        <a
+                          key={c.source + c.remoteId}
+                          className="lt__cell"
+                          href={c.pageUrl ?? undefined}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          title={c.title + (c.creator ? " — " + c.creator : "") + (c.licence ? " · " + c.licence : "")}
+                        >
+                          <span className="lt__tile">
+                            {/* same manners as the strip had: a refused thumb
+                                retries once, then yields to its title card */}
+                            <img
+                              src={c.thumbUrl!}
+                              alt={c.title}
+                              loading="lazy"
+                              decoding="async"
+                              onError={(e) => {
+                                const img = e.currentTarget;
+                                if (!img.dataset.retried) {
+                                  img.dataset.retried = "1";
+                                  const src = img.src;
+                                  window.setTimeout(() => { img.src = src; }, 3500 + Math.random() * 2500);
+                                  return;
+                                }
+                                img.closest(".lt__tile")?.classList.add("is-dead");
+                              }}
+                            />
+                            <span className="lt__fallback" aria-hidden="true">{c.title}</span>
+                            <span className="lt__src">{c.source}{c.keepable ? " · CC0" : ""}</span>
+                          </span>
+                          <span className="lt__cap">{c.title}</span>
+                        </a>
+                      ))}
+                    </div>
+                    <div className="lt__foot">
+                      <span className="lt__note">
+                        {lightTable.items.length} candidate{lightTable.items.length === 1 ? "" : "s"} ·{" "}
+                        {lightTable.items.filter((c) => c.keepable).length} keepable — a candidate opens at its source.
+                      </span>
+                      <button className="lt__go" onClick={() => setLtOpen(false)}>let go</button>
+                    </div>
+                  </aside>
+                )}
                 </div>
               )}
             </div>
