@@ -2939,12 +2939,12 @@ export default function GraphView({
                       })();
                       const nested = nestedFlags[i] ? " is-nested" : "";
                       if (m.type === "head") {
-                        /* Atlas finishing is the speaker going quiet, not a
-                           task done: the boil settles to a dim rest, and only
-                           the subagents' rows carry checkmarks */
+                        /* the ident exists only while Atlas works: once the
+                           turn completes it leaves entirely and the words
+                           stand alone — "ATLAS · replied", nothing greyed */
                         return (
                           <div key={i} className="agent-turnhead">
-                            <ToolCheck running={m.status === "running"} size={15} rest />
+                            {m.status === "running" && <ToolCheck running size={15} />}
                             <span className="agent-turnhead__who">atlas</span>
                             <span className="agent-turnhead__what">· {m.what}</span>
                           </div>
