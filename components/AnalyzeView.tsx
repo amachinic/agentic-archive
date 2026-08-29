@@ -35,6 +35,7 @@ export default function AnalyzeView({
   const [pickerVersion, setPickerVersion] = useState(0);
 
   const pickerDrag = useDragScroll();
+  const pickerRef = useRef<HTMLDivElement>(null);
   const [thread, setThread] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
@@ -200,28 +201,31 @@ export default function AnalyzeView({
         <main className="pane pane--flush" tabIndex={-1}>
           <div className="analyze">
             {/* ---- picker ---- */}
-            {/* the picker: a paged strip of pictures and nothing else — the
-                carets stay pinned at the ends and walk a screenful at a time */}
-            <div className="analyze__picker" {...pickerDrag}>
+            {/* The picker: pictures only. The carets sit OUTSIDE the scroller
+                in their own gutters, so nothing ever slides behind them, and
+                the scroller's ends fade to show exactly where it cuts off. */}
+            <div className="analyze__strip">
               <button
-                className="analyze__page analyze__page--prev" aria-label="Scroll back"
-                onClick={(e) => e.currentTarget.parentElement?.scrollBy({ left: -420, behavior: "smooth" })}
+                className="analyze__page" aria-label="Scroll back"
+                onClick={() => pickerRef.current?.scrollBy({ left: -420, behavior: "smooth" })}
               ><IconCaret width={13} height={13} style={{ transform: "rotate(180deg)" }} /></button>
-              <div className="analyze__grid">
-                {picker.map((p) => (
-                  <button
-                    key={p.id}
-                    className={"analyze__thumb" + (selected === p.id ? " is-selected" : "")}
-                    onClick={() => setSelected(p.id)}
-                    title={p.title}
-                  >
-                    <img src={"/api/img/" + p.id} alt={p.title} loading="lazy" style={{ aspectRatio: p.w + " / " + p.h }} />
-                  </button>
-                ))}
+              <div className="analyze__picker" ref={pickerRef} {...pickerDrag}>
+                <div className="analyze__grid">
+                  {picker.map((p) => (
+                    <button
+                      key={p.id}
+                      className={"analyze__thumb" + (selected === p.id ? " is-selected" : "")}
+                      onClick={() => setSelected(p.id)}
+                      title={p.title}
+                    >
+                      <img src={"/api/img/" + p.id} alt={p.title} loading="lazy" style={{ aspectRatio: p.w + " / " + p.h }} />
+                    </button>
+                  ))}
+                </div>
               </div>
               <button
-                className="analyze__page analyze__page--next" aria-label="Scroll on"
-                onClick={(e) => e.currentTarget.parentElement?.scrollBy({ left: 420, behavior: "smooth" })}
+                className="analyze__page" aria-label="Scroll on"
+                onClick={() => pickerRef.current?.scrollBy({ left: 420, behavior: "smooth" })}
               ><IconCaret width={13} height={13} /></button>
             </div>
 
@@ -296,15 +300,11 @@ export default function AnalyzeView({
                     </div>
                   )}
 
-                  {/* the conversation rides ABOVE the details: the question you
-                      are about to ask beats the brief you have already read */}
+                  {/* ONE grey card: the ask-composer merged with the brief.
+                      No label, no hint — the field's own placeholder is the
+                      whole invitation, and the details ride below it. */}
+                  <div className="analyze__card">
                   <div className="chatbox">
-                    <span className="mono-label">Conversation</span>
-                    {thread.length === 0 && !chatBusy && (
-                      <p className="chatbox__hint">
-                        Ask anything about this image: what material is that, how would this light be set up, what era does the typography belong to, how do I push this further.
-                      </p>
-                    )}
                     {thread.map((m, i) => (
                       <div key={i} className={"chat-msg " + (m.role === "user" ? "is-user" : "is-ai")}>
                         <span className="mono-xs">{m.role === "user" ? "you" : "atlas"}</span>
@@ -351,16 +351,17 @@ export default function AnalyzeView({
                     </form>
                   </div>
 
-                  {a && !analyzing && (
-                    <>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                        <h2 className="insp-title">{detail?.ai_title}</h2>
-                        <div className="topbar__spacer" />
-                        <button className="btn is-ghost" onClick={() => runAnalysis(selected)}>Re-analyze</button>
-                      </div>
-                      <AnalysisBrief a={a} />
-                    </>
-                  )}
+                    {a && !analyzing && (
+                      <>
+                        <div className="analyze__cardhead">
+                          <h2 className="insp-title">{detail?.ai_title}</h2>
+                          <div className="topbar__spacer" />
+                          <button className="btn is-ghost" onClick={() => runAnalysis(selected)}>Re-analyze</button>
+                        </div>
+                        <AnalysisBrief a={a} />
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
