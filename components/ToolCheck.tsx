@@ -12,6 +12,11 @@
   sandbox). Completion is the same either way: whatever was moving dissolves
   into the check. Colour follows the state: the working ident speaks in the
   text's own colour; the resolved check is the processing green.
+
+  With `rest`, completion is NOT a check: the boil settles into a dim,
+  frozen dither and goes muted. The check is a task's receipt; Atlas
+  finishing its reply is the speaker going quiet, and only its subagents'
+  rows carry checkmarks.
 */
 
 import { useEffect, useRef } from "react";
@@ -34,7 +39,10 @@ function hash(a: number, b: number) {
 const CELL = 17;
 const PAD = (100 - CELL * 5) / 2;
 
-export default function ToolCheck({ running, size = 14, mode }: { running: boolean; size?: number; mode?: PixMode }) {
+/* the at-rest frame: a quiet frozen dither, deliberately not a form */
+const restAt = (i: number) => 0.06 + hash(i, 7) * 0.35;
+
+export default function ToolCheck({ running, size = 14, mode, rest }: { running: boolean; size?: number; mode?: PixMode; rest?: boolean }) {
   const ref = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -44,8 +52,10 @@ export default function ToolCheck({ running, size = 14, mode }: { running: boole
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (reduced) {
-      /* at rest: the lens's still while working, the check once done */
+      /* at rest: the lens's still while working; then the check — or, for
+         a rest ident, the quiet frozen dither */
       rects.forEach((r, i) => {
+        if (!running && rest) { r.setAttribute("fill-opacity", restAt(i).toFixed(3)); return; }
         const on = running && mode
           ? stillAt(mode, i)
           : CHECK[Math.floor(i / 5)][i % 5] === 1;
@@ -70,14 +80,14 @@ export default function ToolCheck({ running, size = 14, mode }: { running: boole
       rects.forEach((r, i) => {
         const on = CHECK[Math.floor(i / 5)][i % 5] === 1;
         const live = mode ? opacityAt(mode, i, t, step) : 0.08 + hash(i, step) * 0.8;
-        const target = on ? 1 : 0.04;
+        const target = rest ? restAt(i) : on ? 1 : 0.04;
         r.setAttribute("fill-opacity", (live + (target - live) * rp).toFixed(3));
       });
       if (!running && rp >= 1) cancelAnimationFrame(raf);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [running, mode]);
+  }, [running, mode, rest]);
 
   return (
     <svg
@@ -86,7 +96,9 @@ export default function ToolCheck({ running, size = 14, mode }: { running: boole
       width={size}
       height={size}
       style={{
-        color: running && mode ? "var(--text-primary)" : "var(--processing-accent)",
+        color: !running && rest ? "var(--text-muted)"
+          : running && mode ? "var(--text-primary)"
+          : "var(--processing-accent)",
         transition: "color 380ms ease",
         flex: "none",
       }}
