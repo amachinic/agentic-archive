@@ -1610,9 +1610,23 @@
    Temporary-ness lives in the head's words, not in a dashed second window:
    there is no second window any more. */
 .chatdock { align-self: flex-start; display: flex; align-items: stretch; min-height: 0; }
+/* .graph-below carries align-self: flex-start from its life as a DIRECT
+   child of the column-flex graph-top, where it meant "hug the left". Inside
+   the row-flex chatdock the same words mean "refuse the height cap": the
+   panel grew to its content past the viewport and the thread never
+   overflowed — the chat lost its scrollbar. Here it must stretch: the dock
+   is capped by the stage, the panel fills the dock, the thread scrolls. */
+.chatdock > .graph-below { align-self: stretch; }
 .lighttable {
   position: relative; width: 0; opacity: 0; overflow: hidden;
   display: flex; flex-direction: column; min-height: 0;
+  /* The CONVERSATION drives the furniture's height; the table stretches to
+     match it and its grid scrolls inside. Without this the grid's
+     intrinsic height (dozens of tiles) inflated the whole dock to the
+     viewport floor, the thread stopped overflowing, and the chat lost its
+     scrollbar — measured, not guessed. contain:size takes the table's
+     content out of the sizing conversation entirely. */
+  contain: size;
   /* the panel's own dress: same wash, same blur, joined at its right
      hairline — the table's outer edge takes over the panel's corner */
   background: color-mix(in srgb, var(--surface) 94%, transparent);
