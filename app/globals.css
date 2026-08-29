@@ -85,6 +85,12 @@ body {
 }
 html[data-atlas-boot="loading"] .atlas-preloader,
 html[data-atlas-boot="leaving"] .atlas-preloader { display: block; }
+/* The cover takes focus for assistive tech (the app behind it is inert),
+   but it is not interactive — without this the UA's default focus ring
+   draws a hairline around the entire viewport, which read as a stray white
+   stroke along the far left and top while the preloader ran. */
+.atlas-preloader:focus,
+.atlas-preloader:focus-visible { outline: none; }
 html[data-atlas-boot="leaving"] .atlas-preloader {
   opacity: 0;
   pointer-events: none;
