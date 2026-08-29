@@ -310,8 +310,11 @@ export async function POST(req: Request) {
     sort: { by: "colour" | "light" | "period" | "kind" | "off" } | null;
     release: boolean;
     /* what search_outside found this turn: shown in the conversation, never
-       on the canvas — candidates have no image id and no place in ws */
-    candidates: { query: string; items: Candidate[] } | null;
+       on the canvas — candidates have no image id and no place in ws.
+       totals: per source, the LARGEST population any probe this turn
+       matched there — "at least this much exists", never a sum of
+       overlapping probes. */
+    candidates: { query: string; items: Candidate[]; totals?: Record<string, number> } | null;
   } = { shownIds: null, proposal: null, sort: null, release: false, candidates: null };
   const toolLog: ToolLogRow[] = [];
 
@@ -511,7 +514,7 @@ export async function POST(req: Request) {
         const only = outsideSources.find((id) => id === args.source) ?? null;
         const medium = MEDIUMS.find((m) => m === args.medium) ?? null;
 
-        const { results, searched, failed } = await searchConnected(q, {
+        const { results, searched, failed, totals } = await searchConnected(q, {
           limit: only ? OUTSIDE_SINGLE_LIMIT : OUTSIDE_SWEEP_LIMIT,
           only,
           medium,
@@ -531,20 +534,34 @@ export async function POST(req: Request) {
            title, it is a stutter */
         const probes = new Set(out.candidates ? out.candidates.query.split(", ") : []);
         probes.add(q);
-        out.candidates = { query: [...probes].join(", "), items: held };
+        /* per source, keep the LARGEST matched population any probe saw:
+           "at least N exists there" — summing probes would double-count */
+        const heldTotals: Record<string, number> = out.candidates?.totals ?? {};
+        for (const t of totals) {
+          if (t.total == null) continue;
+          heldTotals[t.source] = Math.max(heldTotals[t.source] ?? 0, t.total);
+        }
+        out.candidates = { query: [...probes].join(", "), items: held, totals: heldTotals };
 
         const perSource: Record<string, number> = {};
         for (const c of results) perSource[c.source] = (perSource[c.source] ?? 0) + 1;
+        const matched: Record<string, number> = {};
+        for (const t of totals) if (t.total != null) matched[t.source] = t.total;
+        const totalMatched = Object.values(matched).reduce((a, b) => a + b, 0);
         return JSON.stringify({
           query: q,
           searched: searched.length,
           found: results.length,
           keepable: results.filter((c) => c.keepable).length,
           per_source: perSource,
+          /* the population behind the preview: what the sources SAY the
+             query matched, so the reply can be honest about scale */
+          matched_at_sources: matched,
+          total_matched: totalMatched || undefined,
           sample: results.slice(0, 4).map((c) => c.title).join(", "),
           gathered_this_turn: held.length,
           ...(failed.length ? { failed } : {}),
-          note: "candidates appear to the human as a strip in the conversation. They are NOT in the library and NOT on the canvas; say what you found and how much of it is keepable.",
+          note: "candidates appear to the human on the light table beside the conversation. They are NOT in the library and NOT on the canvas. found is only the bounded preview; matched_at_sources is what actually exists — when it dwarfs found, SAY SO (e.g. \"showing 16 of ~3,400 at the Met\") so the human knows the hunt only skimmed the surface.",
         });
       }
       default:

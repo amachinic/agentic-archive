@@ -86,7 +86,12 @@ type ThreadItem =
   | { type: "skills" }
   /* what search_outside found: outside the library, so shown here in the
      conversation rather than on the canvas, which draws by image id */
-  | { type: "candidates"; query: string; items: Candidate[] };
+  | { type: "candidates"; query: string; items: Candidate[]; totals?: Record<string, number> }
+  /* the follow-up surface after an outside hunt: checkable narrows, a
+     source to go deeper into, and a line of the human's own words — all
+     layered into ONE refined hunt. sent: null = live, a string = the
+     refinement that went, "-" = passed over by a newer prompt. */
+  | { type: "refine"; base: string; sources: { id: string; total: number | null }[]; sent: string | null };
 
 type Candidate = {
   source: string; remoteId: string; title: string;
@@ -377,6 +382,103 @@ function folderNameFrom(q: string): string {
    repeated beneath every button; a sub that says something else still shows */
 const ARCH_NAMES = new Set(["archivist", "curator", "media manager", "atlas"]);
 
+/* ---- the refine surface: an outside hunt's follow-up --------------------
+   Checkable narrows (tones + a medium), a source to go deeper into — shown
+   with the population it reported, so "go deeper" is a navigable fact — and
+   a free line for the human's own words. Everything checked layers into ONE
+   sentence that goes back through the agent as the next hunt. */
+const REFINE_TONES = ["dark", "blue", "muted", "warm", "monochrome", "night"];
+const REFINE_MEDIUMS = ["painting", "print", "photograph", "sculpture"];
+const SOURCE_NAME: Record<string, string> = {
+  met: "the Met", artic: "Art Institute", cleveland: "Cleveland",
+  rijks: "Rijksmuseum", europeana: "Europeana", arena: "Are.na", pinterest: "Pinterest",
+};
+const fmtPop = (t: number) => "~" + t.toLocaleString("en-GB");
+
+function RefineBlock({ item, busy, onGo }: {
+  item: Extract<ThreadItem, { type: "refine" }>;
+  busy: boolean;
+  onGo: (text: string) => void;
+}) {
+  const [tones, setTones] = useState<string[]>([]);
+  const [mediumPick, setMediumPick] = useState<string | null>(null);
+  const [source, setSource] = useState<string | null>(null);
+  const [custom, setCustom] = useState("");
+
+  const spent = item.sent !== null;
+  const chosen = tones.length > 0 || mediumPick !== null || source !== null || custom.trim().length > 0;
+
+  const compose = () => {
+    const narrow = [...tones, ...(mediumPick ? [mediumPick + "s only"] : [])];
+    let s = "Refine the outside hunt for " + item.base;
+    if (narrow.length) s += ": narrow to " + narrow.join(", ");
+    if (custom.trim()) s += (narrow.length ? " — " : ": ") + custom.trim();
+    if (source) s += ". Search only " + (SOURCE_NAME[source] ?? source) + ".";
+    else if (!s.endsWith(".")) s += ".";
+    return s;
+  };
+
+  if (spent && item.sent !== "-") {
+    /* the refinement that went, kept as the block's receipt */
+    return <div className="agent-refine is-spent"><span className="mono-label">refined</span><p>{item.sent}</p></div>;
+  }
+  return (
+    <div className={"agent-refine" + (item.sent === "-" ? " is-passed" : "")}>
+      <span className="mono-label">Refine the hunt</span>
+      <div className="agent-refine__row">
+        <span className="agent-refine__k">narrow to</span>
+        {REFINE_TONES.map((t) => (
+          <button
+            key={t}
+            className={"refine-chip" + (tones.includes(t) ? " is-on" : "")}
+            aria-pressed={tones.includes(t)}
+            disabled={spent || busy}
+            onClick={() => setTones((a) => (a.includes(t) ? a.filter((x) => x !== t) : [...a, t]))}
+          ><i />{t}</button>
+        ))}
+      </div>
+      <div className="agent-refine__row">
+        <span className="agent-refine__k">medium</span>
+        {REFINE_MEDIUMS.map((mm) => (
+          <button
+            key={mm}
+            className={"refine-chip" + (mediumPick === mm ? " is-on" : "")}
+            aria-pressed={mediumPick === mm}
+            disabled={spent || busy}
+            onClick={() => setMediumPick((v) => (v === mm ? null : mm))}
+          ><i />{mm}</button>
+        ))}
+      </div>
+      <div className="agent-refine__row">
+        <span className="agent-refine__k">only from</span>
+        {item.sources.map((s) => (
+          <button
+            key={s.id}
+            className={"refine-chip" + (source === s.id ? " is-on" : "")}
+            aria-pressed={source === s.id}
+            disabled={spent || busy}
+            title={s.total != null ? fmtPop(s.total) + " matched there" : undefined}
+            onClick={() => setSource((v) => (v === s.id ? null : s.id))}
+          ><i />{SOURCE_NAME[s.id] ?? s.id}{s.total != null && <em>{fmtPop(s.total)}</em>}</button>
+        ))}
+      </div>
+      <div className="agent-refine__go">
+        <input
+          value={custom}
+          disabled={spent || busy}
+          placeholder="or say it your way — smoky interiors, no portraits…"
+          onChange={(e) => setCustom(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && chosen && !busy) onGo(compose()); }}
+          aria-label="Your own refinement"
+        />
+        <button className="agent-refine__send" disabled={spent || busy || !chosen} onClick={() => onGo(compose())}>
+          go deeper
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CtaFace({ opt }: { opt: CtaOpt }) {
   const Icon = ctaIcon(opt.key);
   const sub = opt.sub && !ARCH_NAMES.has(opt.sub) ? opt.sub : null;
@@ -455,7 +557,7 @@ export default function GraphView({
      panel's right edge, slid out from behind it. It opens DURING the turn —
      the moment the historian's row starts playing — and holds the images;
      the thread keeps only a one-line trace that can reopen it. */
-  const [lightTable, setLightTable] = useState<{ query: string; items: Candidate[] } | null>(null);
+  const [lightTable, setLightTable] = useState<{ query: string; items: Candidate[]; totals?: Record<string, number> } | null>(null);
   const [ltOpen, setLtOpen] = useState(false);
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const toggleFilterTag = useCallback((name: string) => {
@@ -755,7 +857,7 @@ export default function GraphView({
     let inTurn = false;
     for (const x of thread) {
       if (x.type === "head") { inTurn = true; flags.push(false); continue; }
-      if (x.type === "ctas" || x.type === "skills" || x.type === "timeline" || (x.type === "msg" && x.role === "user")) inTurn = false;
+      if (x.type === "ctas" || x.type === "refine" || x.type === "skills" || x.type === "timeline" || (x.type === "msg" && x.role === "user")) inTurn = false;
       flags.push(inTurn);
     }
     return flags;
@@ -1367,8 +1469,16 @@ export default function GraphView({
       if (r.staged) return "staged · " + r.count;
       if (r.sorted) return r.sorted === "off" ? "grid dropped" : "grid re-formed";
       if (r.shown != null) return "field re-formed · " + r.shown;
-      /* search_outside: found/keepable, checked before the generic count */
-      if (r.found != null) return r.found + " outside · " + (r.keepable ?? 0) + " keepable";
+      /* search_outside: found/keepable, checked before the generic count.
+         total_matched is the POPULATION the sources reported — when it
+         exists, the row says both, so a capped preview never reads as
+         everything there is. */
+      if (r.found != null) {
+        const of = typeof r.total_matched === "number" && r.total_matched > r.found
+          ? " of ~" + Number(r.total_matched).toLocaleString("en-GB")
+          : "";
+        return r.found + of + " outside · " + (r.keepable ?? 0) + " keepable";
+      }
       if (r.count != null) return r.count + " in set";
       if (r.released) return "field released";
     } catch { /* opaque */ }
@@ -1508,7 +1618,10 @@ export default function GraphView({
     pushCtas([...keys.map((k) => CTA_META[k]).filter(Boolean), CTA_META.skills]);
   }
 
-  const retireCtas = () => setThread((it) => it.map((x) => (x.type === "ctas" && !x.picked ? { ...x, picked: "-" } : x)));
+  const retireCtas = () => setThread((it) => it.map((x) =>
+    x.type === "ctas" && !x.picked ? { ...x, picked: "-" }
+    : x.type === "refine" && x.sent === null ? { ...x, sent: "-" }
+    : x));
 
   function onCta(index: number, key: string, label: string) {
     setThread((it) => it.map((x, i) => (i === index && x.type === "ctas" ? { ...x, picked: key } : x)));
@@ -1878,7 +1991,7 @@ export default function GraphView({
            so the finds are on the canvas while the work is still visible */
         if (!ltShown && t.tool === "search_outside" && d.candidates?.items?.length) {
           ltShown = true;
-          setLightTable({ query: String(d.candidates.query ?? ""), items: d.candidates.items });
+          setLightTable({ query: String(d.candidates.query ?? ""), items: d.candidates.items, totals: d.candidates.totals });
           setLtOpen(true);
         }
         await playToolRow(t.tool, fmtDetail(t.tool, t.args), fmtResult(t.result));
@@ -1907,12 +2020,24 @@ export default function GraphView({
         logLedger("curator", "proposed “" + d.proposal.name + "” · " + d.proposal.ids.length + " images");
       }
       if (d.candidates && Array.isArray(d.candidates.items) && d.candidates.items.length) {
-        setThread((it) => [...it, { type: "candidates", query: String(d.candidates.query ?? ""), items: d.candidates.items }]);
+        setThread((it) => [...it, { type: "candidates", query: String(d.candidates.query ?? ""), items: d.candidates.items, totals: d.candidates.totals }]);
         logLedger("historian", "searched outside · " + d.candidates.items.length + " candidates");
       }
       closeHead("replied");
       setThread((it) => [...it, { type: "msg", role: "assistant", content: d.reply }]);
-      if (Array.isArray(d.ids) && d.ids.length) {
+      if (d.candidates && Array.isArray(d.candidates.items) && d.candidates.items.length) {
+        /* an outside hunt's follow-up is a REFINE surface, not generic
+           chips: narrows to check, a source to go deeper into, and the
+           human's own words — layered into the next hunt */
+        const srcs = [...new Set((d.candidates.items as Candidate[]).map((c) => c.source))];
+        const totals: Record<string, number> = d.candidates.totals ?? {};
+        setThread((it) => [...it, {
+          type: "refine",
+          base: String(d.candidates.query ?? ""),
+          sources: srcs.map((id) => ({ id, total: totals[id] ?? null })),
+          sent: null,
+        }]);
+      } else if (Array.isArray(d.ids) && d.ids.length) {
         pushCtas([
           { key: "sort", label: "Sort these", sub: "curator" },
           { key: "post-save", label: "File these as a folder", sub: "proposes" },
@@ -2942,6 +3067,19 @@ export default function GraphView({
                           </div>
                         );
                       }
+                      if (m.type === "refine") {
+                        return (
+                          <RefineBlock
+                            key={i}
+                            item={m}
+                            busy={promptBusy}
+                            onGo={(text) => {
+                              setThread((it) => it.map((x, j) => (j === i && x.type === "refine" ? { ...x, sent: text } : x)));
+                              void sendPrompt(text);
+                            }}
+                          />
+                        );
+                      }
                       if (m.type === "candidates") {
                         /* the images live on the light table, docked to the
                            panel's right; the thread keeps a one-line trace
@@ -2954,7 +3092,7 @@ export default function GraphView({
                             </div>
                             <button
                               className="agent-cands__open"
-                              onClick={() => { setLightTable({ query: m.query, items: m.items }); setLtOpen(true); }}
+                              onClick={() => { setLightTable({ query: m.query, items: m.items, totals: m.totals }); setLtOpen(true); }}
                             >
                               on the light table
                             </button>
@@ -3092,7 +3230,16 @@ export default function GraphView({
                     <div className="lt__foot">
                       <span className="lt__note">
                         {lightTable.items.length} candidate{lightTable.items.length === 1 ? "" : "s"} ·{" "}
-                        {lightTable.items.filter((c) => c.keepable).length} keepable — a candidate opens at its source.
+                        {lightTable.items.filter((c) => c.keepable).length} keepable
+                        {(() => {
+                          /* the population behind the preview: the sources'
+                             own count of what these probes matched */
+                          const pop = Object.values(lightTable.totals ?? {}).reduce((a, b) => a + b, 0);
+                          return pop > lightTable.items.length
+                            ? " · the sources hold ~" + pop.toLocaleString("en-GB") + " matches"
+                            : "";
+                        })()}
+                        {" "}— a candidate opens at its source.
                       </span>
                       <button className="lt__go" onClick={() => setLtOpen(false)}>let go</button>
                     </div>

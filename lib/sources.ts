@@ -40,7 +40,12 @@ export const MEDIUMS: Medium[] = ["painting", "print", "photograph", "sculpture"
 export type Adapter = {
   id: SourceId;
   probe(): Promise<Probe>;
-  search(q: string, limit: number, medium?: Medium): Promise<Candidate[]>;
+  /* items is the bounded PREVIEW; total is the source's own count of what
+     the query matched, when its API says so. The cap is a display budget,
+     never a knowledge budget: what exists is always reported, even when
+     only a sliver of it is fetched. null = the source cannot say (Are.na
+     has channels, not a corpus). */
+  search(q: string, limit: number, medium?: Medium): Promise<{ items: Candidate[]; total: number | null }>;
 };
 
 /** Every outbound call is bounded. A slow source must not hold a request open. */
@@ -129,7 +134,9 @@ const met: Adapter = {
     const s = await getJson<{ objectIDs?: number[] | null }>(
       "https://collectionapi.metmuseum.org/public/collection/v1/search?hasImages=true" +
       (medium ? "&medium=" + facet[medium] : "") + "&q=" + encodeURIComponent(q));
-    const ids = (s.objectIDs ?? []).slice(0, limit);
+    /* the full ID list IS the true match count — keep it before slicing */
+    const all = s.objectIDs ?? [];
+    const ids = all.slice(0, limit);
     const out: Candidate[] = [];
     for (const id of ids) {
       try {
@@ -151,7 +158,7 @@ const met: Adapter = {
         });
       } catch { /* one bad object must not fail the search */ }
     }
-    return out;
+    return { items: out, total: all.length };
   },
 };
 
@@ -173,12 +180,12 @@ const artic: Adapter = {
     const d = await getJson<{ data?: Array<{
       id: number; title?: string; artist_title?: string | null;
       image_id?: string | null; is_public_domain?: boolean;
-    }>; config?: { iiif_url?: string } }>(
+    }>; config?: { iiif_url?: string }; pagination?: { total?: number } }>(
       "https://api.artic.edu/api/v1/artworks/search?q=" + encodeURIComponent(q) +
       (medium ? "&query%5Bterm%5D%5Bartwork_type_title.keyword%5D=" + facet[medium] : "") +
       "&limit=" + limit + "&fields=" + fields);
     const iiif = d.config?.iiif_url || "https://www.artic.edu/iiif/2";
-    return (d.data ?? []).filter((a) => a.image_id).map((a) => ({
+    const items = (d.data ?? []).filter((a) => a.image_id).map((a) => ({
       source: "artic" as const, remoteId: String(a.id),
       title: a.title || "Untitled",
       creator: a.artist_title ?? null,
@@ -188,6 +195,7 @@ const artic: Adapter = {
       licence: a.is_public_domain ? "public domain" : "in copyright",
       keepable: !!a.is_public_domain,
     }));
+    return { items, total: d.pagination?.total ?? null };
   },
 };
 
@@ -211,9 +219,9 @@ const cleveland: Adapter = {
       id: number; title?: string; creators?: Array<{ description?: string }>;
       url?: string; images?: { web?: { url?: string }; print?: { url?: string } };
       share_license_status?: string;
-    }> }>("https://openaccess-api.clevelandart.org/api/artworks/?cc0=1&has_image=1&limit=" +
+    }>; info?: { total?: number } }>("https://openaccess-api.clevelandart.org/api/artworks/?cc0=1&has_image=1&limit=" +
       limit + (medium ? "&type=" + facet[medium] : "") + "&q=" + encodeURIComponent(q));
-    return (d.data ?? []).map((a) => ({
+    const items = (d.data ?? []).map((a) => ({
       source: "cleveland" as const, remoteId: String(a.id),
       title: a.title || "Untitled",
       creator: a.creators?.[0]?.description ?? null,
@@ -223,6 +231,7 @@ const cleveland: Adapter = {
       licence: a.share_license_status || "CC0",
       keepable: (a.share_license_status || "CC0").toUpperCase() === "CC0",
     }));
+    return { items, total: d.info?.total ?? null };
   },
 };
 
@@ -246,7 +255,7 @@ const rijks: Adapter = {
     return { detail: n(d.partOf?.totalItems) + " paintings with images" };
   },
   async search(q, limit, medium) {
-    const d = await getJson<{ orderedItems?: Array<{ id: string }> }>(
+    const d = await getJson<{ orderedItems?: Array<{ id: string }>; partOf?: { totalItems?: number } }>(
       RIJKS_SEARCH + "?imageAvailable=True" + (medium ? "&type=" + medium : "") +
       "&title=" + encodeURIComponent(q));
     const ids = (d.orderedItems ?? []).slice(0, Math.min(limit, 8));
@@ -270,7 +279,7 @@ const rijks: Adapter = {
         });
       } catch { /* one unreachable object must not fail the search */ }
     }
-    return out;
+    return { items: out, total: d.partOf?.totalItems ?? null };
   },
 };
 
@@ -288,12 +297,12 @@ const europeana: Adapter = {
   },
   async search(q, limit) {
     const key = process.env.ATLAS_EUROPEANA_KEY?.trim() ?? "";
-    const d = await getJson<{ items?: Array<{
+    const d = await getJson<{ totalResults?: number; items?: Array<{
       id: string; title?: string[]; dcCreator?: string[];
       guid?: string; edmPreview?: string[]; rights?: string[];
     }> }>(EUROPEANA_BASE + "/record/v2/search.json?wskey=" + encodeURIComponent(key) +
       "&rows=" + limit + "&media=true&query=" + encodeURIComponent(q));
-    return (d.items ?? []).map((i) => {
+    const items = (d.items ?? []).map((i) => {
       const rights = i.rights?.[0] ?? null;
       /* only the genuinely open rights statements count as keepable; anything
          else is a lead, not an acquisition */
@@ -309,6 +318,7 @@ const europeana: Adapter = {
         keepable: open,
       };
     });
+    return { items, total: d.totalResults ?? null };
   },
 };
 
@@ -365,7 +375,8 @@ const arena: Adapter = {
         }
       } catch { /* a private or empty channel must not fail the search */ }
     }
-    return out;
+    /* Are.na has channels, not a corpus: there is no honest total */
+    return { items: out, total: null };
   },
 };
 
@@ -393,8 +404,9 @@ const pinterest: Adapter = {
     }> }>(PINTEREST_BASE + "/v5/pins?page_size=" + Math.min(100, limit * 4),
       { headers: { Authorization: "Bearer " + token } });
     const needle = q.trim().toLowerCase();
-    return (d.items ?? [])
-      .filter((p) => !needle || (p.title || p.note || "").toLowerCase().includes(needle))
+    const hits = (d.items ?? [])
+      .filter((p) => !needle || (p.title || p.note || "").toLowerCase().includes(needle));
+    const items = hits
       .slice(0, limit)
       .map((p) => {
         const imgs = p.media?.images ?? {};
@@ -410,6 +422,9 @@ const pinterest: Adapter = {
           keepable: false,
         };
       });
+    /* the count is of the fetched page of YOUR pins, not a corpus — the
+       only population Pinterest's API will admit to */
+    return { items, total: null };
   },
 };
 
@@ -428,6 +443,9 @@ export type OutsideSearch = {
   results: Candidate[];
   searched: SourceId[];
   failed: { source: SourceId; error: string }[];
+  /* what each source says the query MATCHED — the population behind the
+     preview. null where a source cannot say. */
+  totals: { source: SourceId; total: number | null }[];
 };
 
 /**
@@ -447,9 +465,10 @@ export async function searchConnected(
 
   const settled = await Promise.all(targets.map(async (id) => {
     try {
-      return { id, items: await ADAPTERS[id].search(q, limit, opts.medium ?? undefined) };
+      const r = await ADAPTERS[id].search(q, limit, opts.medium ?? undefined);
+      return { id, items: r.items, total: r.total };
     } catch (e) {
-      return { id, items: [] as Candidate[], error: reason(e) };
+      return { id, items: [] as Candidate[], total: null, error: reason(e) as string | undefined };
     }
   }));
 
@@ -457,6 +476,7 @@ export async function searchConnected(
     results: settled.flatMap((s) => s.items),
     searched: targets,
     failed: settled.filter((s) => s.error).map((s) => ({ source: s.id, error: s.error! })),
+    totals: settled.map((s) => ({ source: s.id, total: s.total })),
   };
 }
 

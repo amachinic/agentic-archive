@@ -1546,6 +1546,61 @@
 }
 .agent-cands__open:hover { color: var(--text-primary); }
 
+/* ---- the refine surface: an outside hunt's follow-up ----
+   Checkable narrows, a source to go deeper into (with the population it
+   reported), and a line of the human's own words — layered into one hunt. */
+.agent-refine {
+  display: flex; flex-direction: column; gap: 9px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  padding: 11px 12px;
+  animation: content-in 200ms var(--motion-ease) both;
+}
+.agent-refine.is-passed { opacity: 0.5; pointer-events: none; }
+.agent-refine.is-spent { opacity: 0.75; }
+.agent-refine.is-spent p { margin: 0; font-size: var(--font-body-xs); color: var(--text-secondary); line-height: 1.5; }
+.agent-refine__row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.agent-refine__k {
+  flex: none; width: 64px;
+  font-family: var(--font-mono); font-size: var(--font-input-2xs);
+  letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted);
+}
+.refine-chip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-secondary);
+  background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 5px 9px 4px; cursor: pointer;
+  transition: color var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease);
+}
+.refine-chip:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.refine-chip i {
+  align-self: center; width: 9px; height: 9px; flex: none;
+  border: 1px solid var(--border-strong); border-radius: 2px;
+  transition: background var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease);
+}
+.refine-chip.is-on { color: var(--text-primary); border-color: var(--border-strong); }
+.refine-chip.is-on i { background: var(--accent); border-color: var(--accent); }
+.refine-chip em { font-style: normal; color: var(--text-muted); font-size: var(--font-input-2xs); }
+.refine-chip:disabled { cursor: default; opacity: 0.6; }
+.agent-refine__go { display: flex; align-items: stretch; gap: 8px; }
+.agent-refine__go input {
+  flex: 1; min-width: 0;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 7px 10px; color: var(--text-primary);
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em;
+}
+.agent-refine__go input::placeholder { color: var(--text-muted); }
+.agent-refine__go input:focus-visible { outline: none; border-color: var(--border-strong); }
+.agent-refine__send {
+  flex: none;
+  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  border-radius: var(--radius-md); padding: 7px 12px 6px; cursor: pointer;
+  background: var(--accent); color: var(--on-accent); border: 1px solid transparent;
+}
+.agent-refine__send:disabled { opacity: 0.4; cursor: default; }
+
 /* ---- the light table: outside finds on a TEMPORARY canvas ----
    A drawer of the prompt panel: it lives BEHIND the panel and slides out to
    the right when the Historian brings work in — dashed while temporary,
