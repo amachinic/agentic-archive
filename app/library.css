@@ -1602,29 +1602,36 @@
 .agent-refine__send:disabled { opacity: 0.4; cursor: default; }
 
 /* ---- the light table: outside finds on a TEMPORARY canvas ----
-   A drawer of the prompt panel: it lives BEHIND the panel and slides out to
-   the right when the Historian brings work in — dashed while temporary,
-   like a proposal, because nothing is written. The chatdock is the panel
-   plus its drawer, one positioned piece of furniture. */
-.chatdock { align-self: flex-start; position: relative; display: flex; min-height: 0; }
-.chatdock > .graph-below { position: relative; z-index: 1; }
+   ONE BODY with the prompt panel: when the Historian brings work in, the
+   panel itself widens — thread and table are two panes of the same frame,
+   the panel's own hairline dividing them, the head rule running unbroken
+   across both. Each pane keeps its OWN scroll: the conversation scrolls in
+   the thread, the finds scroll in the grid, and neither moves the other.
+   Temporary-ness lives in the head's words, not in a dashed second window:
+   there is no second window any more. */
+.chatdock { align-self: flex-start; display: flex; align-items: stretch; min-height: 0; }
 .lighttable {
-  position: absolute; top: 16px; bottom: 16px; left: calc(100% - 14px);
-  width: 400px; max-width: 44vw;
-  display: flex; flex-direction: column; z-index: 0;
-  border: 1px dashed var(--border-strong);
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-  background: color-mix(in srgb, var(--surface) 97%, transparent);
+  position: relative; width: 0; opacity: 0; overflow: hidden;
+  display: flex; flex-direction: column; min-height: 0;
+  /* the panel's own dress: same wash, same blur, joined at its right
+     hairline — the table's outer edge takes over the panel's corner */
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(10px);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
-  transform: translateX(calc(-100% + 14px)); opacity: 0;
-  transition: transform 620ms var(--motion-ease), opacity 400ms var(--motion-ease) 120ms;
+  border: 1px solid var(--border); border-top: 0; border-left: 0;
+  border-radius: 0 0 var(--radius-lg) 0;
+  transition: width 560ms var(--motion-ease), opacity 320ms var(--motion-ease);
 }
-.lighttable.is-in { transform: none; opacity: 1; transition: transform 620ms var(--motion-ease), opacity 250ms var(--motion-ease); }
-/* the drawer follows its panel: gone when the panel collapses or leaves */
+.lighttable.is-in { width: 400px; opacity: 1; }
+/* while the table is open the panel's rounded corner passes to it */
+.chatdock:has(.lighttable.is-in) > .graph-below { border-radius: 0; }
+/* content holds its shape while the pane's width animates */
+.lt__head, .lt__grid, .lt__foot { min-width: 398px; }
+/* the table follows its panel: gone when the panel collapses or leaves */
 .graph-below--chat.is-collapsed + .lighttable { display: none; }
 @media (max-width: 900px) { .lighttable { display: none; } }
-.lt__head { display: flex; align-items: baseline; gap: 10px; flex: none; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+/* head height matches the chathead exactly (16px panel pad + 41px head,
+   measured), so ONE rule runs unbroken across both panes */
+.lt__head { display: flex; align-items: center; gap: 10px; flex: none; height: 57px; padding: 0 14px; border-bottom: 1px solid var(--border); }
 .lt__t { font-family: var(--font-mono); font-size: var(--font-input-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); }
 .lt__sub { font-family: var(--font-mono); font-size: var(--font-input-2xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); margin-left: auto; }
 .lt__grid {
