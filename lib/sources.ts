@@ -341,8 +341,11 @@ const arena: Adapter = {
     for (const slug of slugs) {
       if (out.length >= limit) break;
       try {
+        /* a channel's first blocks are often text and links; ask for a full
+           page so the IMAGES in it are actually reached — with per=limit a
+           channel opening on four notes contributed nothing (measured) */
         const c = await getJson<{ contents?: ArenaBlock[] | null }>(
-          ARENA + "/channels/" + encodeURIComponent(slug) + "/contents?per=" + limit);
+          ARENA + "/channels/" + encodeURIComponent(slug) + "/contents?per=24");
         for (const b of c.contents ?? []) {
           if (out.length >= limit) break;
           const thumb = b.image?.thumb?.url;

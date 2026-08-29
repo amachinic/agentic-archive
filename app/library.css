@@ -1533,6 +1533,85 @@
 .agent-cands__note {
   margin: 0; font-size: var(--font-body-xs); color: var(--text-muted);
 }
+/* the thread's one-line trace of an outside search: the images themselves
+   live on the light table, and this line can put them back on it */
+.agent-cands--line { display: flex; align-items: baseline; gap: 10px; }
+.agent-cands--line .agent-cands__t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-cands__open {
+  flex: none; background: none; border: 0; padding: 0; cursor: pointer;
+  font-family: var(--font-mono); font-size: var(--font-input-xs);
+  letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted);
+  text-decoration: underline; text-underline-offset: 3px;
+  transition: color var(--motion-duration) var(--motion-ease);
+}
+.agent-cands__open:hover { color: var(--text-primary); }
+
+/* ---- the light table: outside finds on a TEMPORARY canvas ----
+   A drawer of the prompt panel: it lives BEHIND the panel and slides out to
+   the right when the Historian brings work in — dashed while temporary,
+   like a proposal, because nothing is written. The chatdock is the panel
+   plus its drawer, one positioned piece of furniture. */
+.chatdock { align-self: flex-start; position: relative; display: flex; min-height: 0; }
+.chatdock > .graph-below { position: relative; z-index: 1; }
+.lighttable {
+  position: absolute; top: 16px; bottom: 16px; left: calc(100% - 14px);
+  width: 400px; max-width: 44vw;
+  display: flex; flex-direction: column; z-index: 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  transform: translateX(calc(-100% + 14px)); opacity: 0;
+  transition: transform 620ms var(--motion-ease), opacity 400ms var(--motion-ease) 120ms;
+}
+.lighttable.is-in { transform: none; opacity: 1; transition: transform 620ms var(--motion-ease), opacity 250ms var(--motion-ease); }
+/* the drawer follows its panel: gone when the panel collapses or leaves */
+.graph-below--chat.is-collapsed + .lighttable { display: none; }
+@media (max-width: 900px) { .lighttable { display: none; } }
+.lt__head { display: flex; align-items: baseline; gap: 10px; flex: none; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.lt__t { font-family: var(--font-mono); font-size: var(--font-input-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-secondary); }
+.lt__sub { font-family: var(--font-mono); font-size: var(--font-input-2xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); margin-left: auto; }
+.lt__grid {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  padding: 12px 14px; align-content: start;
+}
+.lt__cell { display: flex; flex-direction: column; gap: 5px; min-width: 0; text-decoration: none; }
+.lt__tile {
+  position: relative; display: block; aspect-ratio: 1; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface);
+  transition: border-color var(--motion-duration) var(--motion-ease);
+}
+.lt__cell:hover .lt__tile { border-color: var(--border-strong); }
+.lt__cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lt__tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lt__fallback {
+  display: none; position: absolute; inset: 0; padding: 8px;
+  align-items: center; justify-content: center; text-align: center;
+  font-size: var(--font-body-xs); line-height: 1.35; color: var(--text-secondary);
+  overflow: hidden;
+}
+.lt__tile.is-dead img { display: none; }
+.lt__tile.is-dead .lt__fallback { display: flex; }
+.lt__src {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 6px 4px;
+  font-family: var(--font-mono); font-size: var(--font-input-2xs);
+  letter-spacing: 0.05em; text-transform: uppercase; color: #f0f0f0;
+  background: linear-gradient(transparent, rgba(2, 2, 2, 0.72));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lt__cap { font-size: var(--font-body-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lt__foot { display: flex; align-items: center; gap: 10px; flex: none; padding: 11px 14px; border-top: 1px solid var(--border); }
+.lt__note { font-size: var(--font-body-xs); line-height: 1.45; color: var(--text-muted); margin-right: auto; }
+.lt__go {
+  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  border-radius: var(--radius-md); padding: 7px 12px 6px; cursor: pointer; flex: none;
+  background: transparent; color: var(--text-secondary); border: 1px solid var(--border-strong);
+  transition: color var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease);
+}
+.lt__go:hover { color: #dc2626; border-color: #dc2626; }
 
 .agent-prop {
   border: 1px dashed var(--accent);
