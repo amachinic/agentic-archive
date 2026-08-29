@@ -926,14 +926,21 @@
   height: 100%;
   min-height: 0;
 }
-.analyze__picker {
-  display: flex; flex-direction: row; align-items: center; gap: 10px;
-  padding: 8px var(--space-2);
+/* the strip's three lanes: caret gutter, scroller, caret gutter */
+.analyze__strip {
+  display: grid; grid-template-columns: 46px minmax(0, 1fr) 46px;
+  align-items: center;
   border-bottom: 1px solid var(--border);
-  overflow-x: auto; overflow-y: hidden;
   background: var(--surface);
   flex: none;
-  scrollbar-width: thin;
+  padding: 8px 10px;
+}
+.analyze__picker {
+  display: flex; flex-direction: row; align-items: center;
+  overflow-x: auto; overflow-y: hidden;
+  /* the cut-off, made visible: both ends dissolve so it is obvious the row
+     continues past the frame rather than simply stopping */
+  mask-image: linear-gradient(to right, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
 }
 /* search rides the topbar now, beside Upload; the strip is pictures only */
 .analyze__find { flex: none; width: 230px; }
@@ -947,6 +954,31 @@
   margin-bottom: var(--space-2);
 }
 .analyze__drop .mono-xs { text-align: center; line-height: 1.5; }
+/* ---- the studio's one card: ask, then read ----
+   The composer and the brief share a single grey surface, so the question
+   and the answer are one object rather than two stacked panels. The brief's
+   own frame dissolves inside it -- a card within a card is a seam. */
+.analyze__card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel, var(--surface));
+  padding: var(--space-2);
+  display: flex; flex-direction: column; gap: var(--space-3);
+}
+/* an empty thread should take no room: the composer sits straight against
+   the divider until there is actually a conversation above it */
+.analyze__card .chatbox { gap: 12px; padding: 0; }
+.analyze__card .chatbox > div:empty { display: none; }
+.analyze__card .ai-block {
+  border: 0; border-radius: 0; background: none; padding: 0;
+  animation: none;
+}
+.analyze__cardhead {
+  display: flex; align-items: baseline; gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-2);
+}
+
 /* The paged strip (variant C, chosen from the sandbox line-up): tight square
    crops, no scrollbar — the ends fade to say there is more, and two carets
    stay pinned at the edges to walk a screenful at a time. */
@@ -965,19 +997,18 @@
 .analyze__thumb:hover { border-color: var(--border-strong); }
 .analyze__thumb.is-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
+/* always there, in their own gutters — no picture ever passes behind them */
 .analyze__page {
-  position: sticky; z-index: 3; flex: none;
-  height: 34px; width: 34px; align-self: center;
+  height: 34px; width: 34px; justify-self: center;
   display: grid; place-items: center;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: blur(4px);
+  background: var(--surface);
   color: var(--text-secondary);
   border: 1px solid var(--border-strong); border-radius: 50%;
   cursor: pointer;
+  transition: color var(--motion-duration) var(--motion-ease), border-color var(--motion-duration) var(--motion-ease);
 }
 .analyze__page:hover { color: var(--text-primary); border-color: var(--accent); }
-.analyze__page--prev { left: 0; }
-.analyze__page--next { right: 0; }
+.analyze__page:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .analyze__main { min-width: 0; overflow-y: auto; }
 .analyze__scroll {
@@ -1680,17 +1711,7 @@
   .sheet-only { display: inline-flex; }
   .filtersheet__head.sheet-only { display: flex; }
 
-  /* ---- analyze: tiny carousel on top, analysis below ---- */
-  .analyze { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .analyze__picker {
-    flex-direction: row; align-items: center;
-    gap: 8px; padding: 8px;
-    border-right: 0; border-bottom: 1px solid var(--border);
-    overflow-x: auto; overflow-y: hidden;
-    scrollbar-width: none;
-  }
-  .analyze__picker::-webkit-scrollbar { display: none; }
-  /* the strip is already square crops at every size; nothing to override */
+  /* ---- analyze ---- the strip is the same three-lane grid at every size */
   .analyze__scroll { padding: var(--space-2); }
 
   /* edge bubbles can't follow a finger: keep them modest */
