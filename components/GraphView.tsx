@@ -387,7 +387,11 @@ const ARCH_NAMES = new Set(["archivist", "curator", "media manager", "atlas"]);
    with the population it reported, so "go deeper" is a navigable fact — and
    a free line for the human's own words. Everything checked layers into ONE
    sentence that goes back through the agent as the next hunt. */
-const REFINE_TONES = ["dark", "blue", "muted", "warm", "monochrome", "night"];
+/* every narrow group is MULTI-select — tones, colours and mediums layer
+   freely ("dark + blue + paintings + prints"). Only the source stays
+   single: going deeper means going deeper into ONE place. */
+const REFINE_TONES = ["dark", "muted", "warm", "monochrome", "night"];
+const REFINE_COLOURS = ["blue", "red", "green", "gold"];
 const REFINE_MEDIUMS = ["painting", "print", "photograph", "sculpture"];
 const SOURCE_NAME: Record<string, string> = {
   met: "the Met", artic: "Art Institute", cleveland: "Cleveland",
@@ -401,15 +405,18 @@ function RefineBlock({ item, busy, onGo }: {
   onGo: (text: string) => void;
 }) {
   const [tones, setTones] = useState<string[]>([]);
-  const [mediumPick, setMediumPick] = useState<string | null>(null);
+  const [colours, setColours] = useState<string[]>([]);
+  const [mediums, setMediums] = useState<string[]>([]);
   const [source, setSource] = useState<string | null>(null);
   const [custom, setCustom] = useState("");
 
   const spent = item.sent !== null;
-  const chosen = tones.length > 0 || mediumPick !== null || source !== null || custom.trim().length > 0;
+  const chosen = tones.length > 0 || colours.length > 0 || mediums.length > 0 || source !== null || custom.trim().length > 0;
+  const flip = (set: React.Dispatch<React.SetStateAction<string[]>>, v: string) =>
+    set((a) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]));
 
   const compose = () => {
-    const narrow = [...tones, ...(mediumPick ? [mediumPick + "s only"] : [])];
+    const narrow = [...tones, ...colours, ...mediums.map((mm) => mm + "s")];
     let s = "Refine the outside hunt for " + item.base;
     if (narrow.length) s += ": narrow to " + narrow.join(", ");
     if (custom.trim()) s += (narrow.length ? " — " : ": ") + custom.trim();
@@ -426,14 +433,26 @@ function RefineBlock({ item, busy, onGo }: {
     <div className={"agent-refine" + (item.sent === "-" ? " is-passed" : "")}>
       <span className="mono-label">Refine the hunt</span>
       <div className="agent-refine__row">
-        <span className="agent-refine__k">narrow to</span>
+        <span className="agent-refine__k">tone</span>
         {REFINE_TONES.map((t) => (
           <button
             key={t}
             className={"refine-chip" + (tones.includes(t) ? " is-on" : "")}
             aria-pressed={tones.includes(t)}
             disabled={spent || busy}
-            onClick={() => setTones((a) => (a.includes(t) ? a.filter((x) => x !== t) : [...a, t]))}
+            onClick={() => flip(setTones, t)}
+          ><i />{t}</button>
+        ))}
+      </div>
+      <div className="agent-refine__row">
+        <span className="agent-refine__k">colour</span>
+        {REFINE_COLOURS.map((t) => (
+          <button
+            key={t}
+            className={"refine-chip" + (colours.includes(t) ? " is-on" : "")}
+            aria-pressed={colours.includes(t)}
+            disabled={spent || busy}
+            onClick={() => flip(setColours, t)}
           ><i />{t}</button>
         ))}
       </div>
@@ -442,10 +461,10 @@ function RefineBlock({ item, busy, onGo }: {
         {REFINE_MEDIUMS.map((mm) => (
           <button
             key={mm}
-            className={"refine-chip" + (mediumPick === mm ? " is-on" : "")}
-            aria-pressed={mediumPick === mm}
+            className={"refine-chip" + (mediums.includes(mm) ? " is-on" : "")}
+            aria-pressed={mediums.includes(mm)}
             disabled={spent || busy}
-            onClick={() => setMediumPick((v) => (v === mm ? null : mm))}
+            onClick={() => flip(setMediums, mm)}
           ><i />{mm}</button>
         ))}
       </div>
