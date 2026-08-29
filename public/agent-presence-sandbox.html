@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Atlas — agent presence sandbox</title>
+<style>
+  /*
+    Which lens is at work, made visible — six treatments, four use cases, and
+    a motion switch, all over faithful replicas of the prompt panel.
+
+    Treatments A–D attribute the work at the ROW: badges, a presence chip, a
+    hand-off rail, leading idents. E and F attribute it at the TOP: Atlas as
+    the one mind conducting, its subagents listed beneath (E grows the list
+    as lenses join the turn; F keeps the whole roster visible with
+    idle/active/done states).
+
+    The motion switch is the question of taste this page exists to answer:
+    LIVE keeps every ident animating for the whole turn; SETTLE freezes each
+    lens to its still frame the moment its work completes, so only the hand
+    actually moving is in motion.
+  */
+  @font-face { font-family: "Neue Haas Unica"; src: url("/fonts/NHU-Lite.ttf") format("truetype"); font-weight: 300; font-display: swap; }
+  @font-face { font-family: "Neue Haas Unica"; src: url("/fonts/NHU-Reg.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Input Mono"; src: url("/fonts/InputMono-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+  :root {
+    --bg: #020202; --surface: #0d0d0d; --raised: #1a1a1a; --panel: #141414;
+    --border: rgba(255,255,255,0.10); --border-strong: #555;
+    --text: #f0f0f0; --text-2: #a3a3a3; --text-3: #7b7b7b;
+    --accent: #fff; --on-accent: #020202; --green: #7ebb1c;
+    --sans: "Neue Haas Unica", Helvetica, Arial, sans-serif;
+    --mono: "Input Mono", ui-monospace, Menlo, monospace;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  html[data-theme="light"] {
+    --bg: #f8f8f8; --surface: #fff; --raised: #efefef; --panel: #f4f4f4;
+    --border: #e8e8e8; --border-strong: #c0c0c0;
+    --text: #1a1a1a; --text-2: #555; --text-3: #7b7b7b;
+    --accent: #020202; --on-accent: #fff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-weight: 300; display: flex; flex-direction: column; -webkit-font-smoothing: antialiased; }
+
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface); flex: none;
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand b { font-weight: 400; font-size: 15px; }
+  .brand span { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-3); }
+  .group { display: flex; align-items: center; gap: 8px; }
+  .group > label { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-3); }
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button {
+    background: none; border: 0; cursor: pointer; padding: 6px 10px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; color: var(--text-2);
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button:hover { color: var(--text); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+
+  .stage { flex: 1; min-height: 0; display: grid; place-items: center; padding: 20px; overflow: auto; }
+
+  .panelbox {
+    width: 560px; max-width: 96vw; height: 680px;
+    display: flex; flex-direction: column;
+    border: 1px solid var(--border); border-radius: 0 0 10px 10px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+  }
+  .panelhead { display: flex; align-items: center; gap: 10px; flex: none; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .panelhead .topic { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .panelhead .clear { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--text-3); border: 1px solid var(--border); border-radius: 5px; padding: 4px 9px; }
+
+  /* B: presence chip */
+  .presence { display: none; align-items: center; gap: 9px; flex: none; padding: 8px 16px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--accent) 4%, transparent); }
+  .panelbox[data-variant="b"] .presence { display: flex; }
+  .presence .who { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text); }
+  .presence .what { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--text-3); }
+
+  /* E + F: the deck — Atlas conducting, subagents beneath */
+  .deck { display: none; flex: none; flex-direction: column; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .panelbox[data-variant="e"] .deck, .panelbox[data-variant="f"] .deck, .panelbox[data-variant="g"] .deck { display: flex; }
+  /* G: the header carries only Atlas — one mind narrating the turn — and
+     the subagents appear as idents beside the work they are doing, in the
+     rows themselves. No chip roster. */
+  .panelbox[data-variant="g"] .rowpix { display: block; }
+  .panelbox[data-variant="g"] .deck__subs { display: none; }
+  .deck__atlas { display: flex; align-items: center; gap: 10px; }
+  .deck__atlas .who { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text); }
+  .deck__atlas .what { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--text-3); }
+  .deck__subs { display: flex; gap: 8px; flex-wrap: wrap; padding-left: 26px; }
+  .sub {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px 4px;
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--text-3);
+    transition: opacity 200ms var(--ease), border-color 200ms var(--ease), color 200ms var(--ease);
+  }
+  .sub.is-idle { opacity: 0.42; }
+  .sub.is-active { color: var(--text); border-color: var(--border-strong); }
+  .sub.is-done { opacity: 0.8; }
+  .sub .state { font-size: 9px; color: var(--text-3); }
+  .sub.is-active .state { color: var(--green); }
+
+  .thread { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { display: flex; flex-direction: column; gap: 3px; max-width: 85%; }
+  .msg .who { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+  .msg p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-2); }
+  .msg.is-user { align-self: flex-end; align-items: flex-end; }
+  .msg.is-user p { background: var(--raised); border-radius: 10px; padding: 8px 12px; color: var(--text); }
+
+  .toolrow {
+    display: flex; align-items: center; gap: 10px;
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px;
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.02em; color: var(--text-2);
+    animation: rise 280ms var(--ease) both;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+  .toolrow b { font-weight: 400; color: var(--text); }
+  .toolrow .name { flex: none; white-space: nowrap; }
+  .toolrow .args { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toolrow .res { margin-left: auto; flex: none; color: var(--text-3); }
+  .toolrow.is-running .res { color: var(--green); }
+
+  .rowbadge { display: none; flex: none; align-items: center; gap: 6px; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); border: 1px solid var(--border); border-radius: 4px; padding: 3px 7px 2px; }
+  .panelbox[data-variant="a"] .rowbadge { display: inline-flex; }
+
+  .railwrap { display: flex; gap: 10px; }
+  .rail { display: none; flex: none; width: 22px; position: relative; }
+  .panelbox[data-variant="c"] .rail { display: block; }
+  .rail::before { content: ""; position: absolute; left: 50%; top: 4px; bottom: 4px; width: 1px; background: var(--border-strong); }
+  .rail .railpix { position: absolute; left: 50%; transform: translateX(-50%); top: 50%; margin-top: -8px; background: var(--surface); padding: 2px 0; }
+  .railwrap .rows { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+
+  .rowpix { display: none; flex: none; }
+  .panelbox[data-variant="d"] .rowpix { display: block; }
+  .lensname { display: none; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); margin-right: 2px; }
+  .panelbox[data-variant="d"] .lensname, .panelbox[data-variant="i"] .lensname { display: inline; }
+
+  /* H: the whole response is ONE entry in the chat — Atlas speaks from
+     inside the thread, its subagents' work hangs nested beneath the name,
+     and the reply closes the same block. Everything in context together.
+     I: the same nesting, but each row names its subagent and says the task
+     in plain words instead of the tool call — and a finished task's ident
+     always resolves to a checkmark, whatever the motion switch says. */
+  .panelbox[data-variant="h"] .rowpix, .panelbox[data-variant="i"] .rowpix { display: block; }
+  .panelbox[data-variant="i"] .toolrow .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .agentblock { width: 100%; display: flex; flex-direction: column; gap: 8px; animation: rise 280ms var(--ease) both; }
+  .agentblock__head { display: flex; align-items: center; gap: 10px; }
+  .agentblock__head .who { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text); }
+  .agentblock__head .what { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--text-3); }
+  .agentblock__body { display: flex; flex-direction: column; gap: 8px; padding-left: 26px; }
+  .agentblock__say { margin: 2px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--text-2); max-width: 85%; }
+
+  .thinking { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-2); }
+  .thinking .who { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+
+  .composer { flex: none; display: flex; align-items: center; gap: 10px; margin: 0 16px 16px; border: 1px solid var(--border-strong); border-radius: 999px; padding: 10px 16px; color: var(--text-3); font-size: 13.5px; }
+  .composer .up { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-size: 12px; }
+
+  svg.pix rect { fill: currentColor; }
+  .pix { color: var(--text); display: block; }
+  /* the "✓ when done" motion: a finished ident becomes its receipt —
+     drawn with the app's own IconCheck (1.5 stroke, round caps) */
+  .check { color: var(--green); display: block; flex: none; }
+  @media (prefers-reduced-motion: reduce) { .toolrow { animation: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><b>Agent presence</b><span>sandbox</span></div>
+  <div class="group">
+    <label>Treatment</label>
+    <div class="seg" id="variants">
+      <button data-v="a" aria-pressed="true">A badges</button>
+      <button data-v="b" aria-pressed="false">B chip</button>
+      <button data-v="c" aria-pressed="false">C rail</button>
+      <button data-v="d" aria-pressed="false">D idents</button>
+      <button data-v="e" aria-pressed="false">E atlas+subs</button>
+      <button data-v="f" aria-pressed="false">F deck</button>
+      <button data-v="g" aria-pressed="false">G chip+idents</button>
+      <button data-v="h" aria-pressed="false">H nested</button>
+      <button data-v="i" aria-pressed="false">I nested+tasks</button>
+    </div>
+  </div>
+  <div class="group">
+    <label>Use case</label>
+    <div class="seg" id="cases">
+      <button data-c="hunt" aria-pressed="true">outside hunt</button>
+      <button data-c="tag" aria-pressed="false">tag backlog</button>
+      <button data-c="sort" aria-pressed="false">sort canvas</button>
+      <button data-c="save" aria-pressed="false">save + export</button>
+    </div>
+  </div>
+  <div class="group">
+    <label>Motion</label>
+    <div class="seg" id="motions">
+      <button data-m="live" aria-pressed="true">live</button>
+      <button data-m="settle" aria-pressed="false">settle when done</button>
+      <button data-m="check" aria-pressed="false">✓ when done</button>
+    </div>
+  </div>
+  <div class="group">
+    <label>Theme</label>
+    <div class="seg" id="themes">
+      <button data-t="dark" aria-pressed="true">dark</button>
+      <button data-t="light" aria-pressed="false">light</button>
+    </div>
+  </div>
+  <div class="group"><div class="seg"><button id="replay">replay</button></div></div>
+</header>
+
+<div class="stage">
+  <div class="panelbox" data-variant="a" id="panel">
+    <div class="panelhead">
+      <span class="topic" id="topic">…</span>
+      <span class="clear">CLEAR</span>
+    </div>
+    <div class="presence" id="presence">
+      <span id="presencePix"></span>
+      <span class="who" id="presenceWho">atlas</span>
+      <span class="what" id="presenceWhat"></span>
+    </div>
+    <div class="deck" id="deck">
+      <div class="deck__atlas">
+        <span id="deckAtlasPix"></span>
+        <span class="who">Atlas</span>
+        <span class="what" id="deckAtlasWhat">planning the turn</span>
+      </div>
+      <div class="deck__subs" id="deckSubs"></div>
+    </div>
+    <div class="thread" id="thread"></div>
+    <div class="composer"><span>+</span><span>Describe what you are hunting for…</span><span class="up">↑</span></div>
+  </div>
+</div>
+
+<script>
+/* ---- the idents: the app's 5x5 dither language, with STILLS. A lens that
+   has finished settles to its most characteristic frame instead of moving
+   forever -- that stillness is what the motion switch compares. ---- */
+/* the app's pixelated checkmark (components/ToolCheck.tsx), on the same
+   5x5 grid as the idents */
+const CHECKPAT = [
+  0, 0, 0, 0, 0,
+  0, 0, 0, 0, 1,
+  0, 0, 0, 1, 0,
+  1, 0, 1, 0, 0,
+  0, 1, 0, 0, 0,
+];
+
+function makePix(mode, size) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("width", size); svg.setAttribute("height", size);
+  svg.classList.add("pix");
+  const rects = [];
+  for (let i = 0; i < 25; i++) {
+    const r = document.createElementNS(NS, "rect");
+    r.setAttribute("x", 7.5 + (i % 5) * 17); r.setAttribute("y", 7.5 + Math.floor(i / 5) * 17);
+    r.setAttribute("width", 13); r.setAttribute("height", 13);
+    r.setAttribute("fill-opacity", "0.06");
+    svg.appendChild(r); rects.push(r);
+  }
+  const hash = (a, b) => { let h = (a * 374761393 + b * 668265263) >>> 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  function frame(mode, i, t, step) {
+    const r = Math.floor(i / 5), c = i % 5;
+    if (mode === "seek") {
+      const d = Math.abs(r - 2) + Math.abs(c - 2);
+      const ring = ((t % 1900) / 1900) * 6 - 0.5;
+      if (d === 0) return 0.9;
+      if (Math.abs(d - ring) < 0.55) return 1;
+      return d < ring ? 0.3 : 0.05 + hash(i, step) * 0.25;
+    }
+    if (mode === "forms") {
+      const ph = (t % 2400) / 2400;
+      return (ph < 0.5 ? (r + c) % 2 === 0 : r === 2 || c === 2) ? 0.93 : 0.06;
+    }
+    if (mode === "scan") {
+      const sweep = ((t % 1900) / 1900) * 7 - 1;
+      if (Math.abs(r - sweep) < 0.6) return 1;
+      return r < sweep ? 0.75 : 0.05 + hash(i, step) * 0.5;
+    }
+    if (mode === "drop") {
+      const ph = (t % 1600) / 1600, y = ph * 5.4 - 0.7;
+      const tray = r === 4 || (r === 3 && (c === 0 || c === 4));
+      if (tray) return 0.8;
+      return c === 2 && Math.abs(r - y) < 0.6 && r < 4 ? 1 : 0.04 + hash(i, step) * 0.15;
+    }
+    return 0.1 + hash(i, step) * 0.6;  /* atlas: the quiet boil */
+  }
+  function still(mode, i) {
+    const r = Math.floor(i / 5), c = i % 5;
+    if (mode === "seek") return (Math.abs(r - 2) + Math.abs(c - 2) === 2 || (r === 2 && c === 2)) ? 0.9 : 0.06;
+    if (mode === "forms") return (r === 2 || c === 2) ? 0.93 : 0.06;
+    if (mode === "scan") return r === 2 ? 0.95 : 0.06;
+    if (mode === "drop") return (r === 4 || (r === 3 && (c === 0 || c === 4)) || (c === 2 && r === 1)) ? 0.85 : 0.06;
+    return 0.06 + hash(i, 7) * 0.35;
+  }
+  const t0 = performance.now();
+  let raf = 0, running = false;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function tick(now) {
+    const t = Math.floor((now - t0) / 95) * 95, step = Math.floor((now - t0) / 95);
+    rects.forEach((r, i) => r.setAttribute("fill-opacity", frame(mode, i, t, step).toFixed(3)));
+    if (running) raf = requestAnimationFrame(tick);
+  }
+  svg.start = () => { if (reduced) { svg.settle(); return; } if (!running) { running = true; raf = requestAnimationFrame(tick); } };
+  svg.settle = () => { running = false; cancelAnimationFrame(raf); rects.forEach((r, i) => r.setAttribute("fill-opacity", still(mode, i).toFixed(3))); };
+  svg.stop = () => { running = false; cancelAnimationFrame(raf); };
+  /* ToolCheck's resolve: the boil lerps into the pixel check over 380ms
+     and freezes — the micro-animation BECOMES the checkmark */
+  svg.resolveCheck = () => {
+    running = false; cancelAnimationFrame(raf);
+    svg.style.color = "var(--green)";
+    const start = performance.now();
+    const from = rects.map((r) => Number(r.getAttribute("fill-opacity")));
+    const dissolve = (now) => {
+      const rp = reduced ? 1 : Math.min(1, (now - start) / 380);
+      rects.forEach((r, i) => {
+        const target = CHECKPAT[i] ? 1 : 0.04;
+        r.setAttribute("fill-opacity", (from[i] + (target - from[i]) * rp).toFixed(3));
+      });
+      if (rp < 1) raf = requestAnimationFrame(dissolve);
+    };
+    raf = requestAnimationFrame(dissolve);
+  };
+  svg.start();
+  return svg;
+}
+
+const LENS = {
+  archivist: { mode: "scan", label: "archivist" },
+  curator: { mode: "forms", label: "curator" },
+  historian: { mode: "seek", label: "historian" },
+  manager: { mode: "drop", label: "media manager" },
+  atlas: { mode: "atlas", label: "atlas" },
+};
+
+/* ---- four use cases, four different mixes of hands ---- */
+const CASES = {
+  hunt: {
+    topic: "find paintings about malaise and melancholy…",
+    steps: [
+      { kind: "user", text: "find paintings about malaise and melancholy from the museums" },
+      { kind: "think", what: "planning the turn", ms: 1500 },
+      { kind: "tool", lens: "historian", tool: "search_outside", args: "“melancholy” · paintings", res: "5 outside · 5 keepable", what: "searching the museums", ms: 2100 },
+      { kind: "tool", lens: "historian", tool: "search_outside", args: "“vanitas, lamentation, elegy” · paintings", res: "8 outside · 6 keepable", what: "probing the iconography", ms: 2100 },
+      { kind: "tool", lens: "curator", tool: "search_library", args: "“melancholy”", res: "12 in set", what: "checking what you already hold", ms: 1800 },
+      { kind: "tool", lens: "manager", tool: "propose_folder", args: "“Malaise”", res: "staged · 12", what: "staging the folder for your accept", ms: 1800 },
+      { kind: "reply", text: "18 candidates from the museums, 15 keepable — and 12 works already in the library. A folder is staged; nothing is written until you accept.", ms: 2600 },
+    ],
+  },
+  tag: {
+    topic: "tag my new images",
+    steps: [
+      { kind: "user", text: "tag my new images" },
+      { kind: "think", what: "planning the turn", ms: 1300 },
+      { kind: "tool", lens: "archivist", tool: "scan_untagged", args: "the whole library", res: "23 without keyterms", what: "finding what has no name yet", ms: 1900 },
+      { kind: "tool", lens: "archivist", tool: "tag_images", args: "batch 1 · 12 images", res: "titled · described · keyed", what: "looking at every image, writing what is there", ms: 2400 },
+      { kind: "tool", lens: "archivist", tool: "tag_images", args: "batch 2 · 11 images", res: "titled · described · keyed", what: "second batch through the vocabulary", ms: 2400 },
+      { kind: "tool", lens: "curator", tool: "show_field", args: "", res: "field re-formed · 23", what: "putting the newly named on the canvas", ms: 1600 },
+      { kind: "reply", text: "23 images tagged against the vocabulary — titles, descriptions and keyterms. They are on the field now; search can find them.", ms: 2600 },
+    ],
+  },
+  sort: {
+    topic: "sort the canvas by colour",
+    steps: [
+      { kind: "user", text: "sort everything by colour" },
+      { kind: "think", what: "planning the turn", ms: 1200 },
+      { kind: "tool", lens: "curator", tool: "release_field", args: "", res: "field released", what: "bringing the whole library back", ms: 1700 },
+      { kind: "tool", lens: "curator", tool: "sort_field", args: "colour", res: "grid re-formed", what: "sweeping the hue wheel, dark to bright", ms: 2000 },
+      { kind: "reply", text: "All 926 pieces arranged as a colour sweep, dark to bright inside each band. Release puts them back where they live.", ms: 2600 },
+    ],
+  },
+  save: {
+    topic: "save these to disk",
+    steps: [
+      { kind: "user", text: "save what is showing as a folder, and mirror it to disk" },
+      { kind: "think", what: "planning the turn", ms: 1300 },
+      { kind: "tool", lens: "curator", tool: "show_field", args: "the current set", res: "34 showing", what: "confirming what is on the canvas", ms: 1600 },
+      { kind: "tool", lens: "manager", tool: "propose_folder", args: "“Working Set”", res: "staged · 34", what: "staging the folder for your accept", ms: 1900 },
+      { kind: "accept", ms: 1400 },
+      { kind: "tool", lens: "manager", tool: "create_collection", args: "“Working Set”", res: "created", what: "filing the accepted folder", ms: 1700 },
+      { kind: "tool", lens: "manager", tool: "export_disk", args: "~/Atlas Exports/Working Set", res: "34 files copied", what: "mirroring real files to disk", ms: 2100 },
+      { kind: "reply", text: "Filed as “Working Set” and mirrored to ~/Atlas Exports — 34 real copies, originals untouched.", ms: 2600 },
+    ],
+  },
+};
+
+const $ = (id) => document.getElementById(id);
+const panel = $("panel"), thread = $("thread");
+let motion = "live", useCase = "hunt";
+let livePix = [], rowPix = [], timer = null;
+let deckSubPix = {}, deckAtlasPix = null;
+
+function pixFor(lens, size) { const p = makePix(LENS[lens].mode, size); livePix.push(p); return p; }
+
+/* a static pixel check at any size — for chip state marks */
+function checkEl(size) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("width", size); svg.setAttribute("height", size);
+  svg.classList.add("check");
+  for (let i = 0; i < 25; i++) {
+    const r = document.createElementNS(NS, "rect");
+    r.setAttribute("x", 7.5 + (i % 5) * 17); r.setAttribute("y", 7.5 + Math.floor(i / 5) * 17);
+    r.setAttribute("width", 13); r.setAttribute("height", 13);
+    r.setAttribute("fill", "currentColor");
+    r.setAttribute("fill-opacity", CHECKPAT[i] ? "1" : "0.04");
+    svg.appendChild(r);
+  }
+  return svg;
+}
+/* chip state: word while working, the icon once done (unless the ident
+   itself already became the check) */
+function stateInto(span, state) {
+  span.textContent = state === "active" ? "working" : state === "idle" ? "idle" : "";
+  if (state === "done" && motion !== "check") span.appendChild(checkEl(10));
+}
+/* done → the ident dissolves into the pixel check, in place */
+function toCheck(p) {
+  if (!p || !p.isConnected || !p.resolveCheck) return;
+  p.resolveCheck();
+}
+
+const deckOn = () => ["e", "f", "g"].includes(panel.dataset.variant);
+const deckGrows = () => panel.dataset.variant === "e";  /* g keeps the roster empty: rows attribute */
+
+function setPresence(lens, what) {
+  $("presenceWho").textContent = LENS[lens].label;
+  $("presenceWhat").textContent = "· " + what;
+  $("presencePix").innerHTML = "";
+  $("presencePix").appendChild(pixFor(lens, 16));
+}
+
+/* the deck: Atlas on top, its subagents beneath. E grows the list as lenses
+   join; F shows the whole roster with states from the start. */
+function deckInit() {
+  $("deckSubs").innerHTML = "";
+  deckSubPix = {};
+  $("deckAtlasPix").innerHTML = "";
+  deckAtlasPix = pixFor("atlas", 18);
+  $("deckAtlasPix").appendChild(deckAtlasPix);
+  $("deckAtlasWhat").textContent = "· planning the turn";
+  if (panel.dataset.variant === "f") {
+    for (const k of ["archivist", "curator", "historian", "manager"]) deckAdd(k, "idle");
+  }
+}
+function deckAdd(lens, state) {
+  const el = document.createElement("span");
+  el.className = "sub is-" + state;
+  el.dataset.lens = lens;
+  const p = pixFor(lens, 13);
+  deckSubPix[lens] = p;
+  if (state !== "active") p.settle();
+  el.appendChild(p);
+  el.appendChild(Object.assign(document.createElement("span"), { textContent: LENS[lens].label }));
+  const st = document.createElement("span"); st.className = "state";
+  stateInto(st, state);
+  el.appendChild(st);
+  $("deckSubs").appendChild(el);
+}
+function deckState(lens, state, what) {
+  if (!deckOn()) return;
+  if (what) $("deckAtlasWhat").textContent = "· " + what;
+  let el = $("deckSubs").querySelector('[data-lens="' + lens + '"]');
+  if (!el && deckGrows()) { deckAdd(lens, state); el = $("deckSubs").querySelector('[data-lens="' + lens + '"]'); }
+  if (!el) return;
+  el.className = "sub is-" + state;
+  stateInto(el.querySelector(".state"), state);
+  const p = deckSubPix[lens];
+  if (!p) return;
+  if (state === "active") p.start();
+  else if (state === "done" && motion === "settle") p.settle();
+  else if (state === "done" && motion === "check") { toCheck(p); deckSubPix[lens] = null; }
+  else if (state === "done") p.start();
+  else p.settle();
+}
+
+function toolRow(step, running) {
+  const wrap = document.createElement("div");
+  wrap.className = "railwrap";
+  const rail = document.createElement("div");
+  rail.className = "rail";
+  const rp = document.createElement("span"); rp.className = "railpix";
+  const railP = pixFor(step.lens, 14); rp.appendChild(railP); rail.appendChild(rp);
+  const rows = document.createElement("div"); rows.className = "rows";
+  const row = document.createElement("div");
+  row.className = "toolrow" + (running ? " is-running" : "");
+  const lead = document.createElement("span"); lead.className = "rowpix";
+  const leadP = pixFor(step.lens, 15); lead.appendChild(leadP); row.appendChild(lead);
+  const name = document.createElement("span");
+  name.className = "name";
+  /* I speaks the task in plain words; everywhere else names the tool call */
+  const doing = panel.dataset.variant === "i" ? step.what : step.tool;
+  name.innerHTML = '<span class="lensname">' + LENS[step.lens].label + "</span> <b>" + doing + "</b>";
+  row.appendChild(name);
+  /* I gives the task the whole line — args would crush it to ellipses */
+  if (panel.dataset.variant !== "i") row.insertAdjacentHTML("beforeend", '<span class="args">(' + step.args + ")</span>");
+  const res = document.createElement("span"); res.className = "res"; res.textContent = running ? "…" : step.res; row.appendChild(res);
+  const badge = document.createElement("span"); badge.className = "rowbadge";
+  const badgeP = pixFor(step.lens, 12); badge.appendChild(badgeP);
+  badge.appendChild(document.createTextNode(LENS[step.lens].label));
+  row.appendChild(badge);
+  rows.appendChild(row);
+  wrap.appendChild(rail); wrap.appendChild(rows);
+  return { row, wrap, pix: [railP, leadP, badgeP] };
+}
+
+function play() {
+  clearTimeout(timer);
+  livePix.forEach((p) => p.stop());
+  livePix = []; rowPix = [];
+  thread.innerHTML = "";
+  const script = CASES[useCase];
+  $("topic").textContent = script.topic;
+  deckInit();
+  setPresence("atlas", "planning the turn");
+  let i = 0, pending = null, lastLens = null;
+  let block = null, blockPix = null;
+  const nested = () => panel.dataset.variant === "h" || panel.dataset.variant === "i";
+  /* I's contract: a completed task ALWAYS resolves its ident to a checkmark */
+  const checksOnDone = () => motion === "check" || panel.dataset.variant === "i";
+  function ensureBlock(what) {
+    if (block) return;
+    block = document.createElement("div");
+    block.className = "agentblock";
+    const head = document.createElement("div");
+    head.className = "agentblock__head";
+    blockPix = pixFor("atlas", 16);
+    head.appendChild(blockPix);
+    head.insertAdjacentHTML("beforeend", '<span class="who">atlas</span><span class="what">· ' + what + "</span>");
+    block.appendChild(head);
+    const body = document.createElement("div");
+    body.className = "agentblock__body";
+    block.appendChild(body);
+    thread.appendChild(block);
+  }
+  function blockSay(what) { if (block) block.querySelector(".agentblock__head .what").textContent = "· " + what; }
+  /* a user interjection (Accept) ends the block — the next work opens a new
+     one below it, so the chat order stays honest */
+  function blockClose() {
+    if (!block) return;
+    if (checksOnDone() && blockPix) toCheck(blockPix);
+    else if (motion === "settle" && blockPix) blockPix.settle();
+    block = null; blockPix = null;
+  }
+
+  function resolvePending() {
+    if (!pending) return;
+    pending.row.classList.remove("is-running");
+    pending.row.querySelector(".res").textContent = pending.step.res;
+    if (checksOnDone()) pending.pix.forEach(toCheck);
+    else if (motion === "settle") pending.pix.forEach((p) => p.settle());
+    pending = null;
+  }
+  function next() {
+    resolvePending();
+    if (i >= script.steps.length) {
+      if (lastLens) deckState(lastLens, "done");
+      $("deckAtlasWhat").textContent = "· replied";
+      if (motion === "settle" && deckAtlasPix) deckAtlasPix.settle();
+      else if (motion === "check" && deckAtlasPix) { toCheck(deckAtlasPix); deckAtlasPix = null; }
+      blockClose();
+      timer = setTimeout(play, 3400);
+      return;
+    }
+    const step = script.steps[i++];
+    if (step.kind === "user") {
+      thread.insertAdjacentHTML("beforeend", '<div class="msg is-user"><span class="who">you</span><p>' + step.text + "</p></div>");
+      timer = setTimeout(next, 900);
+    } else if (step.kind === "think") {
+      setPresence("atlas", step.what);
+      if (nested()) {
+        ensureBlock(step.what);
+        thread.scrollTop = thread.scrollHeight;
+        timer = setTimeout(next, step.ms);
+      } else {
+        const d = document.createElement("div");
+        d.className = "thinking";
+        d.appendChild(pixFor("atlas", 16));
+        d.insertAdjacentHTML("beforeend", '<span class="who">atlas</span><span>sifting…</span>');
+        thread.appendChild(d);
+        timer = setTimeout(() => { d.remove(); next(); }, step.ms);
+      }
+    } else if (step.kind === "tool") {
+      if (lastLens && lastLens !== step.lens) deckState(lastLens, "done");
+      lastLens = step.lens;
+      deckState(step.lens, "active", step.what);
+      setPresence(step.lens, step.what);
+      const made = toolRow(step, true);
+      if (nested()) {
+        ensureBlock(step.what);
+        blockSay(step.what);
+        block.querySelector(".agentblock__body").appendChild(made.wrap);
+      } else {
+        thread.appendChild(made.wrap);
+      }
+      thread.scrollTop = thread.scrollHeight;
+      pending = made; pending.step = step;
+      timer = setTimeout(next, step.ms);
+    } else if (step.kind === "accept") {
+      if (nested()) blockClose();
+      thread.insertAdjacentHTML("beforeend", '<div class="msg is-user"><span class="who">you</span><p>Accept.</p></div>');
+      thread.scrollTop = thread.scrollHeight;
+      timer = setTimeout(next, step.ms);
+    } else if (step.kind === "reply") {
+      if (lastLens) deckState(lastLens, "done");
+      setPresence("atlas", "replied");
+      $("deckAtlasWhat").textContent = "· replied";
+      if (nested()) {
+        ensureBlock("replied");
+        blockSay("replied");
+        const p = document.createElement("p");
+        p.className = "agentblock__say";
+        p.textContent = step.text;
+        block.querySelector(".agentblock__body").appendChild(p);
+      } else {
+        thread.insertAdjacentHTML("beforeend", '<div class="msg"><span class="who">atlas</span><p>' + step.text + "</p></div>");
+      }
+      thread.scrollTop = thread.scrollHeight;
+      timer = setTimeout(next, step.ms);
+    }
+  }
+  next();
+}
+
+function wire(id, attr, fn) {
+  const btns = $(id).querySelectorAll("button");
+  btns.forEach((b) => b.addEventListener("click", () => {
+    btns.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    fn(b.getAttribute(attr));
+  }));
+}
+wire("variants", "data-v", (v) => { panel.dataset.variant = v; play(); });
+wire("cases", "data-c", (c) => { useCase = c; play(); });
+wire("motions", "data-m", (m) => { motion = m; play(); });
+wire("themes", "data-t", (t) => document.documentElement.setAttribute("data-theme", t));
+$("replay").addEventListener("click", play);
+play();
+</script>
+</body>
+</html>

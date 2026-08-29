@@ -1443,7 +1443,26 @@
   line-height: 1.65; max-width: 76ch;
 }
 
-/* ---- the agent's presence in the thread: tool rows + staged proposals ---- */
+/* ---- the agent's presence in the thread: tool rows + staged proposals ----
+   Treatment I (presence sandbox): ATLAS speaks from inside the thread as a
+   turn head, its subagents' work nests beneath the name — each row led by
+   the lens's own ident, resolving into the pixel check — and the reply
+   closes the block. */
+.agent-turnhead {
+  display: flex; align-items: center; gap: 9px;
+  font-family: var(--font-mono); letter-spacing: 0.03em;
+  animation: content-in 200ms var(--motion-ease) both;
+}
+.agent-turnhead__who { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-primary); }
+.agent-turnhead__what { font-size: 10.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* everything inside the turn hangs under the ATLAS name */
+.is-nested { margin-left: 26px; }
+/* the head names the speaker; the nested reply need not repeat it */
+.chat-msg.is-ai.is-nested > .mono-xs { display: none; }
+.agent-tool__who {
+  font-style: normal; font-size: 9.5px; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--text-muted); margin-right: 7px;
+}
 .agent-tool {
   display: flex; align-items: center; gap: 8px;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
