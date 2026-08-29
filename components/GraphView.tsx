@@ -2794,9 +2794,12 @@ export default function GraphView({
                       })();
                       const nested = nestedFlags[i] ? " is-nested" : "";
                       if (m.type === "head") {
+                        /* Atlas finishing is the speaker going quiet, not a
+                           task done: the boil settles to a dim rest, and only
+                           the subagents' rows carry checkmarks */
                         return (
                           <div key={i} className="agent-turnhead">
-                            <ToolCheck running={m.status === "running"} size={15} />
+                            <ToolCheck running={m.status === "running"} size={15} rest />
                             <span className="agent-turnhead__who">atlas</span>
                             <span className="agent-turnhead__what">· {m.what}</span>
                           </div>
