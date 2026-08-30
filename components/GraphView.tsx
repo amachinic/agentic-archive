@@ -2561,17 +2561,72 @@ export default function GraphView({
     const edge = showWiresRef.current ? pickEdge(e.clientX, e.clientY) : null;
     if (edge) window.location.href = "/diptych?a=" + edge.source + "&b=" + edge.target;
   }
-  function onWheel(e: React.WheelEvent) {
+  /* Zoom about a point: the pixel under the cursor stays under the cursor,
+     which is what makes a pinch feel like it is moving the field rather
+     than resizing it. */
+  const zoomAt = useCallback((cx: number, cy: number, factor: number) => {
+    const el = canvasRef.current;
+    if (!el) return;
     const s = sim.current;
-    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
     const next = Math.max(0.08, Math.min(6, s.scale * factor));
-    const r = canvasRef.current!.getBoundingClientRect();
-    const mx = e.clientX - r.left - r.width / 2;
-    const my = e.clientY - r.top - r.height / 2;
+    if (next === s.scale) return;
+    const r = el.getBoundingClientRect();
+    const mx = cx - r.left - r.width / 2;
+    const my = cy - r.top - r.height / 2;
     s.ox = mx - ((mx - s.ox) * next) / s.scale;
     s.oy = my - ((my - s.oy) * next) / s.scale;
     s.scale = next;
-  }
+  }, []);
+
+  /*
+    Zoom hangs off a NON-PASSIVE native listener rather than React's onWheel.
+
+    React registers wheel passively, so preventDefault() inside an onWheel
+    handler is ignored -- the field zoomed AND the browser zoomed the whole
+    window underneath it, which is what a trackpad pinch did. Claiming the
+    event here keeps the gesture inside the canvas.
+
+    It is attached to the CANVAS, not the stage, so the panels floating over
+    it keep their own scrolling: a wheel over the conversation scrolls the
+    conversation, because that event never reaches this element.
+  */
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+
+    const onWheelNative = (e: WheelEvent) => {
+      e.preventDefault();
+      /* A trackpad pinch arrives as a wheel event with ctrlKey set and a
+         delta of a few units; a mouse notch is about 100. Taking the factor
+         from an exponent of the delta makes both continuous, so a pinch
+         glides where the old fixed 1.12 step used to jump. */
+      const k = e.ctrlKey ? 0.01 : 0.0018;
+      const factor = Math.min(2.4, Math.max(0.4, Math.exp(-e.deltaY * k)));
+      zoomAt(e.clientX, e.clientY, factor);
+    };
+    el.addEventListener("wheel", onWheelNative, { passive: false });
+
+    /* Safari answers a pinch with its own gesture events, and its `scale`
+       is cumulative for the gesture, so each step is the ratio since last. */
+    type GestureEvent = Event & { scale: number; clientX: number; clientY: number };
+    let last = 1;
+    const onGestureStart = (e: Event) => { e.preventDefault(); last = 1; };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      const g = e as GestureEvent;
+      if (!g.scale || !last) return;
+      zoomAt(g.clientX, g.clientY, g.scale / last);
+      last = g.scale;
+    };
+    el.addEventListener("gesturestart", onGestureStart);
+    el.addEventListener("gesturechange", onGestureChange);
+
+    return () => {
+      el.removeEventListener("wheel", onWheelNative);
+      el.removeEventListener("gesturestart", onGestureStart);
+      el.removeEventListener("gesturechange", onGestureChange);
+    };
+  }, [zoomAt]);
 
   /* the pill tells the truth: the pool it reports is the SAME pool the
      field forms from, prompt results included */
@@ -2661,7 +2716,6 @@ export default function GraphView({
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
-              onWheel={onWheel}
               onContextMenu={disconnectEdge}
             />
             <div className="graph-top">
