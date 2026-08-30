@@ -522,7 +522,9 @@ export async function POST(req: Request) {
            per-probe depth and the turn's cap toward the number the human
            actually named, bounded at 100 so a typo cannot order a museum. */
         const want = Math.max(0, Math.min(100, Math.trunc(Number(args.count)) || 0));
-        if (want) capThisTurn = Math.max(capThisTurn, want);
+        /* a named number is the EXACT ceiling: "I want 40" must not mean 48
+           because the default cap happened to be higher (measured overshoot) */
+        if (want) capThisTurn = want;
         const per = only
           ? Math.min(40, want || OUTSIDE_SINGLE_LIMIT)
           : Math.min(40, want ? Math.ceil(want / Math.max(1, outsideSources.length)) : OUTSIDE_SWEEP_LIMIT);
@@ -536,12 +538,14 @@ export async function POST(req: Request) {
         /* Accumulate across the turn's probes: the strip the human sees is
            the union, deduped by identity, capped so it stays a strip. */
         const held = out.candidates?.items ?? [];
+        const before = held.length;
         const seen = new Set(held.map((c) => c.source + ":" + c.remoteId));
         for (const c of results) {
           if (held.length >= capThisTurn) break;
           const key = c.source + ":" + c.remoteId;
           if (!seen.has(key)) { seen.add(key); held.push(c); }
         }
+        const added = held.length - before;
         /* the label joins DISTINCT probes: a per-source sweep calls this five
            times with one query, and "melancholy" five times over is not a
            title, it is a stutter */
@@ -574,6 +578,17 @@ export async function POST(req: Request) {
           sample: results.slice(0, 4).map((c) => c.title).join(", "),
           gathered_this_turn: held.length,
           ...(failed.length ? { failed } : {}),
+          /* the loop contract, spoken AT the decision point: a system rule
+             asking for persistence was followed 1 time in 5 (measured); an
+             instruction inside the tool result is read when it matters */
+          ...(want ? {
+            asked_for: want,
+            next: held.length >= want
+              ? "the asked number is reached — STOP probing and reply now."
+              : added === 0
+                ? "that probe added NOTHING new (" + held.length + " of " + want + " gathered). Try ONE more probe with very different words, then reply with what you have."
+                : "gathered " + held.length + " of the " + want + " asked. Run ANOTHER probe NOW with different words — never repeat: " + [...probes].join(", ") + ". Keep going until you approach " + want + " or the probes run dry.",
+          } : {}),
           note: "candidates appear to the human on the light table beside the conversation. They are NOT in the library and NOT on the canvas. found is only the bounded preview; matched_at_sources is what actually exists — when it dwarfs found, SAY SO (e.g. \"showing 16 of ~3,400 at the Met\") so the human knows the hunt only skimmed the surface.",
         });
       }
