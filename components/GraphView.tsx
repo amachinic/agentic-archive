@@ -3268,8 +3268,10 @@ export default function GraphView({
                           title={c.title + (c.creator ? " — " + c.creator : "") + (c.licence ? " · " + c.licence : "")}
                         >
                           <span className="lt__tile">
-                            {/* same manners as the strip had: a refused thumb
-                                retries once, then yields to its title card */}
+                            {/* the chain: the source DIRECT (the viewer's own
+                                network is usually welcome where a server's is
+                                flagged) -> the Atlas proxy (header-bearing,
+                                CDN-cached) -> the title card. One hop each. */}
                             <img
                               src={c.thumbUrl!}
                               alt={c.title}
@@ -3277,10 +3279,10 @@ export default function GraphView({
                               decoding="async"
                               onError={(e) => {
                                 const img = e.currentTarget;
-                                if (!img.dataset.retried) {
-                                  img.dataset.retried = "1";
-                                  const src = img.src;
-                                  window.setTimeout(() => { img.src = src; }, 3500 + Math.random() * 2500);
+                                if (!img.dataset.orig) img.dataset.orig = c.thumbUrl!;
+                                if (!img.dataset.viaProxy && !img.dataset.orig.startsWith("/api/")) {
+                                  img.dataset.viaProxy = "1";
+                                  img.src = "/api/sources/thumb?url=" + encodeURIComponent(img.dataset.orig);
                                   return;
                                 }
                                 img.closest(".lt__tile")?.classList.add("is-dead");

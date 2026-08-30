@@ -170,6 +170,7 @@ const TOOLS = [
           query: { type: "string", description: "ONE concrete probe: words a museum catalogue would actually contain" },
           medium: { type: "string", enum: ["painting", "print", "photograph", "sculpture"], description: "facet filter on what the work IS; set it whenever the human names a kind" },
           source: { type: "string", description: "ONLY to re-check a single source id (met, artic, cleveland, rijks, arena…); omit to sweep all — the default and almost always right" },
+          count: { type: "integer", minimum: 1, maximum: 100, description: "set ONLY when the human named a number of images they want gathered this turn — it raises the per-probe depth and the turn's cap toward that number" },
         },
         required: ["query"],
       },
@@ -305,6 +306,9 @@ export async function POST(req: Request) {
     // the field's own order is the set's order
     ws = seed.filter((id) => title.has(id)).map((id) => ({ id, title: title.get(id)! }));
   }
+  /* the turn's candidate ceiling: CANDIDATE_CAP by default, raised toward
+     the number the human named when a probe carries count */
+  let capThisTurn = CANDIDATE_CAP;
   const out: {
     shownIds: number[] | null;
     proposal: { name: string; note: string; ids: number[] } | null;
@@ -514,9 +518,17 @@ export async function POST(req: Request) {
         if (!q) return JSON.stringify({ error: "a query is required" });
         const only = outsideSources.find((id) => id === args.source) ?? null;
         const medium = MEDIUMS.find((m) => m === args.medium) ?? null;
+        /* "i want 100 images" is a legitimate ask: count raises both the
+           per-probe depth and the turn's cap toward the number the human
+           actually named, bounded at 100 so a typo cannot order a museum. */
+        const want = Math.max(0, Math.min(100, Math.trunc(Number(args.count)) || 0));
+        if (want) capThisTurn = Math.max(capThisTurn, want);
+        const per = only
+          ? Math.min(40, want || OUTSIDE_SINGLE_LIMIT)
+          : Math.min(40, want ? Math.ceil(want / Math.max(1, outsideSources.length)) : OUTSIDE_SWEEP_LIMIT);
 
         const { results, searched, failed, totals } = await searchConnected(q, {
-          limit: only ? OUTSIDE_SINGLE_LIMIT : OUTSIDE_SWEEP_LIMIT,
+          limit: per,
           only,
           medium,
         });
@@ -526,7 +538,7 @@ export async function POST(req: Request) {
         const held = out.candidates?.items ?? [];
         const seen = new Set(held.map((c) => c.source + ":" + c.remoteId));
         for (const c of results) {
-          if (held.length >= CANDIDATE_CAP) break;
+          if (held.length >= capThisTurn) break;
           const key = c.source + ":" + c.remoteId;
           if (!seen.has(key)) { seen.add(key); held.push(c); }
         }
@@ -601,7 +613,9 @@ export async function POST(req: Request) {
       "\n- When the human asks to PULL from, SEE, or SHOW the outside sources, SEARCH — immediately, with the conversation's current theme if they named none. Never describe what a search could do instead of running one." +
       "\n- Probes are catalogue queries, not sentences: two or three words each. Fold a refinement's tones and colours into SEPARATE short probes ('dark melancholy', 'blue grief'), never one long string — a compound string matches nothing anywhere." +
       "\n- Are.na matches the words ON blocks and channels: probe it with short evocative terms. A zero-result probe is information — loosen the words and try once more before concluding a source holds nothing." +
-      "\n- When the human names ONE source (are.na, the Met), set source on every probe so the hunt goes only there — never sweep everything and report a subset."
+      "\n- When the human names ONE source (are.na, the Met), set source on every probe so the hunt goes only there — never sweep everything and report a subset." +
+      "\n- When the human names a NUMBER of images, set count to it on every probe and keep probing with DIFFERENT words until gathered_this_turn approaches it or the probes run dry. Never refuse a number; gather toward it." +
+      "\n- Candidates can NEVER be filed into a folder — propose_folder files LIBRARY images only, and acquiring outside finds into the library is not built yet, on any archive. If asked to keep or file candidates, gather them onto the light table, say filing outside finds is not possible yet, and point at Copy log as the record."
     : historianOff
       ? "\n\nThe Historian lens is switched off in Agents, so you have no outside-search tool this turn. If the human asks to search museums or outside platforms, say the Historian is switched off and where the switch lives."
       : IS_HOSTED_READ_ONLY
