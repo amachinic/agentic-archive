@@ -1130,20 +1130,46 @@
 /* the budget sits on its own second line, flush with the status TEXT
    (6px dot + 6px gap), never fighting the status for width */
 .agentcard__budget { grid-column: 1; margin-left: 12px; font-family: var(--font-mono); font-size: 9.5px; color: var(--text-muted); }
-.agentcard__switch {
-  grid-column: 2; grid-row: 1; align-self: center;
+/* ---- THE HOUSE SWITCH ----------------------------------------------
+   One pill, one thumb, wherever a thing is simply on or off. Agents wears
+   it in a grid cell and Connections at the end of a flex row, so placement
+   stays with each card and the look lives here, once. */
+.agentcard__switch,
+.conncard__switch {
   width: 34px; height: 19px; flex: none;
   border-radius: 999px; border: 1px solid var(--border-strong);
   background: var(--bg); position: relative; cursor: pointer;
 }
-.agentcard__switch:disabled { cursor: default; opacity: 0.8; }
-.agentcard__switch::after {
+.agentcard__switch { grid-column: 2; grid-row: 1; align-self: center; }
+.agentcard__switch:disabled,
+.conncard__switch:disabled { cursor: default; opacity: 0.8; }
+.agentcard__switch::after,
+.conncard__switch::after {
   content: ""; position: absolute; top: 2px; left: 2px;
   width: 13px; height: 13px; border-radius: 50%;
   background: var(--border-strong);
   transition: transform var(--motion-duration) var(--motion-ease), background var(--motion-duration) var(--motion-ease);
 }
-.agentcard__switch.on::after { transform: translateX(15px); background: var(--accent); }
+.agentcard__switch.on::after,
+.conncard__switch.on::after { transform: translateX(15px); background: var(--accent); }
+.agentcard__switch:hover:not(:disabled),
+.conncard__switch:hover:not(:disabled) { border-color: var(--text-primary); }
+.agentcard__switch:focus-visible,
+.conncard__switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Connecting is a real call to a real source, and it can refuse. So the
+   thumb BREATHES WHERE IT STANDS rather than sliding across: nothing has
+   been decided yet, and a thumb that had already travelled would be
+   claiming a connection nobody made. It settles when the server answers. */
+.conncard__switch.is-busy::after { animation: switch-probe 1100ms var(--motion-ease) infinite; }
+/* mid-probe it is refusing presses without going un-focusable, and on the
+   hosted archive it is a readout rather than a control */
+.conncard__switch[aria-disabled="true"] { cursor: default; }
+/* the trough stays legible: at 0.4 the thumb all but vanished against a
+   light track, which read as a broken switch rather than a working one */
+@keyframes switch-probe { 0%, 100% { opacity: 0.58; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .conncard__switch.is-busy::after { animation: none; opacity: 0.6; }
+}
 
 /* ============================================================
    CONNECTIONS — the sources Atlas may look at.
@@ -1332,6 +1358,11 @@
   border-radius: 50%; background: var(--border-strong);
   transition: background var(--motion-duration) var(--motion-ease), box-shadow var(--motion-duration) var(--motion-ease);
 }
+/* the one place the dot IS allowed to pulse: mid-probe, where the claim is
+   "this is working" and not yet "this is on" */
+.conn-live.is-busy { color: var(--text-secondary); }
+.conn-live.is-busy i { background: var(--processing-accent); animation: switch-probe 1100ms var(--motion-ease) infinite; }
+@media (prefers-reduced-motion: reduce) { .conn-live.is-busy i { animation: none; } }
 .conn-live.is-on { color: var(--text-primary); }
 .conn-live.is-on i {
   background: var(--processing-accent);
@@ -1346,21 +1377,8 @@
   display: flex; align-items: center; gap: var(--space-2);
   border-top: 1px solid var(--border); padding-top: 10px;
 }
-.conn-cta {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--accent); color: var(--on-accent);
-  border: 0; border-radius: var(--radius-md); padding: 7px 12px;
-  font-family: var(--font-mono); font-size: var(--font-input-sm);
-  letter-spacing: 0.03em; cursor: pointer;
-  transition: opacity var(--motion-duration) var(--motion-ease);
-}
-.conn-cta:hover { opacity: 0.85; }
-.conn-cta:disabled { opacity: 0.5; cursor: default; }
-.conn-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.conn-cta.is-off {
-  background: none; color: var(--text-secondary);
-  border: 1px solid var(--border-strong);
-}
+/* the Connect CTA that used to sit here is gone: the switch in the card's
+   head IS the connection now, so the foot carries only the setup expander */
 /* where a source lives, on the archive that cannot press anything */
 .conncard__where {
   font-family: var(--font-mono); font-size: var(--font-input-xs);

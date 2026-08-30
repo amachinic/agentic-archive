@@ -13,16 +13,27 @@
   found outside stays a candidate until you accept it, through the same door an
   ordinary folder proposal goes through.
 
-  State is the SERVER's, not the browser's. An earlier version kept toggles in
-  localStorage, which meant the page could cheerfully claim a source was on
-  while no credential existed anywhere -- a settings screen that lies. Now the
-  rows render what /api/connections reports, and Pinterest's switch is not a
-  switch at all: it is an authorisation, so it sends you to Pinterest.
+  A source is simply on or off, and it says so with the same switch the
+  Agents page uses -- one component for one idea, across both pages under
+  AGENTS.
+
+  But the switch is not a setting. State is the SERVER's, not the browser's:
+  the first version of this page kept toggles in localStorage, so it could
+  cheerfully claim a source was on while no credential existed anywhere -- a
+  settings screen that lies. Turning one on now CALLS the source, and the
+  switch refuses to move until it answers. Mid-probe the thumb breathes where
+  it stands, the dot beside it reads "connecting…", and a refusal leaves the
+  switch exactly where it was with the reason printed on the card. The only
+  way to show "on" is to have actually reached the thing.
+
+  Pinterest wears the same pill and means something different by it: there is
+  no probe to run, only an authorisation, so flipping it leaves for Pinterest
+  and comes back through the OAuth callback. The card says so under it.
 */
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { IconAlert, IconCaret, IconCheck, IconX, IconLink } from "./icons";
+import { IconAlert, IconCaret, IconCheck, IconX } from "./icons";
 
 type Grade = "full" | "partial" | "none";
 type Auth = "none" | "key" | "oauth";
@@ -153,10 +164,21 @@ type State = {
    one piece of information the reader actually needs. */
 type Toast = { id: number; kind: "ok" | "bad"; text: string };
 
-function demand(s: Source): string {
-  if (s.auth === "oauth") return "Connect " + s.name;
-  if (s.auth === "key") return "Enable";
-  return "Enable";
+/* What flipping this particular switch will actually do — spoken plainly,
+   because identical pills mean different things: an open source probes and
+   settles, one still missing its credentials cannot probe at all, an OAuth
+   one leaves the page for the provider, and on the hosted archive the
+   switch only reports, since nothing there can connect. */
+function switchTitle(s: Source, on: boolean, st: State | undefined, hosted: boolean): string {
+  if (hosted) {
+    return on
+      ? s.name + " is available on this archive"
+      : s.name + " connects only in the local runtime";
+  }
+  if (on) return "Switch off " + s.name;
+  if (st && !st.ready) return s.name + " needs its credentials first — see Setup";
+  if (s.auth === "oauth") return "Authorise " + s.name + " — opens " + s.name;
+  return "Switch on " + s.name + " — Atlas calls the source to check it answers";
 }
 
 export default function ConnectionsView() {
@@ -202,6 +224,14 @@ export default function ConnectionsView() {
   }, [params, push, load]);
 
   async function act(s: Source, on: boolean) {
+    /* The guard lives HERE rather than on the button's disabled attribute.
+       Disabling the very control you just pressed makes the browser drop
+       focus to <body> mid-probe, and it never comes back -- a keyboard user
+       could switch a source on and then be unable to switch it off without
+       hunting for the control again. The switch stays focusable and says
+       aria-disabled while it works; this line is what actually stops a
+       second press from firing. */
+    if (busy === s.id) return;
     if (s.auth === "oauth" && !on) {
       const st = states[s.id];
       if (!st?.ready) {
@@ -304,6 +334,7 @@ export default function ConnectionsView() {
               const st = states[s.id];
               const on = !!st && st.status !== "off";
               const open = openId === s.id;
+              const probing = busy === s.id;
               return (
                 <article key={s.id} className={"conncard" + (on ? " is-live" : "")}>
                   <div className="conncard__top">
@@ -312,9 +343,37 @@ export default function ConnectionsView() {
                       <span className="conncard__name">{s.name}</span>
                       <span className="conncard__host">{s.host}</span>
                     </div>
-                    <span className={"conn-live" + (on ? " is-on" : "")}>
-                      <i />{on ? (st.account ? "@" + st.account : "live") : "off"}
+                    {/* spoken as well as shown: "connecting…" is the one
+                        state a reader cannot see coming */}
+                    <span
+                      className={"conn-live" + (on ? " is-on" : "") + (probing ? " is-busy" : "")}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <i />{probing ? "connecting…" : on ? (st.account ? "@" + st.account : "live") : "off"}
                     </span>
+                    {/* The switch IS the connection. It does not flip on a
+                        click and hope: it stays where it is while Atlas
+                        actually calls the source, and settles only on what
+                        the server reports back. A switch that moved first
+                        would be claiming a connection nobody made.
+
+                        On the hosted archive it still shows — the state is
+                        worth reading there — but nothing can be pressed,
+                        because a press whose answer is a 403 is the page
+                        lying about what it offers. */}
+                    <button
+                      type="button"
+                      className={"conncard__switch" + (on ? " on" : "") + (probing ? " is-busy" : "")}
+                      role="switch"
+                      aria-checked={on}
+                      aria-busy={probing}
+                      aria-disabled={probing || hosted}
+                      aria-label={switchTitle(s, on, st, hosted)}
+                      title={switchTitle(s, on, st, hosted)}
+                      disabled={hosted}
+                      onClick={() => act(s, on)}
+                    />
                   </div>
 
                   <p className="conncard__line">{s.line}</p>
@@ -343,24 +402,16 @@ export default function ConnectionsView() {
 
                   <div className="conncard__foot">
                     {/* On the public archive nothing connects or disconnects:
-                        the open sources are simply available, and offering a
-                        button whose answer is a 403 is the page lying about
-                        what a press would do. */}
+                        the open sources are simply available, so the card
+                        carries no switch at all and says where the act lives
+                        rather than offering one whose answer is a 403. */}
                     {hosted ? (
                       <span className="conncard__where">
                         {on ? "available on this archive" : "connects in the local runtime"}
                       </span>
-                    ) : (
-                      <button
-                        className={"conn-cta" + (on ? " is-off" : "")}
-                        disabled={busy === s.id}
-                        onClick={() => act(s, on)}
-                      >
-                        {on
-                          ? <><IconX width={11} height={11} />Disconnect</>
-                          : <><IconCheck width={11} height={11} />{busy === s.id ? "…" : demand(s)}</>}
-                      </button>
-                    )}
+                    ) : s.auth === "oauth" ? (
+                      <span className="conncard__where">the switch opens {s.name}</span>
+                    ) : null}
                     <button
                       className={"conncard__more" + (open ? " is-open" : "")}
                       onClick={() => setOpenId((v) => (v === s.id ? null : s.id))}
