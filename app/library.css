@@ -1406,8 +1406,15 @@
   letter-spacing: 0.05em; color: var(--text-muted);
 }
 .conncard__more:hover { color: var(--text-primary); }
-.conncard__more svg { transition: transform var(--motion-duration) var(--motion-ease); }
-.conncard__more.is-open svg { transform: rotate(180deg); }
+/* Down means "there is more below", up means "put it away" — the same
+   grammar the rules accordion uses. IconCaret's base glyph points RIGHT,
+   so down is the 90 and up is the 270; pointing it right and then flipping
+   it to left said nothing about where the content was going. */
+.conncard__more svg {
+  transform: rotate(90deg);
+  transition: transform var(--motion-duration) var(--motion-ease);
+}
+.conncard__more.is-open svg { transform: rotate(270deg); }
 
 .conncard__setup {
   display: flex; flex-direction: column; gap: 10px;

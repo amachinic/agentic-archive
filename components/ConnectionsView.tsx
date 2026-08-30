@@ -462,6 +462,17 @@ export default function ConnectionsView() {
                       ))}
                     </p>
                   )}
+                  {/* Say WHY there is no Connect button here, rather than
+                      leaving a reader to wonder where it went. A public
+                      archive has no visitor accounts, so a token would have
+                      nowhere of its own to live. */}
+                  {hosted && s.auth !== "none" && (
+                    <p className="conncard__missing">
+                      {s.auth === "oauth"
+                        ? "Signing in to your account needs the local build — a public archive has nowhere of its own to keep your token."
+                        : "Needs an API key, which lives in the local build’s .env.local."}
+                    </p>
+                  )}
                   {/* what the source said about itself when it answered */}
                   {on && st?.detail && <p className="conncard__detail">{st.detail}</p>}
                   {!on && st?.lastError && <p className="conncard__fail">{st.lastError}</p>}
