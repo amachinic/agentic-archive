@@ -1,4 +1,4 @@
-import "./library.css";
+import "../library.css";
 import { listTags, graphData } from "@/lib/queries";
 import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
 import GraphView, { FIELD_DEFAULTS } from "@/components/GraphView";

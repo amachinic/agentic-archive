@@ -2197,3 +2197,39 @@
   color: var(--text-muted); padding: 6px 2px;
 }
 .drop-find--sheet { padding: 4px 0 10px; }
+
+/* ============================================================
+   THE FIELD'S SILHOUETTE — the workspace's instant loading state.
+
+   Shown by app/loading.tsx the moment a navigation commits, so the click
+   lands immediately instead of waiting out the server. It mimics what is
+   coming: the rail's ground and a loose scatter of cards on the field's
+   own dark. Nothing here is interactive and nothing shifts layout when
+   the real canvas replaces it.
+   ============================================================ */
+.fieldskel {
+  position: relative; height: 100%; overflow: hidden;
+  background: var(--bg);
+}
+.fieldskel__rail {
+  height: 44px; flex: none;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+}
+.fieldskel__field { position: absolute; inset: 44px 0 0 0; }
+.fieldskel__card {
+  position: absolute;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  /* a slow, shallow breath — present enough to read as "coming", far too
+     quiet to be a spinner demanding attention */
+  animation: fieldskel-breathe 2200ms var(--motion-ease) infinite;
+}
+@keyframes fieldskel-breathe {
+  0%, 100% { opacity: 0.30; }
+  50%      { opacity: 0.62; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fieldskel__card { animation: none; opacity: 0.42; }
+}

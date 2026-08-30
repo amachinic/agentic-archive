@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { hammingHex, histDistance } from "./imaging";
 import type { Swatch } from "./imaging";
-import { IS_HOSTED_DEMO } from "./runtime";
+import { IS_HOSTED_DEMO, IS_HOSTED_READ_ONLY } from "./runtime";
 import {
   demoCollectionTree,
   demoGetImage,
@@ -218,6 +218,52 @@ export function libraryStats() {
  */
 export type SimilarityMode = "blend" | "structure" | "color" | "aesthetic";
 
+/*
+  The tag co-occurrence join is the Network page's whole cost.
+
+  Measured on the deployed archive: the page answered in 3.79s, and
+  /api/graph — the same query with no React in the picture — in 3.65s. The
+  aesthetic mode runs the identical join TWICE and answered in 7.04s, so one
+  execution is ~3.35s of it. Everything else in here totals under 200ms.
+
+  It is expensive because it materialises every pair of images sharing any
+  keyterm — 2.8 million intermediate rows on a 926-image archive — and keeps
+  the top 1,200. It takes no argument beyond the shared-count floor, so on a
+  snapshot that cannot change it is a constant being recomputed for every
+  visitor.
+
+  So the hosted archive computes it once per process and keeps it: that DB is
+  opened read-only with query_only ON, and nothing in the runtime can write
+  to it. The local archive always re-runs, because there the tags genuinely
+  change underneath you as you upload and file things.
+*/
+const tagPairCache = new Map<string, { a_id: number; b_id: number; shared: number }[]>();
+type TagPair = { a_id: number; b_id: number; shared: number };
+function sharedTagPairs(conn: ReturnType<typeof db>, sharedMin: number, limit: number): TagPair[] {
+  const key = sharedMin + ":" + limit;
+  if (IS_HOSTED_READ_ONLY) {
+    const hit = tagPairCache.get(key);
+    if (hit) return hit;
+  }
+  const rows = conn.prepare(
+    "SELECT a.image_id AS a_id, b.image_id AS b_id, COUNT(*) AS shared FROM image_tags a " +
+    "JOIN image_tags b ON a.tag_id = b.tag_id AND a.image_id < b.image_id " +
+    "GROUP BY a.image_id, b.image_id HAVING shared >= ? ORDER BY shared DESC LIMIT " + Number(limit)
+  ).all(sharedMin) as TagPair[];
+  if (IS_HOSTED_READ_ONLY) tagPairCache.set(key, rows);
+  return rows;
+}
+
+/* the field draws cards, not records: it needs a name, a size and a colour.
+   Reusing IMG_COLS here read palette, prompt_text, ai_description and note
+   off disk for every image and JSON-parsed 926 palettes, all to be thrown
+   away by the projection at the end of this function. */
+const GRAPH_COLS = "id, filename, width, height, dominant_hex, ai_title, flagged";
+type GraphRow = {
+  id: number; filename: string; width: number | null; height: number | null;
+  dominant_hex: string | null; ai_title: string | null; flagged: number;
+};
+
 export function graphData(minScore = 0.8, maxEdgesPerNode = 6, collectionId?: number, mode: SimilarityMode = "blend") {
   if (IS_HOSTED_DEMO) return demoGraphData(minScore, maxEdgesPerNode, collectionId, mode);
   const conn = db();
@@ -225,9 +271,9 @@ export function graphData(minScore = 0.8, maxEdgesPerNode = 6, collectionId?: nu
   const imgFilter = collectionId
     ? " WHERE id IN (SELECT image_id FROM image_collections WHERE collection_id = " + Number(collectionId) + ")"
     : "";
-  const nodes = (conn.prepare(
-    "SELECT " + IMG_COLS + " FROM images" + imgFilter
-  ).all() as RawImage[]).map(hydrate);
+  const nodes = conn.prepare(
+    "SELECT " + GRAPH_COLS + " FROM images" + imgFilter
+  ).all() as GraphRow[];
   const ids = new Set(nodes.map((n) => n.id));
 
   /* The similarity wires depend on what "similar" MEANS right now:
@@ -284,11 +330,7 @@ export function graphData(minScore = 0.8, maxEdgesPerNode = 6, collectionId?: nu
   } else {
     // aesthetic: shared keyterms; the min slider (0.70..0.95) maps to 2..6 shared
     const sharedMin = Math.max(2, Math.min(6, 2 + Math.round((minScore - 0.7) * 16)));
-    const pairs = conn.prepare(
-      "SELECT a.image_id AS a_id, b.image_id AS b_id, COUNT(*) AS shared FROM image_tags a " +
-      "JOIN image_tags b ON a.tag_id = b.tag_id AND a.image_id < b.image_id " +
-      "GROUP BY a.image_id, b.image_id HAVING shared >= ? ORDER BY shared DESC LIMIT 4000"
-    ).all(sharedMin) as { a_id: number; b_id: number; shared: number }[];
+    const pairs = sharedTagPairs(conn, sharedMin, 4000);
     for (const e of pairs) {
       if (!ids.has(e.a_id) || !ids.has(e.b_id)) continue;
       pushCapped(e.a_id, e.b_id, Math.min(1, e.shared / 6));
@@ -297,11 +339,7 @@ export function graphData(minScore = 0.8, maxEdgesPerNode = 6, collectionId?: nu
 
   // Tag co-occurrence: connect pairs sharing >= 2 tags. Bounded to the most
   // shared pairs so the tag layer stays a layer, not a blanket.
-  const tagEdges = (conn.prepare(
-    "SELECT a.image_id AS a_id, b.image_id AS b_id, COUNT(*) AS shared FROM image_tags a " +
-    "JOIN image_tags b ON a.tag_id = b.tag_id AND a.image_id < b.image_id " +
-    "GROUP BY a.image_id, b.image_id HAVING shared >= 2 ORDER BY shared DESC LIMIT 1200"
-  ).all() as { a_id: number; b_id: number; shared: number }[])
+  const tagEdges = sharedTagPairs(conn, 2, 1200)
     .filter((e) => ids.has(e.a_id) && ids.has(e.b_id) && !hidden(e.a_id, e.b_id))
     .map((e) => ({ source: e.a_id, target: e.b_id, score: Math.min(1, e.shared / 6), kind: "tag" as const }));
 
