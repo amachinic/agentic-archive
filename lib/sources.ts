@@ -63,12 +63,20 @@ export const AIC_UA = process.env.ATLAS_CONTACT?.trim()
   ? "Atlas Agentic Archive (" + process.env.ATLAS_CONTACT.trim() + ")"
   : "Atlas Agentic Archive (personal image archive)";
 
-/* Hosts whose images cannot be hotlinked and must come through Atlas. The
-   Art Institute's IIIF service refuses any request without AIC-User-Agent,
-   which a browser <img> will never send, so those thumbnails are proxied.
-   This list is an allowlist, not a suggestion: /api/sources/thumb refuses
-   anything not on it, so the route can never become an open proxy. */
-export const PROXY_HOSTS = new Set(["www.artic.edu", "artic.edu"]);
+/* Hosts /api/sources/thumb may fetch from — the known image CDNs of the
+   connected sources, nothing else. This list is an allowlist, not a
+   suggestion: the route refuses anything not on it, so it can never become
+   an open proxy. The client tries every thumbnail DIRECT first (the
+   viewer's own network is usually welcome where a datacenter's is not —
+   the AIC flags server egress but serves ordinary browsers) and falls back
+   to the proxy, so every host a tile might need to route through is here. */
+export const PROXY_HOSTS = new Set([
+  "www.artic.edu", "artic.edu",
+  "images.metmuseum.org",
+  "openaccess-cdn.clevelandart.org",
+  "d2w9rnfcy7mm78.cloudfront.net", "images.are.na", "attachments.are.na",
+  "api.europeana.eu",
+]);
 
 export function proxied(url: string | null): string | null {
   if (!url) return null;
@@ -138,25 +146,30 @@ const met: Adapter = {
     const all = s.objectIDs ?? [];
     const ids = all.slice(0, limit);
     const out: Candidate[] = [];
-    for (const id of ids) {
-      try {
-        const o = await getJson<{
-          objectID: number; title?: string; artistDisplayName?: string;
-          primaryImageSmall?: string; primaryImage?: string;
-          objectURL?: string; isPublicDomain?: boolean;
-        }>("https://collectionapi.metmuseum.org/public/collection/v1/objects/" + id);
-        if (!o.primaryImageSmall) continue;
-        out.push({
-          source: "met", remoteId: String(o.objectID),
-          title: o.title || "Untitled",
-          creator: o.artistDisplayName || null,
-          pageUrl: o.objectURL ?? null,
-          thumbUrl: o.primaryImageSmall,
-          fullUrl: o.isPublicDomain ? (o.primaryImage || o.primaryImageSmall) : null,
-          licence: o.isPublicDomain ? "CC0" : "in copyright",
-          keepable: !!o.isPublicDomain,
-        });
-      } catch { /* one bad object must not fail the search */ }
+    /* one round trip per object is the Met's price; pay it eight at a time
+       so a deep probe (count=100) lands in seconds, not half a minute */
+    for (let i = 0; i < ids.length; i += 8) {
+      const chunk = await Promise.all(ids.slice(i, i + 8).map(async (id) => {
+        try {
+          const o = await getJson<{
+            objectID: number; title?: string; artistDisplayName?: string;
+            primaryImageSmall?: string; primaryImage?: string;
+            objectURL?: string; isPublicDomain?: boolean;
+          }>("https://collectionapi.metmuseum.org/public/collection/v1/objects/" + id);
+          if (!o.primaryImageSmall) return null;
+          return {
+            source: "met" as const, remoteId: String(o.objectID),
+            title: o.title || "Untitled",
+            creator: o.artistDisplayName || null,
+            pageUrl: o.objectURL ?? null,
+            thumbUrl: o.primaryImageSmall,
+            fullUrl: o.isPublicDomain ? (o.primaryImage || o.primaryImageSmall) : null,
+            licence: o.isPublicDomain ? "CC0" : "in copyright",
+            keepable: !!o.isPublicDomain,
+          };
+        } catch { return null; /* one bad object must not fail the search */ }
+      }));
+      for (const c of chunk) if (c) out.push(c);
     }
     return { items: out, total: all.length };
   },
@@ -190,7 +203,10 @@ const artic: Adapter = {
       title: a.title || "Untitled",
       creator: a.artist_title ?? null,
       pageUrl: "https://www.artic.edu/artworks/" + a.id,
-      thumbUrl: proxied(iiif + "/" + a.image_id + "/full/400,/0/default.jpg"),
+      /* DIRECT, deliberately: the viewer's browser usually loads AIC's IIIF
+         fine, while the server's egress is flagged — the client falls back
+         to the proxy, then to the title card */
+      thumbUrl: iiif + "/" + a.image_id + "/full/400,/0/default.jpg",
       fullUrl: a.is_public_domain ? proxied(iiif + "/" + a.image_id + "/full/1686,/0/default.jpg") : null,
       licence: a.is_public_domain ? "public domain" : "in copyright",
       keepable: !!a.is_public_domain,
