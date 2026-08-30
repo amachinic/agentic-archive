@@ -43,7 +43,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { IconAlert, IconCaret, IconCheck, IconX, IconLink } from "./icons";
+import { IconAlert, IconCaret, IconCheck, IconX, IconLink, IconInfo } from "./icons";
 
 type Grade = "full" | "partial" | "none";
 type Auth = "none" | "key" | "oauth";
@@ -163,6 +163,12 @@ const ALL = CATEGORIES.flatMap((c) => c.sources);
 const MARK: Record<Grade, string> = { full: "●", partial: "◐", none: "○" };
 /* read by GraphView too: the sources this reader has asked Atlas to skip */
 export const MUTED_KEY = "atlas-sources-muted";
+
+/* why an account cannot be joined from the public archive — the long form,
+   carried on the disabled control and its note */
+const LOCAL_ONLY = (s: Source) => s.auth === "oauth"
+  ? "Signing in to " + s.name + " works in the local build. A public archive has no visitor accounts, so your token would have nowhere of its own to live."
+  : s.name + " needs an API key, which lives in the local build’s .env.local — never in a shared deployment.";
 
 type State = {
   id: string; status: "off" | "enabled" | "connected";
@@ -462,17 +468,6 @@ export default function ConnectionsView() {
                       ))}
                     </p>
                   )}
-                  {/* Say WHY there is no Connect button here, rather than
-                      leaving a reader to wonder where it went. A public
-                      archive has no visitor accounts, so a token would have
-                      nowhere of its own to live. */}
-                  {hosted && s.auth !== "none" && (
-                    <p className="conncard__missing">
-                      {s.auth === "oauth"
-                        ? "Signing in to your account needs the local build — a public archive has nowhere of its own to keep your token."
-                        : "Needs an API key, which lives in the local build’s .env.local."}
-                    </p>
-                  )}
                   {/* what the source said about itself when it answered */}
                   {on && st?.detail && <p className="conncard__detail">{st.detail}</p>}
                   {!on && st?.lastError && <p className="conncard__fail">{st.lastError}</p>}
@@ -482,11 +477,28 @@ export default function ConnectionsView() {
                         the open sources are simply available, so the card
                         carries no switch at all and says where the act lives
                         rather than offering one whose answer is a 403. */}
-                    {hosted ? (
+                    {hosted && s.auth === "oauth" ? (
+                      /* The door is SHOWN here, and shown shut. Hiding it
+                         left a reader wondering where the account button
+                         went; a live one would promise a sign-in this
+                         archive cannot keep. So: the same button, disabled,
+                         with the reason beside it. */
+                      <>
+                        <button type="button" className="conn-cta" disabled title={LOCAL_ONLY(s)}>
+                          <IconLink width={12} height={12} />
+                          Connect {s.name}
+                        </button>
+                        <span className="conn-note" title={LOCAL_ONLY(s)}>
+                          <IconInfo width={12} height={12} />local build only
+                        </span>
+                      </>
+                    ) : hosted && s.auth === "key" ? (
+                      <span className="conn-note" title={LOCAL_ONLY(s)}>
+                        <IconInfo width={12} height={12} />key lives in the local build
+                      </span>
+                    ) : hosted ? (
                       <span className="conncard__where">
-                        {inert ? "connects in the local runtime"
-                          : on ? "searched in your hunts"
-                          : "skipped in your hunts"}
+                        {on ? "searched in your hunts" : "skipped in your hunts"}
                       </span>
                     ) : needsAuth ? (
                       /* The door to the account. It leaves for the provider,

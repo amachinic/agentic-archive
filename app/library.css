@@ -1390,8 +1390,16 @@
   letter-spacing: 0.03em; cursor: pointer;
   transition: opacity var(--motion-duration) var(--motion-ease);
 }
-.conn-cta:hover { opacity: 0.85; }
-.conn-cta:disabled { opacity: 0.5; cursor: default; }
+.conn-cta:hover:not(:disabled) { opacity: 0.85; }
+/* shown shut: still legible as the door it is, plainly not openable here */
+.conn-cta:disabled { opacity: 0.38; cursor: default; }
+/* the reason, standing beside the closed door rather than replacing it */
+.conn-note {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: var(--font-input-xs);
+  letter-spacing: 0.05em; color: var(--text-muted);
+}
+.conn-note svg { flex: none; opacity: 0.8; }
 .conn-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* where a source lives, on the archive that cannot press anything */
 .conncard__where {
