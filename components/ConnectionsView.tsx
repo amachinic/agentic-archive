@@ -29,6 +29,16 @@
   Pinterest wears the same pill and means something different by it: there is
   no probe to run, only an authorisation, so flipping it leaves for Pinterest
   and comes back through the OAuth callback. The card says so under it.
+
+  ON THE HOSTED ARCHIVE the switch means the third thing. Nothing can connect
+  there -- the open collections are simply available, and a public deployment
+  has no visitor accounts for a credential to live in -- so a switch that
+  wrote to the server would either lie or let one reader disable the Met for
+  everybody. What it does instead is answer the same question for YOU: will
+  Atlas look here in my hunts? That preference is yours alone, kept in your
+  own browser and sent with each request, so the tool the agent gets offered
+  is genuinely narrowed. A source that needs a credential stays inert there,
+  because no preference of yours can conjure one.
 */
 
 import { useCallback, useEffect, useState } from "react";
@@ -151,6 +161,8 @@ const CATEGORIES: Category[] = [
 
 const ALL = CATEGORIES.flatMap((c) => c.sources);
 const MARK: Record<Grade, string> = { full: "●", partial: "◐", none: "○" };
+/* read by GraphView too: the sources this reader has asked Atlas to skip */
+export const MUTED_KEY = "atlas-sources-muted";
 
 type State = {
   id: string; status: "off" | "enabled" | "connected";
@@ -171,9 +183,14 @@ type Toast = { id: number; kind: "ok" | "bad"; text: string };
    switch only reports, since nothing there can connect. */
 function switchTitle(s: Source, on: boolean, st: State | undefined, hosted: boolean): string {
   if (hosted) {
-    return on
-      ? s.name + " is available on this archive"
-      : s.name + " connects only in the local runtime";
+    /* available here, so the switch is yours: it decides whether Atlas
+       looks in this collection during YOUR hunts */
+    if (st && st.status !== "off") {
+      return on
+        ? "Atlas searches " + s.name + " in your hunts — switch off to skip it"
+        : "Atlas is skipping " + s.name + " — switch on to search it again";
+    }
+    return s.name + " needs a credential, so it connects only in the local runtime";
   }
   if (on) return "Switch off " + s.name;
   if (st && !st.ready) return s.name + " needs its credentials first — see Setup";
@@ -185,6 +202,8 @@ export default function ConnectionsView() {
   const [states, setStates] = useState<Record<string, State>>({});
   /* the public archive: open sources are available, nothing connects */
   const [hosted, setHosted] = useState(false);
+  /* the hosted reader's own choice of where Atlas may look, theirs alone */
+  const [muted, setMuted] = useState<string[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -211,6 +230,21 @@ export default function ConnectionsView() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    try { setMuted(JSON.parse(localStorage.getItem(MUTED_KEY) || "[]") as string[]); } catch { /* first visit */ }
+  }, []);
+
+  /* Skipping a source is a preference, not a connection: it is written here
+     and read by the prompt panel, which sends it with every turn so the
+     agent is offered a genuinely narrower tool. */
+  function mute(id: string, off: boolean) {
+    setMuted((m) => {
+      const next = off ? [...new Set([...m, id])] : m.filter((x) => x !== id);
+      try { localStorage.setItem(MUTED_KEY, JSON.stringify(next)); } catch { /* private window */ }
+      return next;
+    });
+  }
 
   /* The OAuth callback lands back here with an outcome. */
   useEffect(() => {
@@ -269,7 +303,14 @@ export default function ConnectionsView() {
     setBusy(null);
   }
 
-  const liveCount = ALL.filter((s) => states[s.id]?.status !== "off" && states[s.id]).length;
+  /* One reading of "on", used by the cards and by every count, so the
+     header can never disagree with the switches underneath it. */
+  const isOn = useCallback((id: string) => {
+    const st = states[id];
+    const available = !!st && st.status !== "off";
+    return hosted ? available && !muted.includes(id) : available;
+  }, [states, hosted, muted]);
+  const liveCount = ALL.filter((s) => isOn(s.id)).length;
 
   return (
     <div className="conns">
@@ -281,10 +322,12 @@ export default function ConnectionsView() {
         </p>
         <div className="conns__meta">
           <span className={"conn-live" + (liveCount ? " is-on" : "")}>
-            <i />{liveCount ? liveCount + " of " + ALL.length + " connected" : "nothing connected"}
+            <i />{liveCount
+              ? liveCount + " of " + ALL.length + (hosted ? " searched" : " connected")
+              : hosted ? "searching nothing" : "nothing connected"}
           </span>
           {hosted
-            ? <span>The open collections are searchable here. Accounts and keys connect only in the local runtime.</span>
+            ? <span>The open collections are searchable here — switch any of them off and Atlas skips it in your hunts. Accounts and keys connect only in the local runtime.</span>
             : <span>Runs locally. Credentials live in <code>.env.local</code>, never in the browser.</span>}
         </div>
       </header>
@@ -324,7 +367,7 @@ export default function ConnectionsView() {
           <div className="conns__cathead">
             <h2>{cat.title}</h2>
             <span className="conns__catcount">
-              {cat.sources.filter((s) => states[s.id] && states[s.id].status !== "off").length} / {cat.sources.length}
+              {cat.sources.filter((s) => isOn(s.id)).length} / {cat.sources.length}
             </span>
           </div>
           <p className="conns__catlede">{cat.lede}</p>
@@ -332,7 +375,15 @@ export default function ConnectionsView() {
           <div className="conns__grid">
             {cat.sources.map((s) => {
               const st = states[s.id];
-              const on = !!st && st.status !== "off";
+              /* what the SERVER holds: connected, or available-here */
+              const available = !!st && st.status !== "off";
+              /* what the switch shows. Locally that is the connection
+                 itself; on the hosted archive it is this reader's own
+                 answer to "may Atlas look here?" */
+              const on = isOn(s.id);
+              /* hosted sources needing a credential can never come on: no
+                 preference of the reader's conjures one */
+              const inert = hosted && !available;
               const open = openId === s.id;
               const probing = busy === s.id;
               return (
@@ -358,21 +409,24 @@ export default function ConnectionsView() {
                         the server reports back. A switch that moved first
                         would be claiming a connection nobody made.
 
-                        On the hosted archive it still shows — the state is
-                        worth reading there — but nothing can be pressed,
-                        because a press whose answer is a 403 is the page
-                        lying about what it offers. */}
+                        On the hosted archive it flips this reader's own
+                        preference instead — whether Atlas looks here during
+                        their hunts — because a press that wrote to the
+                        server would let one visitor switch the Met off for
+                        everybody. Only a source needing a credential is
+                        inert there, having nothing a preference could
+                        stand in for. */}
                     <button
                       type="button"
                       className={"conncard__switch" + (on ? " on" : "") + (probing ? " is-busy" : "")}
                       role="switch"
                       aria-checked={on}
                       aria-busy={probing}
-                      aria-disabled={probing || hosted}
+                      aria-disabled={probing || inert}
                       aria-label={switchTitle(s, on, st, hosted)}
                       title={switchTitle(s, on, st, hosted)}
-                      disabled={hosted}
-                      onClick={() => act(s, on)}
+                      disabled={inert}
+                      onClick={() => (hosted ? mute(s.id, on) : act(s, on))}
                     />
                   </div>
 
@@ -407,7 +461,9 @@ export default function ConnectionsView() {
                         rather than offering one whose answer is a 403. */}
                     {hosted ? (
                       <span className="conncard__where">
-                        {on ? "available on this archive" : "connects in the local runtime"}
+                        {inert ? "connects in the local runtime"
+                          : on ? "searched in your hunts"
+                          : "skipped in your hunts"}
                       </span>
                     ) : s.auth === "oauth" ? (
                       <span className="conncard__where">the switch opens {s.name}</span>

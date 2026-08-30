@@ -1569,6 +1569,18 @@ export default function GraphView({
     } catch { return true; }
   }
 
+  /* Sources this reader switched off in Connections. On the hosted archive
+     that is the only honest meaning a switch can have — nothing connects
+     there — so it travels with the request and the server drops those
+     sources from the sweep. A preference that never left the browser would
+     be a switch attached to nothing. */
+  function mutedSources(): string[] {
+    try {
+      const v = JSON.parse(localStorage.getItem("atlas-sources-muted") || "[]");
+      return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+    } catch { return []; }
+  }
+
   /** every id currently forming the field, in the order it is laid out */
   function fieldIds(): number[] {
     return sim.current.nodes.map((n) => n.id);
@@ -2042,7 +2054,7 @@ export default function GraphView({
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, field: fieldIds(), historian: historianEnabled() }),
+        body: JSON.stringify({ messages: history, field: fieldIds(), historian: historianEnabled(), mute: mutedSources() }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "the agent failed");

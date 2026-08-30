@@ -269,7 +269,7 @@ type ToolLogRow = { tool: string; args: Record<string, unknown>; result: string 
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null) as
-    { messages?: ChatMsg[]; field?: number[]; historian?: boolean } | null;
+    { messages?: ChatMsg[]; field?: number[]; historian?: boolean; mute?: string[] } | null;
   if (!Array.isArray(body?.messages) || !body.messages.length) {
     return Response.json({ error: "messages required" }, { status: 400 });
   }
@@ -334,9 +334,14 @@ export async function POST(req: Request) {
      has switched it off in Agents, and the tool is genuinely withdrawn for
      the turn, not hidden client-side. */
   const historianOff = body.historian === false;
+  /* Sources the reader switched off in Connections. On the hosted archive
+     that switch is the only one they have — nothing connects there — so the
+     preference arrives with the request and the source is genuinely dropped
+     from the sweep, not merely hidden from the page. */
+  const muted = new Set(Array.isArray(body.mute) ? body.mute.map(String) : []);
   const outsideSources = historianOff
     ? []
-    : listConnections().filter((c) => c.status !== "off").map((c) => c.id);
+    : listConnections().filter((c) => c.status !== "off" && !muted.has(c.id)).map((c) => c.id);
 
   const sample = () => ws.slice(0, 4).map((r) => r.title).join(", ");
 
@@ -539,6 +544,9 @@ export async function POST(req: Request) {
           limit: per,
           only,
           medium,
+          /* the turn's own gate, not the database's: a source the reader
+             switched off must not be reached by re-deriving the live list */
+          allow: outsideSources,
         });
 
         /* Accumulate across the turn's probes: the strip the human sees is
