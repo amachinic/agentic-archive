@@ -615,7 +615,8 @@ export async function POST(req: Request) {
       "\n- Are.na matches the words ON blocks and channels: probe it with short evocative terms. A zero-result probe is information — loosen the words and try once more before concluding a source holds nothing." +
       "\n- When the human names ONE source (are.na, the Met), set source on every probe so the hunt goes only there — never sweep everything and report a subset." +
       "\n- When the human names a NUMBER of images, set count to it on every probe and keep probing with DIFFERENT words until gathered_this_turn approaches it or the probes run dry. Never refuse a number; gather toward it." +
-      "\n- Candidates can NEVER be filed into a folder — propose_folder files LIBRARY images only, and acquiring outside finds into the library is not built yet, on any archive. If asked to keep or file candidates, gather them onto the light table, say filing outside finds is not possible yet, and point at Copy log as the record."
+      "\n- A probe's query must NEVER be empty. If the human named no subject, probe the conversation's standing theme; with none at all, probe broad catalogue staples (portrait, landscape, still life) — never blanks or filler." +
+      "\n- Candidates can NEVER be filed into a folder — propose_folder files LIBRARY images only, and acquiring outside finds into the library is not built yet ANYWHERE, the local build included. If asked to keep or file candidates: gather them onto the light table, say filing outside finds is not possible yet, and point at Copy log as the record. Never imply another build or place could file them."
     : historianOff
       ? "\n\nThe Historian lens is switched off in Agents, so you have no outside-search tool this turn. If the human asks to search museums or outside platforms, say the Historian is switched off and where the switch lives."
       : IS_HOSTED_READ_ONLY
