@@ -344,35 +344,42 @@ const arena: Adapter = {
     return { detail: Array.isArray(d.channels) ? "public channels reachable" : "reachable" };
   },
   async search(q, limit) {
-    const s = await getJson<{ channels?: Array<{ slug?: string; title?: string }> }>(
-      ARENA + "/search?per=5&q=" + encodeURIComponent(q));
-    const slugs = (s.channels ?? []).map((c) => c.slug).filter(Boolean).slice(0, 3) as string[];
     const out: Candidate[] = [];
+    const seen = new Set<number>();
+    const push = (b: ArenaBlock) => {
+      const thumb = b.image?.thumb?.url;
+      if (!thumb || seen.has(b.id) || out.length >= limit) return;
+      seen.add(b.id);
+      out.push({
+        source: "arena", remoteId: String(b.id),
+        title: b.title || b.generated_title || "Untitled",
+        creator: null,
+        pageUrl: b.source?.url ?? "https://www.are.na/block/" + b.id,
+        thumbUrl: thumb,
+        /* Are.na attaches no rights to a block, so nothing from it is ever
+           keepable: it is a lead back to an original, not an acquisition */
+        fullUrl: null,
+        licence: null,
+        keepable: false,
+      });
+    };
+    /* /v2/search answers keyless with BLOCKS as well as channels — measured:
+       a compound query ("melancholic dark muted") that matches no channel
+       NAME still returns image blocks here. A refined hunt used to come
+       back empty because only channel names were consulted; the blocks are
+       the direct answer, the channels the supplement. */
+    const s = await getJson<{ blocks?: ArenaBlock[] | null; channels?: Array<{ slug?: string }> }>(
+      ARENA + "/search?per=" + Math.min(24, limit * 3) + "&q=" + encodeURIComponent(q));
+    for (const b of s.blocks ?? []) push(b);
+    const slugs = (s.channels ?? []).map((c) => c.slug).filter(Boolean).slice(0, 3) as string[];
     for (const slug of slugs) {
       if (out.length >= limit) break;
       try {
         /* a channel's first blocks are often text and links; ask for a full
-           page so the IMAGES in it are actually reached — with per=limit a
-           channel opening on four notes contributed nothing (measured) */
+           page so the IMAGES in it are actually reached (measured) */
         const c = await getJson<{ contents?: ArenaBlock[] | null }>(
           ARENA + "/channels/" + encodeURIComponent(slug) + "/contents?per=24");
-        for (const b of c.contents ?? []) {
-          if (out.length >= limit) break;
-          const thumb = b.image?.thumb?.url;
-          if (!thumb) continue;
-          out.push({
-            source: "arena", remoteId: String(b.id),
-            title: b.title || b.generated_title || "Untitled",
-            creator: null,
-            pageUrl: b.source?.url ?? "https://www.are.na/block/" + b.id,
-            thumbUrl: thumb,
-            /* Are.na attaches no rights to a block, so nothing from it is ever
-               keepable: it is a lead back to an original, not an acquisition */
-            fullUrl: null,
-            licence: null,
-            keepable: false,
-          });
-        }
+        for (const b of c.contents ?? []) push(b);
       } catch { /* a private or empty channel must not fail the search */ }
     }
     /* Are.na has channels, not a corpus: there is no honest total */

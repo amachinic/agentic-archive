@@ -261,6 +261,7 @@ const SYSTEM = [
   "- A decent set you can show beats a perfect set you cannot. When in doubt, show_field.",
   "- Finish with ONE short, human reply (max 2 sentences) stating concretely what you did and what the field now shows.",
   "- Never end with an open offer like 'let me know if you want more'. The interface presents next steps itself; just state the outcome.",
+  "- If the human asks to save, export or log the CONVERSATION: the panel already does it — the 'Copy log' control beside Clear copies the whole chat as markdown, tool calls and finds included, and works everywhere (the hosted archive too, because it writes nothing to the server). Say exactly that. Never claim a log is impossible.",
 ].join("\n");
 
 type ToolLogRow = { tool: string; args: Record<string, unknown>; result: string };
@@ -596,7 +597,10 @@ export async function POST(req: Request) {
       "The library always comes first for anything it can answer. Candidates are not in the library: never file, sort or count them as if they were." +
       "\n- Outside hunts for a MOOD or THEME are a plan of 3 to 5 DIFFERENT probes, because catalogues only match their own words. Probe the synonyms, the iconography (vanitas, lamentation, elegy), and the movements and artists art history files under that mood — a hunt for melancholy that never probes Munch, the Symbolists or Picasso's blue period has only searched the word, not the subject." +
       "\n- One probe sweeps every source at once. Never issue the same query twice, and never once-per-source." +
-      "\n- When the human names a kind of work (paintings, prints, photographs), set medium on every probe."
+      "\n- When the human names a kind of work (paintings, prints, photographs), set medium on every probe." +
+      "\n- When the human asks to PULL from, SEE, or SHOW the outside sources, SEARCH — immediately, with the conversation's current theme if they named none. Never describe what a search could do instead of running one." +
+      "\n- Probes are catalogue queries, not sentences: two or three words each. Fold a refinement's tones and colours into SEPARATE short probes ('dark melancholy', 'blue grief'), never one long string — a compound string matches nothing anywhere." +
+      "\n- Are.na matches the words ON blocks and channels: probe it with short evocative terms. A zero-result probe is information — loosen the words and try once more before concluding a source holds nothing."
     : historianOff
       ? "\n\nThe Historian lens is switched off in Agents, so you have no outside-search tool this turn. If the human asks to search museums or outside platforms, say the Historian is switched off and where the switch lives."
       : IS_HOSTED_READ_ONLY

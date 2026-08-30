@@ -578,6 +578,7 @@ export default function GraphView({
      the thread keeps only a one-line trace that can reopen it. */
   const [lightTable, setLightTable] = useState<{ query: string; items: Candidate[]; totals?: Record<string, number> } | null>(null);
   const [ltOpen, setLtOpen] = useState(false);
+  const [logCopied, setLogCopied] = useState(false);
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const toggleFilterTag = useCallback((name: string) => {
     setFilterTags((current) => current.includes(name)
@@ -1602,6 +1603,47 @@ export default function GraphView({
       await navigator.clipboard.writeText(text);
       setCopied(i);
       setTimeout(() => setCopied((c) => (c === i ? null : c)), 1400);
+    } catch { /* clipboard blocked */ }
+  }
+
+  /* The whole conversation as markdown — messages, tool rows with their
+     lenses, every candidate with its source link, proposals, refinements.
+     Purely client-side, so it works on the hosted archive too: saving a
+     record of the chat never needed a server write. */
+  function chatLog(): string {
+    const L: string[] = ["# Atlas — conversation log", ""];
+    const line = (s: string) => L.push(s);
+    const gap = () => { if (L[L.length - 1] !== "") L.push(""); };
+    for (const m of thread) {
+      if (m.type === "msg") {
+        gap();
+        line((m.role === "user" ? "**you:** " : "**atlas:** ") + m.content);
+      } else if (m.type === "head") {
+        gap();
+        line("_atlas · " + m.what + "_");
+      } else if (m.type === "tool") {
+        const meta = TOOL_META[m.tool];
+        line("- " + (meta ? meta.who + " · " + meta.task : m.tool) + (m.detail ? " (" + m.detail + ")" : "") + " — " + m.result);
+      } else if (m.type === "candidates") {
+        line("- from outside · “" + m.query + "” · " + m.items.length + " candidates, " + m.items.filter((c) => c.keepable).length + " keepable:");
+        for (const c of m.items) {
+          line("  - " + c.title + (c.creator ? " — " + c.creator : "") + " · " + c.source + (c.licence ? " · " + c.licence : "") + (c.pageUrl ? " · " + c.pageUrl : ""));
+        }
+      } else if (m.type === "proposal") {
+        line("- proposal “" + m.name + "” · " + m.ids.length + " images · " + m.status);
+      } else if (m.type === "refine" && m.sent && m.sent !== "-") {
+        line("- refined: " + m.sent);
+      } else if (m.type === "outcome") {
+        for (const r of m.rows) line("- " + r.text);
+      }
+    }
+    return L.join("\n");
+  }
+  async function copyChat() {
+    try {
+      await navigator.clipboard.writeText(chatLog());
+      setLogCopied(true);
+      setTimeout(() => setLogCopied(false), 1400);
     } catch { /* clipboard blocked */ }
   }
 
@@ -2893,6 +2935,11 @@ export default function GraphView({
                         {topic ?? "Conversation"}
                       </span>
                       <div className="filtersheet__actions">
+                        {thread.length > 0 && (
+                          <button className="closebtn" onClick={() => void copyChat()} title="Copy the whole conversation as markdown — messages, tool calls and finds">
+                            {logCopied ? "Copied" : "Copy log"}
+                          </button>
+                        )}
                         {(thread.length > 0 || promptIds) && (
                           <button className="closebtn" onClick={clearPrompt} title="Clear the conversation">Clear</button>
                         )}
