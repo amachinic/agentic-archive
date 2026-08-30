@@ -170,7 +170,7 @@ const TOOLS = [
           query: { type: "string", description: "ONE concrete probe: words a museum catalogue would actually contain" },
           medium: { type: "string", enum: ["painting", "print", "photograph", "sculpture"], description: "facet filter on what the work IS; set it whenever the human names a kind" },
           source: { type: "string", description: "ONLY to re-check a single source id (met, artic, cleveland, rijks, arena…); omit to sweep all — the default and almost always right" },
-          count: { type: "integer", minimum: 1, maximum: 100, description: "set ONLY when the human named a number of images they want gathered this turn — it raises the per-probe depth and the turn's cap toward that number" },
+          count: { type: "integer", minimum: 1, maximum: 100, description: "set ONLY when the human named a number of images: the TOTAL they asked for this turn. Repeat the SAME total on every probe of the turn — never the remainder still missing" },
         },
         required: ["query"],
       },
@@ -306,9 +306,10 @@ export async function POST(req: Request) {
     // the field's own order is the set's order
     ws = seed.filter((id) => title.has(id)).map((id) => ({ id, title: title.get(id)! }));
   }
-  /* the turn's candidate ceiling: CANDIDATE_CAP by default, raised toward
-     the number the human named when a probe carries count */
+  /* the turn's candidate ceiling: CANDIDATE_CAP by default, or exactly the
+     number the human named — the largest count any probe carried */
   let capThisTurn = CANDIDATE_CAP;
+  let wantThisTurn = 0;
   const out: {
     shownIds: number[] | null;
     proposal: { name: string; note: string; ids: number[] } | null;
@@ -522,12 +523,17 @@ export async function POST(req: Request) {
            per-probe depth and the turn's cap toward the number the human
            actually named, bounded at 100 so a typo cannot order a museum. */
         const want = Math.max(0, Math.min(100, Math.trunc(Number(args.count)) || 0));
-        /* a named number is the EXACT ceiling: "I want 40" must not mean 48
-           because the default cap happened to be higher (measured overshoot) */
-        if (want) capThisTurn = want;
+        /* The turn's ask is the LARGEST count any probe carried: a model
+           that sends the remainder ("40, then 12 more") must not shrink the
+           ceiling below what is already held — measured: that made the
+           contract itself announce "reached" at 28 of 40. And a named
+           number is the EXACT ceiling: "I want 40" must not mean 48 because
+           the default cap happened to be higher (also measured). */
+        if (want) wantThisTurn = Math.max(wantThisTurn, want);
+        if (wantThisTurn) capThisTurn = wantThisTurn;
         const per = only
-          ? Math.min(40, want || OUTSIDE_SINGLE_LIMIT)
-          : Math.min(40, want ? Math.ceil(want / Math.max(1, outsideSources.length)) : OUTSIDE_SWEEP_LIMIT);
+          ? Math.min(40, wantThisTurn || OUTSIDE_SINGLE_LIMIT)
+          : Math.min(40, wantThisTurn ? Math.ceil(wantThisTurn / Math.max(1, outsideSources.length)) : OUTSIDE_SWEEP_LIMIT);
 
         const { results, searched, failed, totals } = await searchConnected(q, {
           limit: per,
@@ -581,13 +587,13 @@ export async function POST(req: Request) {
           /* the loop contract, spoken AT the decision point: a system rule
              asking for persistence was followed 1 time in 5 (measured); an
              instruction inside the tool result is read when it matters */
-          ...(want ? {
-            asked_for: want,
-            next: held.length >= want
+          ...(wantThisTurn ? {
+            asked_for: wantThisTurn,
+            next: held.length >= wantThisTurn
               ? "the asked number is reached — STOP probing and reply now."
               : added === 0
-                ? "that probe added NOTHING new (" + held.length + " of " + want + " gathered). Try ONE more probe with very different words, then reply with what you have."
-                : "gathered " + held.length + " of the " + want + " asked. Run ANOTHER probe NOW with different words — never repeat: " + [...probes].join(", ") + ". Keep going until you approach " + want + " or the probes run dry.",
+                ? "that probe added NOTHING new (" + held.length + " of " + wantThisTurn + " gathered). Try ONE more probe with very different words, then reply with what you have."
+                : "gathered " + held.length + " of the " + wantThisTurn + " asked. Run ANOTHER probe NOW with different words (count stays " + wantThisTurn + ") — never repeat: " + [...probes].join(", ") + ". Keep going until you approach " + wantThisTurn + " or the probes run dry.",
           } : {}),
           note: "candidates appear to the human on the light table beside the conversation. They are NOT in the library and NOT on the canvas. found is only the bounded preview; matched_at_sources is what actually exists — when it dwarfs found, SAY SO (e.g. \"showing 16 of ~3,400 at the Met\") so the human knows the hunt only skimmed the surface.",
         });
