@@ -600,7 +600,8 @@ export async function POST(req: Request) {
       "\n- When the human names a kind of work (paintings, prints, photographs), set medium on every probe." +
       "\n- When the human asks to PULL from, SEE, or SHOW the outside sources, SEARCH — immediately, with the conversation's current theme if they named none. Never describe what a search could do instead of running one." +
       "\n- Probes are catalogue queries, not sentences: two or three words each. Fold a refinement's tones and colours into SEPARATE short probes ('dark melancholy', 'blue grief'), never one long string — a compound string matches nothing anywhere." +
-      "\n- Are.na matches the words ON blocks and channels: probe it with short evocative terms. A zero-result probe is information — loosen the words and try once more before concluding a source holds nothing."
+      "\n- Are.na matches the words ON blocks and channels: probe it with short evocative terms. A zero-result probe is information — loosen the words and try once more before concluding a source holds nothing." +
+      "\n- When the human names ONE source (are.na, the Met), set source on every probe so the hunt goes only there — never sweep everything and report a subset."
     : historianOff
       ? "\n\nThe Historian lens is switched off in Agents, so you have no outside-search tool this turn. If the human asks to search museums or outside platforms, say the Historian is switched off and where the switch lives."
       : IS_HOSTED_READ_ONLY
