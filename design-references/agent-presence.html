@@ -72,9 +72,11 @@
   .brand { display: flex; align-items: baseline; gap: 10px; }
   .brand b { font-weight: 400; font-size: 15px; }
   .brand span { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-3); }
-  .group { display: flex; align-items: center; gap: 8px; }
+  .group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
   .group > label { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-3); }
-  .seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  /* nine treatment buttons are wider than a narrow window: the group wraps
+     its rows rather than running off the edge and clipping the last one */
+  .seg { display: flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
   .seg button {
     background: none; border: 0; cursor: pointer; padding: 6px 10px;
     font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; color: var(--text-2);
