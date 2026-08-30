@@ -480,11 +480,17 @@ export type OutsideSearch = {
  */
 export async function searchConnected(
   q: string,
-  opts: { limit?: number; only?: SourceId | null; medium?: Medium | null } = {},
+  opts: { limit?: number; only?: SourceId | null; medium?: Medium | null; allow?: SourceId[] | null } = {},
 ): Promise<OutsideSearch> {
   const limit = Math.max(1, Math.min(40, opts.limit ?? 12));
+  /* `allow` is the caller's own gate, and it NARROWS the connected set —
+     it can never widen it. The agent passes the sources it was actually
+     allowed this turn (the reader may have switched some off), and without
+     this the sweep would quietly re-derive the full list from the database
+     and search a source the reader had just turned off. */
   const live = listConnections().filter((c) => c.status !== "off").map((c) => c.id);
-  const targets = opts.only ? live.filter((id) => id === opts.only) : live;
+  const allowed = opts.allow ? live.filter((id) => opts.allow!.includes(id)) : live;
+  const targets = opts.only ? allowed.filter((id) => id === opts.only) : allowed;
 
   const settled = await Promise.all(targets.map(async (id) => {
     try {
