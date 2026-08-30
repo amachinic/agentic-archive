@@ -43,7 +43,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { IconAlert, IconCaret, IconCheck, IconX } from "./icons";
+import { IconAlert, IconCaret, IconCheck, IconX, IconLink } from "./icons";
 
 type Grade = "full" | "partial" | "none";
 type Auth = "none" | "key" | "oauth";
@@ -273,7 +273,9 @@ export default function ConnectionsView() {
         push("bad", "Set " + (st?.missing.join(" and ") || "the credentials") + " in .env.local, then restart the server.");
         return;
       }
-      window.location.href = "/api/connect/pinterest";
+      /* by source id, so a second account source needs a route and nothing
+         here — the door is the same shape for every provider */
+      window.location.href = "/api/connect/" + s.id;
       return;
     }
     setBusy(s.id);
@@ -384,6 +386,13 @@ export default function ConnectionsView() {
               /* hosted sources needing a credential can never come on: no
                  preference of the reader's conjures one */
               const inert = hosted && !available;
+              /* An account source that has never been authorised has no
+                 state to toggle YET, and a switch is the wrong promise for
+                 it: the act is not "turn this on", it is "leave for
+                 Pinterest, sign in, and come back". That gets a button that
+                 says so. Once authorised it becomes an ordinary switch, so
+                 signing out reads the same as switching anything else off. */
+              const needsAuth = !hosted && s.auth === "oauth" && !available;
               const open = openId === s.id;
               const probing = busy === s.id;
               return (
@@ -415,7 +424,9 @@ export default function ConnectionsView() {
                         server would let one visitor switch the Met off for
                         everybody. Only a source needing a credential is
                         inert there, having nothing a preference could
-                        stand in for. */}
+                        stand in for. An unauthorised account source shows
+                        no switch at all — its door is the button below. */}
+                    {!needsAuth && (
                     <button
                       type="button"
                       className={"conncard__switch" + (on ? " on" : "") + (probing ? " is-busy" : "")}
@@ -428,6 +439,7 @@ export default function ConnectionsView() {
                       disabled={inert}
                       onClick={() => (hosted ? mute(s.id, on) : act(s, on))}
                     />
+                    )}
                   </div>
 
                   <p className="conncard__line">{s.line}</p>
@@ -465,8 +477,19 @@ export default function ConnectionsView() {
                           : on ? "searched in your hunts"
                           : "skipped in your hunts"}
                       </span>
-                    ) : s.auth === "oauth" ? (
-                      <span className="conncard__where">the switch opens {s.name}</span>
+                    ) : needsAuth ? (
+                      /* The door to the account. It leaves for the provider,
+                         so it says the provider's name and what comes back —
+                         never a bare "Connect" that could mean anything. */
+                      <button
+                        type="button"
+                        className="conn-cta"
+                        disabled={probing}
+                        onClick={() => act(s, false)}
+                      >
+                        <IconLink width={12} height={12} />
+                        Connect {s.name}
+                      </button>
                     ) : null}
                     <button
                       className={"conncard__more" + (open ? " is-open" : "")}
