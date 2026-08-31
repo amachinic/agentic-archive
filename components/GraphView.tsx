@@ -24,7 +24,7 @@ import { useDialogs } from "./DialogProvider";
 import { write } from "@/lib/write";
 import GlyphLoader from "./GlyphLoader";
 import Select from "./Select";
-import { IconX, IconPlus, IconCheck, IconCaret, IconChevronDown, IconTag, IconSearch, IconSave, IconSort, IconClock, IconDrive, IconPalette, IconRefresh, IconFolder, IconSparkle, IconUndo, IconCopy, IconTrash, IconAgent } from "./icons";
+import { IconX, IconPlus, IconCheck, IconCaret, IconChevronDown, IconArrowLeft, IconTag, IconSearch, IconSave, IconSort, IconClock, IconDrive, IconPalette, IconRefresh, IconFolder, IconSparkle, IconUndo, IconCopy, IconTrash, IconAgent } from "./icons";
 import ThemeToggle from "./ThemeToggle";
 import ToolCheck from "./ToolCheck";
 import type { PixMode } from "./ArchetypePix";
@@ -596,6 +596,31 @@ export default function GraphView({
   const [filterSheetOpen, setFilterSheetOpen] = useState(false); // mobile: the filter drawer
   const [openFilterSec, setOpenFilterSec] = useState<string | null>(null); // one drawer section at a time
 
+  const [selected, setSelected] = useState<number | null>(null);
+  const [trail, setTrail] = useState<number[]>([]);
+
+  /* ---- the collapsing rail ----
+     The inspector is a FLEX SIBLING of the stage (.inspector-shell, flex:none
+     at clamp(400px, 30vw, 600px)), so selecting a card does not cover the rail,
+     it NARROWS it — and thirteen category chips are ~1443px of chrome the
+     stage no longer has. They were being clipped by .graph-stage's overflow,
+     silently, from the right end: PROCESS, FORMAT, MEDIUM, MANUAL.
+
+     The rule is deliberately BOTH halves. A selection always collapses the
+     rail, because that is the behaviour the surface promises and it holds on
+     any monitor. Width is a FLOOR under it, not a substitute: at a 1440
+     viewport with nothing selected the rail is already ~250px over budget and
+     clips three chips, which the 721-1180px wrap rule at library.css never
+     catches because it interrogates the VIEWPORT while the thing that shrank
+     is the stage. Trigger on selection alone and that bug survives untouched. */
+  const RAIL_FITS_AT = 1560; // the natural rail (1443px) rounded up to cover Clear (1532px)
+  const [stageW, setStageW] = useState(Infinity);
+  const railCollapsed = selected !== null || stageW < RAIL_FITS_AT;
+  /* which room the collapsed panel is showing: null = the category list,
+     a kind = that category's terms */
+  const [drillKind, setDrillKind] = useState<string | null>(null);
+  const drillDeep = drillKind !== null;
+
   const [fieldSort, setFieldSort] = useState<FieldSortMode | null>(null);
   /* the home panel introduces itself: Atlas thinks, speaks, then its
      capabilities arrive one after another */
@@ -910,6 +935,24 @@ export default function GraphView({
     };
   }, [openKind]);
 
+  /* The collapse must not throw away where you were. A category menu open on
+     the wide rail reopens as that category's room inside the panel, and comes
+     back out to its own chip when the rail expands again — the two key spaces
+     already match, so this is a hand-off rather than a translation. Without
+     it, openKind is left pointing at a trigger that no longer exists and the
+     Escape handler below focuses a dead node, stranding the keyboard. */
+  const railCarry = useRef({ openKind, drillKind });
+  railCarry.current = { openKind, drillKind };
+  useEffect(() => {
+    const { openKind: k, drillKind: d } = railCarry.current;
+    if (railCollapsed) {
+      if (k && k !== "all" && k !== "tune" && k !== "help") { setDrillKind(k); setOpenKind("all"); }
+    } else {
+      if (k === "all") setOpenKind(d);
+      setDrillKind(null);
+    }
+  }, [railCollapsed]);
+
   /* live search settles for a beat before the field re-pools, so typing
      does not thrash the spawn animations */
   useEffect(() => {
@@ -917,8 +960,11 @@ export default function GraphView({
     return () => clearTimeout(t);
   }, [searchQ]);
 
-  /* the narrowing box belongs to whichever category is open, not to the rail */
-  useEffect(() => { setTermQ(""); }, [openKind, openFilterSec]);
+  /* the narrowing box belongs to whichever category is open, not to the rail.
+     drillKind is in here because inside the collapsed panel openKind stays
+     "all" while the category underneath changes — without it, a query typed
+     into ARTIST would still be filtering MOOD after you backed out. */
+  useEffect(() => { setTermQ(""); }, [openKind, openFilterSec, drillKind]);
   const narrowTerms = useCallback((items: Keyterm[]) => {
     const q = termQ.trim().toLowerCase();
     return q ? items.filter((t) => t.name.toLowerCase().includes(q)) : items;
@@ -939,8 +985,6 @@ export default function GraphView({
   );
   const [tip, setTip] = useState<{ id: number; label: string; x: number; y: number } | null>(null);
   const [linking, setLinking] = useState(false);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [trail, setTrail] = useState<number[]>([]);
   const [collections, setCollections] = useState<{ id: number; name: string; depth: number }[]>([]);
 
   useEffect(() => {
@@ -1106,6 +1150,8 @@ export default function GraphView({
       canvas.height = r.height * devicePixelRatio;
       canvas.style.width = r.width + "px";
       canvas.style.height = r.height + "px";
+      /* the rail collapses on the stage's width, not the window's */
+      if (r.width > 0) setStageW(r.width);
       if (r.width > 0 && r.height > 0 && canvas.width > 0 && canvas.height > 0) {
         reportAtlasBoot(40);
       }
@@ -2648,6 +2694,15 @@ export default function GraphView({
   }, [raw.nodes, filterTags, effectiveQ, promptIds]);
 
 
+  /* the collapsed panel's second room, and the number on its chip. The chip
+     counts CATEGORIES engaged while Clear counts TERMS — two different facts,
+     rather than the same integer printed twice. */
+  const drillGroup = drillKind ? kinds.find((g) => g.kind === drillKind) ?? null : null;
+  const engagedKinds = useMemo(
+    () => kinds.filter((g) => g.items.some((t) => filterTags.includes(t.name))).length,
+    [kinds, filterTags],
+  );
+
   /* the tuning controls, shared by the desktop dropdown and the mobile
      filter drawer */
   const tuneControls = (
@@ -2740,6 +2795,147 @@ export default function GraphView({
                   Filter
                   {filterTags.length > 0 && <span className="cat-count">{filterTags.length}</span>}
                 </button>
+                {/* The rail has two forms. Wide, it is thirteen chips. Narrow —
+                    because a card is selected, or because the stage simply is
+                    not wide enough — it is one FILTERS door onto a panel with
+                    two rooms: the categories, and one category's terms.
+                    .graph-catwrap is load-bearing, not decoration: the away
+                    handler above tests .closest(".graph-catwrap"), so the panel
+                    gets dismiss-on-outside-click for free, and the
+                    graph-filter-trigger- id convention keeps Escape's refocus
+                    working with no second listener. */}
+                {railCollapsed ? (
+                  <>
+                    <span className="graph-catwrap graph-drillwrap" data-filter-kind="all">
+                      <button
+                        type="button"
+                        id="graph-filter-trigger-all"
+                        className={
+                          "graph-rail__cat graph-drillbtn" +
+                          (openKind === "all" ? " is-open" : "") +
+                          (filterTags.length > 0 ? " has-active" : "")
+                        }
+                        onClick={() => setOpenKind(openKind === "all" ? null : "all")}
+                        aria-expanded={openKind === "all"}
+                        aria-controls="graph-filter-panel-all"
+                      >
+                        Filters
+                        {engagedKinds > 0 && <span className="cat-count">{engagedKinds}</span>}
+                        {" "}<i>▾</i>
+                      </button>
+                      {openKind === "all" && (
+                        <div
+                          id="graph-filter-panel-all"
+                          className="graph-drop graph-drop--terms graph-drop--drill"
+                          role="group"
+                          aria-label="Filters"
+                        >
+                          {/* one window, two panes, one track. The frame never
+                              resizes — not between rooms, not between a
+                              four-term category and a two-hundred-term one —
+                              because a box that breathes slides Clear out from
+                              under the cursor mid-gesture. */}
+                          <div className="drill__viewport">
+                            <div className={"drill__track" + (drillDeep ? " is-deep" : "")}>
+                              <div className="drill__pane" inert={drillDeep || undefined}>
+                                <div className="drill__bar">
+                                  <span className="drill__here">Filters</span>
+                                  {filterTags.length > 0 && <span className="cat-count">{filterTags.length}</span>}
+                                </div>
+                                {kinds.map((g) => {
+                                  const selCount = g.items.filter((t) => filterTags.includes(t.name)).length;
+                                  return (
+                                    <button
+                                      key={g.kind}
+                                      type="button"
+                                      className={"drill__cat" + (selCount > 0 ? " has-active" : "")}
+                                      onClick={() => setDrillKind(g.kind)}
+                                    >
+                                      <span className="drill__kind">{KIND_LABEL[g.kind] ?? g.kind}</span>
+                                      {selCount > 0 && <span className="cat-count">{selCount}</span>}
+                                      <span className="drill__total">{g.items.length}</span>
+                                      <IconCaret className="drill__chev" width={11} height={11} />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="drill__pane" inert={!drillDeep || undefined}>
+                                {drillGroup && (() => {
+                                  const selCount = drillGroup.items.filter((t) => filterTags.includes(t.name)).length;
+                                  const visibleTerms = alphabetizeTerms(narrowTerms(drillGroup.items));
+                                  return (
+                                    <>
+                                      <button type="button" className="drill__bar drill__back" onClick={() => setDrillKind(null)}>
+                                        <IconArrowLeft className="drill__arrow" width={13} height={13} />
+                                        <span className="drill__crumb">Filters</span>
+                                        <span className="drill__sep" aria-hidden>/</span>
+                                        <span className="drill__here">{KIND_LABEL[drillGroup.kind] ?? drillGroup.kind}</span>
+                                        {selCount > 0 && <span className="cat-count">{selCount}</span>}
+                                      </button>
+                                      {drillGroup.items.length > TERM_SEARCH_AT && (
+                                        <div className="drop-find">
+                                          <input
+                                            autoFocus
+                                            value={termQ}
+                                            placeholder={"Search " + drillGroup.items.length + " " + (KIND_LABEL[drillGroup.kind] ?? drillGroup.kind).toLowerCase() + " terms..."}
+                                            onChange={(e) => setTermQ(e.target.value)}
+                                            aria-label={"Narrow the " + drillGroup.kind + " list"}
+                                          />
+                                          {termQ && <span className="drop-find__n" role="status" aria-live="polite">{visibleTerms.length} of {drillGroup.items.length}</span>}
+                                        </div>
+                                      )}
+                                      <div className="graph-drop__list">
+                                        {visibleTerms.length === 0 && (
+                                          <span className="drop-find__none">nothing matches &ldquo;{termQ}&rdquo;</span>
+                                        )}
+                                        {visibleTerms.map((t) => (
+                                          <FilterCheckboxRow
+                                            key={t.id}
+                                            term={t}
+                                            checked={filterTags.includes(t.name)}
+                                            onToggle={toggleFilterTag}
+                                          />
+                                        ))}
+                                      </div>
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="drill__foot">
+                            <span className="mono-xs">
+                              {filterTags.length > 0
+                                ? filterTags.length + (filterTags.length === 1 ? " term · " : " terms · ") + "all must match"
+                                : "no filters · all media showing"}
+                            </span>
+                            {filterTags.length > 0 && (
+                              <button className="graph-rail__clear" onClick={() => setFilterTags([])} title="Remove all selected keyterms">
+                                Clear<span className="cat-count">{filterTags.length}</span>
+                              </button>
+                            )}
+                          </div>
+                          <span className="u-visually-hidden" role="status" aria-live="polite">
+                            {drillGroup
+                              ? (KIND_LABEL[drillGroup.kind] ?? drillGroup.kind) + " filters, " + drillGroup.items.length + " terms"
+                              : "All filter categories, " + kinds.length}
+                          </span>
+                        </div>
+                      )}
+                    </span>
+                    {/* Clear stays ON the rail as well as in the panel: removing
+                        everything should never require opening anything. */}
+                    {filterTags.length > 0 && (
+                      <button
+                        className="graph-rail__clear"
+                        onClick={() => setFilterTags([])}
+                        title="Remove all selected keyterms"
+                      >
+                        Clear<span className="cat-count">{filterTags.length}</span>
+                      </button>
+                    )}
+                  </>
+                ) : (
                 <div className="graph-rail__cats">
                   {kinds.map((g) => {
                     const selCount = g.items.filter((t) => filterTags.includes(t.name)).length;
@@ -2810,6 +3006,7 @@ export default function GraphView({
                     </button>
                   )}
                 </div>
+                )}
                 <div className="graph-rail__spacer" />
                 <span className="graph-catwrap graph-tunewrap">
                   <button

@@ -329,6 +329,95 @@
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+/* ---- the collapsed rail: one FILTERS door, one panel, two rooms ----
+   Reached when a card is selected, or when the stage is simply too narrow for
+   thirteen chips. Everything here is geometry; the rows themselves are the
+   .frow contract above, unchanged, so both rooms read as one material. */
+.graph-drillbtn.is-open { background: var(--surface-raised); color: var(--text-primary); border-color: var(--border); }
+/* FILTERS is NEW, so it enters; the thirteen chips are GONE, and per the house
+   rule exits stay instant. The 8px settles it into the exact left edge ARTIST
+   occupied, inside the inspector's own 280ms envelope so the two read as one
+   gesture rather than a sequel. */
+.graph-drillwrap { animation: drill-chip-in 140ms var(--motion-ease) 120ms both; }
+@keyframes drill-chip-in { from { opacity: 0; transform: translateX(8px); } }
+
+.graph-drop--drill { --drill-h: min(360px, 52vh); }
+.drill__viewport { position: relative; height: var(--drill-h); overflow: hidden; flex: none; }
+/* two panes on one track: the contents traverse behind a frame that never
+   resizes, at either depth, for any category */
+.drill__track {
+  display: flex; width: 200%; height: 100%;
+  transform: translateX(0);
+  transition: transform 260ms var(--motion-ease);
+}
+.drill__track.is-deep { transform: translateX(-50%); }
+.drill__pane {
+  width: 50%; flex: none; height: 100%;
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+  display: flex; flex-direction: column;
+}
+/* one address strip, two variants: at depth 1 it is a title, at depth 2 it is
+   a door, and the hover is the whole tell */
+.drill__bar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; height: 42px; flex: none; padding: 0 12px;
+  background: var(--surface-raised);
+  border: 0; border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-family: var(--font-mono); font-size: var(--font-input-label);
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+}
+button.drill__bar { cursor: pointer; transition: background-color var(--motion-duration) var(--motion-ease); }
+button.drill__bar:hover { background: color-mix(in srgb, var(--text-primary) 9%, var(--surface-raised)); }
+button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.drill__arrow { flex: none; color: var(--text-muted); transition: color var(--motion-duration) var(--motion-ease); }
+.drill__crumb { color: var(--text-muted); flex: none; transition: color var(--motion-duration) var(--motion-ease); }
+.drill__back:hover .drill__crumb, .drill__back:hover .drill__arrow { color: var(--text-primary); }
+.drill__sep { color: var(--text-muted); opacity: 0.5; margin: 0 -2px; }
+/* the title sits on the same left edge as the category names beneath it — the
+   list reads as one column. Depth 2 spends that slot on a real back arrow,
+   which is the one place the indent means something. */
+.drill__here {
+  flex: 1; min-width: 0; color: var(--text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.drill__bar .cat-count { margin-left: auto; flex: none; }
+/* deliberately a twin of .frow, so a category row and a term row are the same
+   object at two depths */
+.drill__cat {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 38px;
+  padding: 10px 10px 10px 12px;
+  background: transparent; border: 0; cursor: pointer; text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  transition: background-color var(--motion-duration) var(--motion-ease);
+}
+.drill__cat:last-child { border-bottom: 0; }
+.drill__cat:hover { background: var(--surface-raised); }
+.drill__cat:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.drill__kind {
+  flex: 1; min-width: 0;
+  font-family: var(--font-mono); font-size: var(--font-input-label);
+  letter-spacing: 0; text-transform: uppercase; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: color var(--motion-duration) var(--motion-ease);
+}
+.drill__cat:hover .drill__kind, .drill__cat.has-active .drill__kind { color: var(--text-primary); }
+.drill__total { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.drill__chev { color: var(--text-muted); transform: rotate(-90deg); flex: none; }
+/* the search box pins under the address so terms do not ghost through it */
+.graph-drop--drill .drop-find { position: sticky; top: 42px; z-index: 2; background: var(--surface); }
+/* the pane owns the scroll now, not the list */
+.graph-drop--drill .graph-drop__list { flex: 1; min-height: 0; max-height: none; overflow: visible; }
+/* always present, both depths, so the contract and Clear never traverse */
+.drill__foot {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 41px; padding: 6px 8px 6px 12px;
+  background: var(--surface); border-top: 1px solid var(--border);
+}
+.drill__foot .graph-rail__clear { padding: 6px 9px 5px; font-size: 10px; }
+
 .graph-drop--tune {
   left: auto; right: 0;
   flex-direction: column; align-items: stretch;
@@ -1826,6 +1915,10 @@
   /* ---- network rail: toggle + Filter button + info, nothing else ---- */
   .graph-rail { gap: 8px; padding: 6px 8px; }
   .graph-rail__cats { display: none; }
+  /* Mobile already had this problem solved: .graph-filterbtn opens the
+     bottom drawer. The narrow stage collapses the rail here too, so hide the
+     desktop door rather than offer two of them. */
+  .graph-drillwrap { display: none; }
   .graph-rail__spacer { flex: 1; display: block; }
   .graph-filterbtn {
     display: inline-flex;
