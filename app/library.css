@@ -47,14 +47,19 @@
    Split in two for motion: the SHELL slides in once when a selection first
    opens the panel; the CONTENT (remounted per image) cross-fades on every hop
    through similar images, so browsing a chain feels fluid, not slammed. */
+/* The inspector reads on the LEFT: the selected image is what the field is
+   currently about, so it takes the reading edge, and the conversation
+   answers from the far side. Its hairline and its entrance follow it —
+   a panel on the left divides on its right and arrives from the left. */
 .inspector-shell {
   width: var(--inspector-w);
   flex: none;
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   background: var(--surface);
   overflow: hidden;
-  animation: panel-in 280ms var(--motion-ease) both;
+  animation: inspector-in 280ms var(--motion-ease) both;
 }
+@keyframes inspector-in { from { transform: translateX(-32px); opacity: 0; } }
 .inspector {
   width: 100%;
   height: 100%;
@@ -626,12 +631,17 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
    the SAME chatbox component as the analysis view (topic as its title),
    expanding only downward, up to the bottom of the stage. */
 .graph-below {
-  align-self: flex-start;
+  /* the conversation hangs from the rail's RIGHT end, opposite the
+     inspector: the image on the reading edge, the agent answering from the
+     far side, the field open between them. Hanging right, it divides on its
+     left and rounds its bottom-LEFT corner — the mirror of what it was. */
+  align-self: flex-end;
   width: 520px;
+  max-width: 100%;   /* the search panel has no dock to cap it */
   padding: var(--space-2);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
-  border: 1px solid var(--border); border-top: 0; border-left: 0;
-  border-radius: 0 0 var(--radius-lg) 0;
+  border: 1px solid var(--border); border-top: 0; border-right: 0;
+  border-radius: 0 0 0 var(--radius-lg);
   backdrop-filter: blur(10px);
   min-height: 0;
   overflow-y: auto;
@@ -1780,7 +1790,22 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
    the thread, the finds scroll in the grid, and neither moves the other.
    Temporary-ness lives in the head's words, not in a dashed second window:
    there is no second window any more. */
-.chatdock { align-self: flex-start; display: flex; align-items: stretch; min-height: 0; }
+/* row-reverse, not a DOM change: the conversation stays first in source
+   order because it is the primary thing, while the table opens INWARD from
+   the panel's left edge — toward the field it came from, rather than off
+   the side of the stage where there is no room for it. */
+.chatdock {
+  align-self: flex-end; display: flex; flex-direction: row-reverse;
+  align-items: stretch; min-height: 0;
+  /* Below about 1160px the inspector leaves the stage narrower than the
+     panel's 520px, and the surplus has to go somewhere. Hanging left it
+     went off the stage's right edge and cost a hairline; hanging right it
+     would go off the LEFT edge, where every line of the conversation
+     begins — the one edge that cannot be spared. So the dock is capped by
+     the stage and the panel shrinks to fit instead of sliding out of it. */
+  max-width: 100%;
+}
+.chatdock > .graph-below { min-width: 0; }
 /* .graph-below carries align-self: flex-start from its life as a DIRECT
    child of the column-flex graph-top, where it meant "hug the left". Inside
    the row-flex chatdock the same words mean "refuse the height cap": the
@@ -1798,12 +1823,12 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
      scrollbar — measured, not guessed. contain:size takes the table's
      content out of the sizing conversation entirely. */
   contain: size;
-  /* the panel's own dress: same wash, same blur, joined at its right
+  /* the panel's own dress: same wash, same blur, joined at its LEFT
      hairline — the table's outer edge takes over the panel's corner */
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(10px);
-  border: 1px solid var(--border); border-top: 0; border-left: 0;
-  border-radius: 0 0 var(--radius-lg) 0;
+  border: 1px solid var(--border); border-top: 0; border-right: 0;
+  border-radius: 0 0 0 var(--radius-lg);
   transition: width 560ms var(--motion-ease), opacity 320ms var(--motion-ease);
 }
 .lighttable.is-in { width: 400px; opacity: 1; }

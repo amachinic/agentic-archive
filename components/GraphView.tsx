@@ -2922,6 +2922,29 @@ export default function GraphView({
         <ThemeToggle />
       </header>
       <div className="work">
+        {selected !== null && (
+          <div className="inspector-shell">
+            <Inspector
+              key={selected}
+              imageId={selected}
+              collections={collections}
+              onClose={() => { setSelected(null); setTrail([]); }}
+              onNavigate={(id) => {
+                setTrail((t) => (selected !== null ? [...t, selected] : t));
+                setSelected(id);
+              }}
+              onBack={trail.length ? () => {
+                const t = [...trail];
+                const prev = t.pop()!;
+                setTrail(t);
+                setSelected(prev);
+              } : null}
+              onRowPatch={() => {}}
+              onRemoved={() => loadGraph().catch(() => {})}
+            />
+          </div>
+        )}
+
         <main className="pane pane--flush" tabIndex={-1}>
           <div className="graph-stage" ref={wrapRef}>
             <canvas
@@ -3781,29 +3804,6 @@ export default function GraphView({
             )}
           </div>
         </main>
-
-        {selected !== null && (
-          <div className="inspector-shell">
-            <Inspector
-              key={selected}
-              imageId={selected}
-              collections={collections}
-              onClose={() => { setSelected(null); setTrail([]); }}
-              onNavigate={(id) => {
-                setTrail((t) => (selected !== null ? [...t, selected] : t));
-                setSelected(id);
-              }}
-              onBack={trail.length ? () => {
-                const t = [...trail];
-                const prev = t.pop()!;
-                setTrail(t);
-                setSelected(prev);
-              } : null}
-              onRowPatch={() => {}}
-              onRemoved={() => loadGraph().catch(() => {})}
-            />
-          </div>
-        )}
       </div>
     </>
   );
