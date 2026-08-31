@@ -28,5 +28,12 @@ run-failed.webm
 # card artwork renders: build outputs for the portfolio repo, not source here
 public/card/
 public/image-archivist.mp4
+
+# Design sandboxes — local references, never shipped.
+# They live under public/ so `next dev` still serves them at /sandboxes/<name>.html,
+# which is what makes them usable; being ignored is what keeps them off the
+# deployed archive, where they were previously reachable by anyone who guessed
+# the filename. Keep them, do not commit them. See public/sandboxes/README.md.
+public/sandboxes/
 .qa/
 .backups/
