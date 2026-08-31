@@ -5,6 +5,7 @@ import { listImages } from "@/lib/queries";
 import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
 import { listConnections } from "@/lib/connections";
 import { searchConnected, MEDIUMS, type Candidate } from "@/lib/sources";
+import { recordEvent, probeMemory } from "@/lib/events";
 import type { ChatMsg } from "@/lib/vision";
 
 export const maxDuration = 120;
@@ -182,11 +183,39 @@ const TOOLS = [
    this the strip stops informing and starts scrolling. 48 leaves room for
    three or four distinct probes to land after overlap collapses. */
 const CANDIDATE_CAP = 48;
-/* Per source, per call. A full sweep keeps it small so ONE probe cannot fill
-   the strip and crowd out the other registers; a single-source re-check may
-   go deeper. The Met costs one round trip per candidate either way. */
-const OUTSIDE_SWEEP_LIMIT = 4;
-const OUTSIDE_SINGLE_LIMIT = 6;
+/* Per PROBE. The old shape was a flat 4 per source — a QUOTA, which assumed
+   the sources yield evenly. They do not, and the miss was not close: a hunt
+   for a mood draws almost nothing from the Met's catalogue text while Are.na
+   holds it by the thousand ("sad": ~1,600 across its matched channels,
+   measured). The even split starved exactly the source that answers, and a
+   three-probe hunt could not clear a dozen before overlap — the session
+   that provoked this landed on eight.
+
+   So the target is per PROBE, not per source: every source may bring up to
+   the whole target (a LIMIT now, not a quota — sources with little return
+   little), and the merged sweep is trimmed back to the target round-robin
+   across the sources that answered, so a fat source deepens a thin probe
+   but can never crowd the others off the strip. */
+const OUTSIDE_PROBE_TARGET = 12;
+const OUTSIDE_SINGLE_LIMIT = 12;
+
+/* What past hunts already learned, folded into the Historian's briefing.
+   The ledger is written at every probe (recordEvent below); this is the
+   re-reading — the agent starts from its own record instead of
+   rediscovering the same dead words every session. Empty in the read-only
+   builds, and silent when there is nothing yet to say. */
+function probeLedgerBrief(): string {
+  const mem = probeMemory();
+  if (!mem.rich.length && !mem.dry.length) return "";
+  const rich = mem.rich.length
+    ? "probes that YIELDED before: " + mem.rich.map((p) => p.q + " (+" + p.added + ")").join(", ") + "."
+    : "";
+  const dry = mem.dry.length
+    ? " Probes that came back EMPTY twice or more: " + mem.dry.join(", ") + " — do not lead with these."
+    : "";
+  return "\n- Your own record from past hunts: " + rich + dry +
+    " Reuse the registers that worked; spend the probes the record has not tried.";
+}
 
 /* the agent picks filter terms from THIS list; guessing was how a hunt for
    "deep rich colours" zeroed its own working set four times in a row */
@@ -310,6 +339,10 @@ export async function POST(req: Request) {
      number the human named — the largest count any probe carried */
   let capThisTurn = CANDIDATE_CAP;
   let wantThisTurn = 0;
+  /* every probe this turn, with what it actually yielded: the ledger the
+     model reads back at each decision point, so "try different words" can
+     become "these words are spent, that register is dry" */
+  const probeLog: Array<{ q: string; found: number; added: number }> = [];
   const out: {
     shownIds: number[] | null;
     proposal: { name: string; note: string; ids: number[] } | null;
@@ -538,9 +571,11 @@ export async function POST(req: Request) {
         if (wantThisTurn) capThisTurn = wantThisTurn;
         const per = only
           ? Math.min(40, wantThisTurn || OUTSIDE_SINGLE_LIMIT)
-          : Math.min(40, wantThisTurn ? Math.ceil(wantThisTurn / Math.max(1, outsideSources.length)) : OUTSIDE_SWEEP_LIMIT);
+          : Math.min(40, wantThisTurn
+              ? Math.ceil(wantThisTurn / Math.max(1, outsideSources.length))
+              : OUTSIDE_PROBE_TARGET);
 
-        const { results, searched, failed, totals } = await searchConnected(q, {
+        const { results: fetched, searched, failed, totals } = await searchConnected(q, {
           limit: per,
           only,
           medium,
@@ -548,6 +583,30 @@ export async function POST(req: Request) {
              switched off must not be reached by re-deriving the live list */
           allow: outsideSources,
         });
+
+        /* the round-robin trim: every source that answered is represented,
+           and the surplus goes to whoever actually had the goods */
+        let results = fetched;
+        if (!only && !wantThisTurn && fetched.length > OUTSIDE_PROBE_TARGET) {
+          const lanes = new Map<string, Candidate[]>();
+          for (const c of fetched) {
+            const lane = lanes.get(c.source);
+            if (lane) lane.push(c); else lanes.set(c.source, [c]);
+          }
+          const mixed: Candidate[] = [];
+          for (let i = 0; mixed.length < OUTSIDE_PROBE_TARGET; i++) {
+            let reached = false;
+            for (const lane of lanes.values()) {
+              if (i < lane.length) {
+                reached = true;
+                mixed.push(lane[i]);
+                if (mixed.length >= OUTSIDE_PROBE_TARGET) break;
+              }
+            }
+            if (!reached) break;
+          }
+          results = mixed;
+        }
 
         /* Accumulate across the turn's probes: the strip the human sees is
            the union, deduped by identity, capped so it stays a strip. */
@@ -579,6 +638,32 @@ export async function POST(req: Request) {
         const matched: Record<string, number> = {};
         for (const t of totals) if (t.total != null) matched[t.source] = t.total;
         const totalMatched = Object.values(matched).reduce((a, b) => a + b, 0);
+        probeLog.push({ q, found: results.length, added });
+        /* the diary: what this probe asked and what it yielded, durable, so
+           the NEXT session's hunt can start from what this one learned */
+        recordEvent("historian", "probe", {
+          q, sources: searched.length, found: results.length, added,
+          matched: totalMatched || null,
+        });
+        /* The loop contract used to exist only when the human named a
+           number, so the commonest hunt of all — "find me sad images", no
+           count — got no reflection at the decision point and stopped at the
+           first probe's handful. Every probe now reads its own ledger. */
+        const registersLeft =
+          "the registers are synonyms, then iconography (vanitas, lamentation, elegy), then the movements and named artists — move to the register the ledger shows untried";
+        const next = wantThisTurn
+          ? (held.length >= wantThisTurn
+            ? "the asked number is reached — STOP probing and reply now."
+            : added === 0
+              ? "that probe added NOTHING new (" + held.length + " of " + wantThisTurn + " gathered). " + registersLeft + "; try ONE more, then reply with what you have."
+              : "gathered " + held.length + " of the " + wantThisTurn + " asked. Run ANOTHER probe NOW with different words (count stays " + wantThisTurn + ") — never repeat: " + [...probes].join(", ") + ". Keep going until you approach " + wantThisTurn + " or the probes run dry.")
+          : (added === 0
+            ? "that probe added NOTHING new. " + registersLeft + "; if the last two probes both added nothing, reply with what you have."
+            : totalMatched > held.length * 3 && probeLog.length < 4
+              ? "the sources matched ~" + totalMatched + " for this theme and you hold " + held.length + ". That is a skim, not a hunt — run ANOTHER probe from a different register before replying."
+              : held.length >= Math.min(24, capThisTurn) || probeLog.length >= 5
+                ? "a healthy strip is gathered — reply now with what the hunt found."
+                : "run at least one more probe from a different register, then reply.");
         return JSON.stringify({
           query: q,
           searched: searched.length,
@@ -591,18 +676,14 @@ export async function POST(req: Request) {
           total_matched: totalMatched || undefined,
           sample: results.slice(0, 4).map((c) => c.title).join(", "),
           gathered_this_turn: held.length,
+          /* the turn's own ledger, probe by probe: yield is the teacher */
+          probes_this_turn: probeLog.map((p) => p.q + " → +" + p.added),
           ...(failed.length ? { failed } : {}),
           /* the loop contract, spoken AT the decision point: a system rule
              asking for persistence was followed 1 time in 5 (measured); an
              instruction inside the tool result is read when it matters */
-          ...(wantThisTurn ? {
-            asked_for: wantThisTurn,
-            next: held.length >= wantThisTurn
-              ? "the asked number is reached — STOP probing and reply now."
-              : added === 0
-                ? "that probe added NOTHING new (" + held.length + " of " + wantThisTurn + " gathered). Try ONE more probe with very different words, then reply with what you have."
-                : "gathered " + held.length + " of the " + wantThisTurn + " asked. Run ANOTHER probe NOW with different words (count stays " + wantThisTurn + ") — never repeat: " + [...probes].join(", ") + ". Keep going until you approach " + wantThisTurn + " or the probes run dry.",
-          } : {}),
+          ...(wantThisTurn ? { asked_for: wantThisTurn } : {}),
+          next,
           note: "candidates appear to the human on the light table beside the conversation. They are NOT in the library and NOT on the canvas. found is only the bounded preview; matched_at_sources is what actually exists — when it dwarfs found, SAY SO (e.g. \"showing 16 of ~3,400 at the Met\") so the human knows the hunt only skimmed the surface.",
         });
       }
@@ -641,11 +722,13 @@ export async function POST(req: Request) {
       "\n- When the human names a kind of work (paintings, prints, photographs), set medium on every probe." +
       "\n- When the human asks to PULL from, SEE, or SHOW the outside sources, SEARCH — immediately, with the conversation's current theme if they named none. Never describe what a search could do instead of running one." +
       "\n- Probes are catalogue queries, not sentences: two or three words each. Fold a refinement's tones and colours into SEPARATE short probes ('dark melancholy', 'blue grief'), never one long string — a compound string matches nothing anywhere." +
-      "\n- Are.na matches the words ON blocks and channels: probe it with short evocative terms. A zero-result probe is information — loosen the words and try once more before concluding a source holds nothing." +
+      "\n- Are.na's wealth for a mood is its CHANNELS — human-curated collections someone already spent an evening filling ('sad' surfaces channels holding ~1,600 blocks). A probe walks the matched channels for you; probe with the short evocative words a person would NAME a channel (sad, melancholy, grief, longing, blue), not catalogue phrases. matched_at_sources now reports Are.na's real population — when it dwarfs found, the hunt has only skimmed and should probe again." +
+      "\n- A zero-result probe is information — loosen the words and try once more before concluding a source holds nothing." +
       "\n- When the human names ONE source (are.na, the Met), set source on every probe so the hunt goes only there — never sweep everything and report a subset." +
       "\n- When the human names a NUMBER of images, set count to it on every probe and keep probing with DIFFERENT words until gathered_this_turn approaches it or the probes run dry. Never refuse a number; gather toward it." +
       "\n- A probe's query must NEVER be empty. If the human named no subject, probe the conversation's standing theme; with none at all, probe broad catalogue staples (portrait, landscape, still life) — never blanks or filler." +
-      "\n- Candidates can NEVER be filed into a folder — propose_folder files LIBRARY images only, and acquiring outside finds into the library is not built yet ANYWHERE, the local build included. If asked to keep or file candidates: gather them onto the light table, say filing outside finds is not possible yet, and point at Copy log as the record. Never imply another build or place could file them."
+      "\n- Candidates can NEVER be filed into a folder — propose_folder files LIBRARY images only, and acquiring outside finds into the library is not built yet ANYWHERE, the local build included. If asked to keep or file candidates: gather them onto the light table, say filing outside finds is not possible yet, and point at Copy log as the record. Never imply another build or place could file them." +
+      probeLedgerBrief()
     : historianOff
       ? "\n\nThe Historian lens is switched off in Agents, so you have no outside-search tool this turn. If the human asks to search museums or outside platforms, say the Historian is switched off and where the switch lives."
       : IS_HOSTED_READ_ONLY
