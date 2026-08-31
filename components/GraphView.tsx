@@ -626,6 +626,19 @@ export default function GraphView({
      with a working footer. A dangling key now falls back to the category
      list, which is always a room that exists. */
   const [drillKind, setDrillKind] = useState<string | null>(null);
+  const drillFindRef = useRef<HTMLInputElement | null>(null);
+  /* The narrowing box is focused AFTER the traverse settles, and with
+     preventScroll — the two halves of the fix for the room that rendered
+     blank. autoFocus fired at mount, mid-slide, and the browser's
+     scroll-into-view answered by scrolling the overflow:hidden viewport
+     (scrollLeft 373) on top of the track's translateX(-378): both rooms
+     ended off-screen. 300ms clears the 260ms traverse, and holds under
+     reduced motion, where there is nothing to wait for anyway. */
+  useEffect(() => {
+    if (!drillKind) return;
+    const t = window.setTimeout(() => drillFindRef.current?.focus({ preventScroll: true }), 300);
+    return () => window.clearTimeout(t);
+  }, [drillKind]);
 
   const [fieldSort, setFieldSort] = useState<FieldSortMode | null>(null);
   /* the home panel introduces itself: Atlas thinks, speaks, then its
@@ -2858,7 +2871,17 @@ export default function GraphView({
                               four-term category and a two-hundred-term one —
                               because a box that breathes slides Clear out from
                               under the cursor mid-gesture. */}
-                          <div className="drill__viewport">
+                          {/* The invariant, enforced where it can never rot: the viewport
+                              NEVER scrolls — rooms move only by the track's transform. Any
+                              scroll that sneaks in (a focus chase, find-in-page, a future
+                              focusable child) is undone in the same event. */}
+                          <div
+                            className="drill__viewport"
+                            onScroll={(e) => {
+                              if (e.currentTarget.scrollLeft !== 0) e.currentTarget.scrollLeft = 0;
+                              if (e.currentTarget.scrollTop !== 0) e.currentTarget.scrollTop = 0;
+                            }}
+                          >
                             <div className={"drill__track" + (drillDeep ? " is-deep" : "")}>
                               <div className="drill__pane" inert={drillDeep || undefined}>
                                 <div className="drill__bar">
@@ -2897,8 +2920,15 @@ export default function GraphView({
                                       </button>
                                       {drillGroup.items.length > TERM_SEARCH_AT && (
                                         <div className="drop-find">
+                                          {/* NO autoFocus. It fired while the track was still
+                                              traversing, and the browser answered by scrolling
+                                              the overflow:hidden viewport to chase the input —
+                                              scrollLeft 373 stacked on translateX(-378), both
+                                              panes off-screen, the room rendered as a void
+                                              (measured). The deliberate focus happens after the
+                                              traverse, with preventScroll, in the effect above. */}
                                           <input
-                                            autoFocus
+                                            ref={drillFindRef}
                                             value={termQ}
                                             placeholder={"Search " + drillGroup.items.length + " " + (KIND_LABEL[drillGroup.kind] ?? drillGroup.kind).toLowerCase() + " terms..."}
                                             onChange={(e) => setTermQ(e.target.value)}
