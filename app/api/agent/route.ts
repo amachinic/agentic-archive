@@ -164,14 +164,15 @@ const TOOLS = [
     type: "function",
     function: {
       name: "search_outside",
-      description: "Search the CONNECTED outside sources (museums, image platforms) for images that are NOT in the library. These APIs are keyword search over CATALOGUE TEXT: a probe finds only works whose titles or records carry the word, so a mood or theme is a PLAN of several probes, not one query. Probe three registers: direct synonyms (melancholy, sorrow, mourning, solitude); iconography and genre terms catalogues actually use (vanitas, memento mori, lamentation, elegy, deposition); and the movements and named artists known for it (for melancholy: Munch, Picasso blue period, Caspar David Friedrich, Hammershøi, Hopper, Symbolist). Each call sweeps every connected source at once — NEVER repeat the same query per source, and never the same query twice. Set medium when the human names a kind of work: 'paintings about sorrow' without it returns vases whose descriptions mention grief. Results are CANDIDATES: shown to the human in the conversation, never in the working set, nothing written. Report the keepable count honestly — it is how many carry a licence permitting a copy.",
+      description: "Search the CONNECTED outside sources (museums, image platforms) for images that are NOT in the library. These APIs are keyword search over CATALOGUE TEXT: a probe finds only works whose titles or records carry the word, so a mood or theme is a PLAN of several probes, not one query. Probe three registers: direct synonyms (melancholy, sorrow, mourning, solitude); iconography and genre terms catalogues actually use (vanitas, memento mori, lamentation, elegy, deposition); and the movements and named artists known for it (for melancholy: Munch, Picasso blue period, Caspar David Friedrich, Hammershøi, Hopper, Symbolist). Each call sweeps every connected source at once — NEVER repeat the same query per source, and never the same query twice — EXCEPT to continue it: repeating a query with more:true pulls the NEXT chunk past everything it has already delivered, this turn or any earlier one (the server keeps the odometer; you never manage offsets). Set medium when the human names a kind of work: 'paintings about sorrow' without it returns vases whose descriptions mention grief. Results are CANDIDATES: shown to the human in the conversation, never in the working set, nothing written. Report the keepable count honestly — it is how many carry a licence permitting a copy.",
       parameters: {
         type: "object",
         properties: {
           query: { type: "string", description: "ONE concrete probe: words a museum catalogue would actually contain" },
           medium: { type: "string", enum: ["painting", "print", "photograph", "sculpture"], description: "facet filter on what the work IS; set it whenever the human names a kind" },
           source: { type: "string", description: "ONLY to re-check a single source id (met, artic, cleveland, rijks, arena…); omit to sweep all — the default and almost always right" },
-          count: { type: "integer", minimum: 1, maximum: 100, description: "set ONLY when the human named a number of images: the TOTAL they asked for this turn. Repeat the SAME total on every probe of the turn — never the remainder still missing" },
+          count: { type: "integer", minimum: 1, maximum: 240, description: "set ONLY when the human named a number of images: the TOTAL they asked for this turn. Repeat the SAME total on every probe of the turn — never the remainder still missing" },
+          more: { type: "boolean", description: "continue this query past everything it has already delivered — this turn or any earlier one. The server keeps the per-source odometer; sources report exhausted when their well is dry. Use when the human asks for more / the next chunk / to pull everything." },
         },
         required: ["query"],
       },
@@ -179,10 +180,21 @@ const TOOLS = [
   },
 ];
 
-/* How many candidates one turn may accumulate across all its probes: past
-   this the strip stops informing and starts scrolling. 48 leaves room for
-   three or four distinct probes to land after overlap collapses. */
-const CANDIDATE_CAP = 48;
+/* Three ceilings, because a hunt has three moods.
+
+   A PREVIEW is a look: enough to judge whether the hunt is pointed the right
+   way, small enough to read without scrolling. A PULL is a decision already
+   made — the human has seen the preview and wants the material — so it moves
+   a real chunk, bounded by what the slowest source can actually deliver
+   inside one request (the Met costs a round trip per object). The STRIP is
+   the absolute: past a thousand the light table is a warehouse, and nobody
+   is looking at image 900.
+
+   The point of the split is that the agent never has to guess how much the
+   human wants. It shows a preview, says what exists behind it, and waits. */
+const CANDIDATE_CAP = 40;
+const PULL_CHUNK = 120;
+const STRIP_MAX = 1000;
 /* Per PROBE. The old shape was a flat 4 per source — a QUOTA, which assumed
    the sources yield evenly. They do not, and the miss was not close: a hunt
    for a mood draws almost nothing from the Met's catalogue text while Are.na
@@ -198,6 +210,9 @@ const CANDIDATE_CAP = 48;
    but can never crowd the others off the strip. */
 const OUTSIDE_PROBE_TARGET = 12;
 const OUTSIDE_SINGLE_LIMIT = 12;
+/* per source on a deliberate pull — deeper than a preview, still inside what
+   the slowest source will serve without refusing */
+const OUTSIDE_PULL_LIMIT = 24;
 
 /* What past hunts already learned, folded into the Historian's briefing.
    The ledger is written at every probe (recordEvent below); this is the
@@ -298,7 +313,20 @@ type ToolLogRow = { tool: string; args: Record<string, unknown>; result: string 
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null) as
-    { messages?: ChatMsg[]; field?: number[]; historian?: boolean; mute?: string[] } | null;
+    {
+      messages?: ChatMsg[]; field?: number[]; historian?: boolean; mute?: string[];
+      /* the hunt's odometer, echoed back by the client between turns:
+         query → source → how many that source has already delivered for it.
+         This is what lets "pull 40 more" continue where delivery stopped
+         instead of re-reading page one — the client holds it because the
+         server holds nothing between requests. */
+      continuation?: Record<string, Partial<Record<string, number>>>;
+      /* how many candidates the light table ALREADY shows. The server keeps
+         nothing between requests, so without this a pull would report "the
+         strip now holds 46" at a table the human can see holds 82 — and the
+         thousand-candidate ceiling would reset every turn. */
+      stripHeld?: number;
+    } | null;
   if (!Array.isArray(body?.messages) || !body.messages.length) {
     return Response.json({ error: "messages required" }, { status: 400 });
   }
@@ -343,6 +371,26 @@ export async function POST(req: Request) {
      model reads back at each decision point, so "try different words" can
      become "these words are spent, that register is dry" */
   const probeLog: Array<{ q: string; found: number; added: number }> = [];
+  /* the odometer: per query, per source, how many are already delivered —
+     seeded from the client's echo so a pull that spans turns still counts
+     from where the last one stopped. Updated after every probe, more or
+     not, so the FIRST pull's yield is already on the clock when the human
+     asks for the next chunk. */
+  /* what the light table already shows, so this turn's arithmetic is about
+     the table the human is looking at rather than about this request */
+  const stripHeld = Math.max(0, Math.min(STRIP_MAX, Math.trunc(Number(body.stripHeld)) || 0));
+  const consumed: Record<string, Partial<Record<string, number>>> = {};
+  if (body.continuation && typeof body.continuation === "object") {
+    for (const [cq, per] of Object.entries(body.continuation)) {
+      if (!per || typeof per !== "object") continue;
+      const clean: Partial<Record<string, number>> = {};
+      for (const [src, cn] of Object.entries(per)) {
+        const v = Math.max(0, Math.min(5000, Math.trunc(Number(cn)) || 0));
+        if (v > 0) clean[src] = v;
+      }
+      if (Object.keys(clean).length) consumed[String(cq).slice(0, 200)] = clean;
+    }
+  }
   const out: {
     shownIds: number[] | null;
     proposal: { name: string; note: string; ids: number[] } | null;
@@ -353,7 +401,7 @@ export async function POST(req: Request) {
        totals: per source, the LARGEST population any probe this turn
        matched there — "at least this much exists", never a sum of
        overlapping probes. */
-    candidates: { query: string; items: Candidate[]; totals?: Record<string, number> } | null;
+    candidates: { query: string; items: Candidate[]; totals?: Record<string, number>; pulled?: boolean } | null;
   } = { shownIds: null, proposal: null, sort: null, release: false, candidates: null };
   const toolLog: ToolLogRow[] = [];
 
@@ -560,7 +608,7 @@ export async function POST(req: Request) {
         /* "i want 100 images" is a legitimate ask: count raises both the
            per-probe depth and the turn's cap toward the number the human
            actually named, bounded at 100 so a typo cannot order a museum. */
-        const want = Math.max(0, Math.min(100, Math.trunc(Number(args.count)) || 0));
+        const want = Math.max(0, Math.min(240, Math.trunc(Number(args.count)) || 0));
         /* The turn's ask is the LARGEST count any probe carried: a model
            that sends the remainder ("40, then 12 more") must not shrink the
            ceiling below what is already held — measured: that made the
@@ -568,26 +616,45 @@ export async function POST(req: Request) {
            number is the EXACT ceiling: "I want 40" must not mean 48 because
            the default cap happened to be higher (also measured). */
         if (want) wantThisTurn = Math.max(wantThisTurn, want);
-        if (wantThisTurn) capThisTurn = wantThisTurn;
+        if (wantThisTurn) capThisTurn = Math.min(STRIP_MAX, wantThisTurn);
+        /* a continuation pull: same query, next chunk. The odometer knows
+           per source how much this query has already delivered — across
+           turns, via the client's echo — and each source resumes from ITS
+           own mark. A pull with no number still moves a real chunk, on top
+           of whatever the strip already holds. */
+        const isMore = args.more === true;
+        const offsets = isMore ? (consumed[q] ?? {}) : {};
+        if (isMore && !wantThisTurn) {
+          /* a chunk on top of this turn's own take, and never past the
+             ceiling counting what the table already shows */
+          capThisTurn = Math.max(0, Math.min(STRIP_MAX - stripHeld, (out.candidates?.items.length ?? 0) + PULL_CHUNK));
+        }
+        /* A pull goes deeper per source than a preview does — that is the
+           whole difference between a look and a delivery. Not unboundedly:
+           the Met costs a round trip per object and answers 403 when leaned
+           on (measured), so 24 is a chunk that arrives inside one request
+           rather than an order the source refuses. */
         const per = only
-          ? Math.min(40, wantThisTurn || OUTSIDE_SINGLE_LIMIT)
+          ? Math.min(40, wantThisTurn || (isMore ? OUTSIDE_PULL_LIMIT : OUTSIDE_SINGLE_LIMIT))
           : Math.min(40, wantThisTurn
               ? Math.ceil(wantThisTurn / Math.max(1, outsideSources.length))
-              : OUTSIDE_PROBE_TARGET);
+              : isMore ? OUTSIDE_PULL_LIMIT : OUTSIDE_PROBE_TARGET);
 
-        const { results: fetched, searched, failed, totals } = await searchConnected(q, {
+        const { results: fetched, searched, failed, totals, exhausted, consumed: advanced } = await searchConnected(q, {
           limit: per,
           only,
           medium,
+          offsets,
           /* the turn's own gate, not the database's: a source the reader
              switched off must not be reached by re-deriving the live list */
           allow: outsideSources,
         });
 
         /* the round-robin trim: every source that answered is represented,
-           and the surplus goes to whoever actually had the goods */
+           and the surplus goes to whoever actually had the goods. A pull
+           skips it — a deliberate chunk is delivered whole. */
         let results = fetched;
-        if (!only && !wantThisTurn && fetched.length > OUTSIDE_PROBE_TARGET) {
+        if (!only && !wantThisTurn && !isMore && fetched.length > OUTSIDE_PROBE_TARGET) {
           const lanes = new Map<string, Candidate[]>();
           for (const c of fetched) {
             const lane = lanes.get(c.source);
@@ -613,12 +680,33 @@ export async function POST(req: Request) {
         const held = out.candidates?.items ?? [];
         const before = held.length;
         const seen = new Set(held.map((c) => c.source + ":" + c.remoteId));
+        const delivered: Partial<Record<string, number>> = {};
         for (const c of results) {
           if (held.length >= capThisTurn) break;
           const key = c.source + ":" + c.remoteId;
-          if (!seen.has(key)) { seen.add(key); held.push(c); }
+          if (!seen.has(key)) {
+            seen.add(key); held.push(c);
+            delivered[c.source] = (delivered[c.source] ?? 0) + 1;
+          }
         }
         const added = held.length - before;
+        /* The odometer moves by each source's OWN cursor, not by what
+           reached the strip. Those differ in two places and both matter: an
+           ID the Met read but could not illustrate still advanced its list,
+           and the preview trim below can withhold items that were
+           nonetheless fetched. Crediting only what was shown left the cursor
+           behind and re-served the same objects on the next chunk —
+           measured. The cost is that a trimmed item is skipped rather than
+           re-offered, which against populations in the thousands is
+           invisible; a repeat is not. */
+        {
+          const slot = (consumed[q] = consumed[q] ?? {});
+          for (const a of advanced) if (a.consumed > 0) slot[a.source] = (slot[a.source] ?? 0) + a.consumed;
+        }
+        /* a source is only dry once it has ALSO stopped delivering: an
+           adapter that reports exhausted while still handing over a full
+           chunk is describing its page, not its well */
+        const dryNow = exhausted.filter((s) => !delivered[s]);
         /* the label joins DISTINCT probes: a per-source sweep calls this five
            times with one query, and "melancholy" five times over is not a
            title, it is a stutter */
@@ -631,7 +719,10 @@ export async function POST(req: Request) {
           if (t.total == null) continue;
           heldTotals[t.source] = Math.max(heldTotals[t.source] ?? 0, t.total);
         }
-        out.candidates = { query: [...probes].join(", "), items: held, totals: heldTotals };
+        /* pulled marks a CONTINUATION turn: the client must merge this
+           onto what it already shows rather than replace it, or a pull would
+           cost the human the preview they were pulling from */
+        out.candidates = { query: [...probes].join(", "), items: held, totals: heldTotals, pulled: isMore || out.candidates?.pulled === true };
 
         const perSource: Record<string, number> = {};
         for (const c of results) perSource[c.source] = (perSource[c.source] ?? 0) + 1;
@@ -645,25 +736,65 @@ export async function POST(req: Request) {
           q, sources: searched.length, found: results.length, added,
           matched: totalMatched || null,
         });
-        /* The loop contract used to exist only when the human named a
-           number, so the commonest hunt of all — "find me sad images", no
-           count — got no reflection at the decision point and stopped at the
-           first probe's handful. Every probe now reads its own ledger. */
+        /* What is left out there: the population the sources reported, less
+           everything this query has already handed over. Approximate by
+           construction — the populations are, and channels hold text as well
+           as images — so it is spoken as "about", never as a promise. */
+        const takenSoFar = Object.values(consumed[q] ?? {}).reduce((a: number, b) => a + (b ?? 0), 0);
+        const remaining = Math.max(0, totalMatched - takenSoFar);
+        const allDry = searched.length > 0 && dryNow.length >= searched.length;
+
+        /* The loop contract, spoken at the decision point.
+
+           It used to drive toward a quota: probe, probe, probe until the
+           number is met. That is the right shape for "find me 40" and the
+           wrong shape for everything else — it made the agent grind through
+           registers on its own judgement while the human, who knows what
+           they actually want, sat watching.
+
+           So the default is now a PREVIEW that ends in a HAND-BACK. Two or
+           three probes build a look worth judging, then the agent stops,
+           says what it found and what exists behind it, and offers the fork:
+           refine, pull more, or leave it there. No auto-grinding, no
+           quota-chasing, and no asking permission it does not need — the
+           preview is already on the table when the question is asked. */
         const registersLeft =
           "the registers are synonyms, then iconography (vanitas, lamentation, elegy), then the movements and named artists — move to the register the ledger shows untried";
-        const next = wantThisTurn
-          ? (held.length >= wantThisTurn
-            ? "the asked number is reached — STOP probing and reply now."
+        const scale = totalMatched
+          ? "The sources report about " + totalMatched.toLocaleString("en-GB") + " matching this theme"
+            + (remaining > 0 ? ", roughly " + remaining.toLocaleString("en-GB") + " of it not yet pulled" : "")
+            + ". "
+          : "";
+        /* the hand-back, in two halves so it composes either as an
+           instruction on its own or as the tail of "one more probe, then …" */
+        const handBackTail =
+          "reply. Say plainly what is on the light table and " +
+          (totalMatched ? "about how much exists behind it" : "that the sources do not report a total") +
+          ", then offer the choice in ONE short sentence: refine the hunt, pull more, or leave it as it is. " +
+          "Offer — do not push, do not ask twice, do not list steps. If they say nothing more, the preview stands on its own.";
+        const handBack = "STOP probing and " + handBackTail;
+        /* the table as the HUMAN sees it: this turn's take on top of what was
+           already showing */
+        const onTable = stripHeld + held.length;
+
+        const next = isMore
+          ? (allDry
+            ? "every source is out of material for this query. Say so plainly, say how many were pulled in total, and suggest a DIFFERENT angle rather than more of this one."
             : added === 0
-              ? "that probe added NOTHING new (" + held.length + " of " + wantThisTurn + " gathered). " + registersLeft + "; try ONE more, then reply with what you have."
-              : "gathered " + held.length + " of the " + wantThisTurn + " asked. Run ANOTHER probe NOW with different words (count stays " + wantThisTurn + ") — never repeat: " + [...probes].join(", ") + ". Keep going until you approach " + wantThisTurn + " or the probes run dry.")
-          : (added === 0
-            ? "that probe added NOTHING new. " + registersLeft + "; if the last two probes both added nothing, reply with what you have."
-            : totalMatched > held.length * 3 && probeLog.length < 4
-              ? "the sources matched ~" + totalMatched + " for this theme and you hold " + held.length + ". That is a skim, not a hunt — run ANOTHER probe from a different register before replying."
-              : held.length >= Math.min(24, capThisTurn) || probeLog.length >= 5
-                ? "a healthy strip is gathered — reply now with what the hunt found."
-                : "run at least one more probe from a different register, then reply.");
+              ? "that pull returned nothing new — this query is spent even though the sources report more. Say so, and offer a different wording or a refinement instead of pulling again."
+              : "pulled " + added + " more; the light table now holds " + onTable + ". " + scale
+                + "Reply now with what arrived. If material clearly remains, mention that another pull is available — once, plainly.")
+          : wantThisTurn
+            ? (held.length >= wantThisTurn
+              ? "the asked number is reached — STOP probing and reply now."
+              : added === 0
+                ? "that probe added NOTHING new (" + held.length + " of " + wantThisTurn + " gathered). " + registersLeft + "; try ONE more, then reply with what you have."
+                : "gathered " + held.length + " of the " + wantThisTurn + " asked. Run ANOTHER probe NOW with different words (count stays " + wantThisTurn + ") — never repeat: " + [...probes].join(", ") + ". Keep going until you approach " + wantThisTurn + " or the probes run dry.")
+            : (added === 0
+              ? "that probe added NOTHING new. " + registersLeft + "; if the last two probes both added nothing, " + handBack
+              : probeLog.length >= 3 || held.length >= CANDIDATE_CAP
+                ? "the preview is ready (" + onTable + " on the table). " + scale + handBack
+                : "run one or two more probes from a different register to make the preview representative, then " + handBackTail);
         return JSON.stringify({
           query: q,
           searched: searched.length,
@@ -676,6 +807,7 @@ export async function POST(req: Request) {
           total_matched: totalMatched || undefined,
           sample: results.slice(0, 4).map((c) => c.title).join(", "),
           gathered_this_turn: held.length,
+          on_light_table: onTable,
           /* the turn's own ledger, probe by probe: yield is the teacher */
           probes_this_turn: probeLog.map((p) => p.q + " → +" + p.added),
           ...(failed.length ? { failed } : {}),
@@ -683,8 +815,16 @@ export async function POST(req: Request) {
              asking for persistence was followed 1 time in 5 (measured); an
              instruction inside the tool result is read when it matters */
           ...(wantThisTurn ? { asked_for: wantThisTurn } : {}),
+          /* the pull's own arithmetic, so the reply can be specific about
+             scale without the model inventing a number */
+          already_pulled_for_this_query: takenSoFar,
+          about_remaining: totalMatched ? remaining : undefined,
+          ...(dryNow.length ? { sources_out_of_material: dryNow } : {}),
+          /* against the table the human is looking at, not this turn's take:
+             a full strip cannot take more however little this request got */
+          can_pull_more: !allDry && (remaining > 0 || totalMatched === 0) && onTable < STRIP_MAX,
           next,
-          note: "candidates appear to the human on the light table beside the conversation. They are NOT in the library and NOT on the canvas. found is only the bounded preview; matched_at_sources is what actually exists — when it dwarfs found, SAY SO (e.g. \"showing 16 of ~3,400 at the Met\") so the human knows the hunt only skimmed the surface.",
+          note: "candidates appear to the human on the light table beside the conversation. They are NOT in the library and NOT on the canvas. found is only the bounded preview; matched_at_sources is what actually exists — when it dwarfs found, SAY SO (e.g. \"showing 16 of ~3,400 at the Met\") so the human knows the hunt only skimmed the surface. To pull the next chunk, call this tool again with the SAME query and more:true — never re-run a query without more:true expecting different results.",
         });
       }
       default:
@@ -726,6 +866,10 @@ export async function POST(req: Request) {
       "\n- A zero-result probe is information — loosen the words and try once more before concluding a source holds nothing." +
       "\n- When the human names ONE source (are.na, the Met), set source on every probe so the hunt goes only there — never sweep everything and report a subset." +
       "\n- When the human names a NUMBER of images, set count to it on every probe and keep probing with DIFFERENT words until gathered_this_turn approaches it or the probes run dry. Never refuse a number; gather toward it." +
+      "\n- A hunt with no number is a PREVIEW, not a delivery. Two or three probes, then STOP and hand back: say what is on the light table, about how much exists behind it, and offer in ONE sentence to refine, pull more, or leave it. The preview is already there when you ask — so ask once, lightly, and never re-ask. If they say nothing about it, the preview was the answer." +
+      "\n- \"More\", \"keep going\", \"pull the rest\", \"all of them\" = the SAME query again with more:true. That continues past everything already delivered; it never re-reads what they have seen. Never answer a request for more by inventing new words — that is a different hunt, and it loses their place." +
+      "\n- When a refinement lands, check it against what they asked for before pulling deeper: if the narrowed preview drifted off what they meant, say so and offer the previous wording back. A refinement that missed is a normal event, not a failure — going back one step must always be on the table, and must cost them one sentence." +
+      "\n- Never pull a large chunk unasked, and never make them ask twice. can_pull_more in the tool result says whether material remains; sources_out_of_material says who is finished. When everything is dry, say so and suggest a different angle rather than offering another pull." +
       "\n- A probe's query must NEVER be empty. If the human named no subject, probe the conversation's standing theme; with none at all, probe broad catalogue staples (portrait, landscape, still life) — never blanks or filler." +
       "\n- Candidates can NEVER be filed into a folder — propose_folder files LIBRARY images only, and acquiring outside finds into the library is not built yet ANYWHERE, the local build included. If asked to keep or file candidates: gather them onto the light table, say filing outside finds is not possible yet, and point at Copy log as the record. Never imply another build or place could file them." +
       probeLedgerBrief()
@@ -843,6 +987,9 @@ export async function POST(req: Request) {
            existed, which made release_field a silent no-op on Anthropic */
         release: out.release,
         candidates: out.candidates,
+        /* the hunt odometer, handed back for the client to echo next turn —
+           the only reason a pull can continue across turns at all */
+        continuation: consumed,
       });
     }
 
@@ -909,6 +1056,7 @@ export async function POST(req: Request) {
       ids: out.shownIds ?? out.proposal?.ids ?? null,
       proposal: out.proposal, sort: out.sort, release: out.release,
       candidates: out.candidates,
+      continuation: consumed,
     });
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : "agent failed" }, { status: 502 });

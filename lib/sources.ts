@@ -44,8 +44,24 @@ export type Adapter = {
      the query matched, when its API says so. The cap is a display budget,
      never a knowledge budget: what exists is always reported, even when
      only a sliver of it is fetched. null = the source cannot say (Are.na
-     has channels, not a corpus). */
-  search(q: string, limit: number, medium?: Medium): Promise<{ items: Candidate[]; total: number | null }>;
+     has channels, not a corpus).
+
+     offset CONTINUES a query past what earlier calls already returned, so a
+     hunt can be pulled in chunks instead of re-reading page one forever.
+     Each adapter honours it as its API allows and says when the well is
+     genuinely dry: exhausted=true means "past the end of what I hold for
+     this query", never "the page happened to be thin". A source that cannot
+     seek (Rijksmuseum's linked-art walk) answers offset > 0 with an honest
+     empty exhausted result rather than repeats dressed as depth.
+
+     consumed is how far THIS source's cursor moved, which is not always how
+     many candidates came back: the Met's offset indexes its ID list, and an
+     ID whose object carries no image yields nothing while still being read.
+     Advancing by items delivered would leave the cursor behind and re-serve
+     those IDs on the next chunk — measured, 2 repeats in 10. Each adapter
+     reports its own unit; the caller never guesses. Defaults to items.length
+     for the sources where the two genuinely coincide. */
+  search(q: string, limit: number, medium?: Medium, offset?: number): Promise<{ items: Candidate[]; total: number | null; exhausted?: boolean; consumed?: number }>;
 };
 
 /** Every outbound call is bounded. A slow source must not hold a request open. */
@@ -133,7 +149,7 @@ const met: Adapter = {
       "https://collectionapi.metmuseum.org/public/collection/v1/objects");
     return { detail: n(d.total) + " objects catalogued" };
   },
-  async search(q, limit, medium) {
+  async search(q, limit, medium, offset = 0) {
     /* medium=Paintings cut a "sorrow" probe from 337 hits to 113, measured:
        the difference between works about sorrow and works that mention it */
     const facet: Record<Medium, string> = {
@@ -142,9 +158,11 @@ const met: Adapter = {
     const s = await getJson<{ objectIDs?: number[] | null }>(
       "https://collectionapi.metmuseum.org/public/collection/v1/search?hasImages=true" +
       (medium ? "&medium=" + facet[medium] : "") + "&q=" + encodeURIComponent(q));
-    /* the full ID list IS the true match count — keep it before slicing */
+    /* the full ID list IS the true match count — keep it before slicing.
+       It also makes the Met the one source whose continuation is EXACT:
+       chunk N is literally ids[offset .. offset+limit). */
     const all = s.objectIDs ?? [];
-    const ids = all.slice(0, limit);
+    const ids = all.slice(offset, offset + limit);
     const out: Candidate[] = [];
     /* one round trip per object is the Met's price; pay it eight at a time
        so a deep probe (count=100) lands in seconds, not half a minute */
@@ -171,7 +189,8 @@ const met: Adapter = {
       }));
       for (const c of chunk) if (c) out.push(c);
     }
-    return { items: out, total: all.length };
+    /* ids.length, not out.length: an ID with no image is still an ID read */
+    return { items: out, total: all.length, exhausted: offset + ids.length >= all.length, consumed: ids.length };
   },
 };
 
@@ -183,20 +202,24 @@ const artic: Adapter = {
       "https://api.artic.edu/api/v1/artworks?limit=1");
     return { detail: n(d.pagination?.total) + " artworks catalogued" };
   },
-  async search(q, limit, medium) {
+  async search(q, limit, medium, offset = 0) {
     const fields = "id,title,artist_title,image_id,is_public_domain";
     /* the .keyword suffix matters: the analysed field matches nothing for an
        exact term, and "The Old Guitarist" only surfaces with it — measured */
     const facet: Record<Medium, string> = {
       painting: "Painting", print: "Print", photograph: "Photograph", sculpture: "Sculpture",
     };
+    /* the API pages rather than seeks, so a continuation rounds itself to
+       the page the offset falls in — chunk edges can shear by a few items,
+       and the caller's dedupe is what trues them up */
+    const page = Math.floor(offset / Math.max(1, limit)) + 1;
     const d = await getJson<{ data?: Array<{
       id: number; title?: string; artist_title?: string | null;
       image_id?: string | null; is_public_domain?: boolean;
     }>; config?: { iiif_url?: string }; pagination?: { total?: number } }>(
       "https://api.artic.edu/api/v1/artworks/search?q=" + encodeURIComponent(q) +
       (medium ? "&query%5Bterm%5D%5Bartwork_type_title.keyword%5D=" + facet[medium] : "") +
-      "&limit=" + limit + "&fields=" + fields);
+      "&limit=" + limit + (page > 1 ? "&page=" + page : "") + "&fields=" + fields);
     const iiif = d.config?.iiif_url || "https://www.artic.edu/iiif/2";
     const items = (d.data ?? []).filter((a) => a.image_id).map((a) => ({
       source: "artic" as const, remoteId: String(a.id),
@@ -216,8 +239,10 @@ const artic: Adapter = {
        (measured), the same number as "grief" and as everything else. The
        top of the ranking is excellent; the count is not a match count. An
        honest adapter says it cannot say, or the agent ends up telling the
-       human the Art Institute holds 132,731 sad works. */
-    return { items, total: null };
+       human the Art Institute holds 132,731 sad works. Exhaustion reads off
+       the page instead: a short page is the ranking running out of works
+       worth ranking. */
+    return { items, total: null, exhausted: (d.data ?? []).length < limit, consumed: (d.data ?? []).length };
   },
 };
 
@@ -231,9 +256,10 @@ const cleveland: Adapter = {
       "https://openaccess-api.clevelandart.org/api/artworks/?cc0=1&has_image=1&limit=1");
     return { detail: n(cc0.info?.total) + " CC0 images of " + n(all.info?.total) + " records" };
   },
-  async search(q, limit, medium) {
+  async search(q, limit, medium, offset = 0) {
     /* cc0=1 and has_image=1 at the query, so nothing unkeepable is ever even
-       offered as a candidate */
+       offered as a candidate. skip is the API's own seek, so continuation is
+       exact here too. */
     const facet: Record<Medium, string> = {
       painting: "Painting", print: "Print", photograph: "Photograph", sculpture: "Sculpture",
     };
@@ -242,7 +268,7 @@ const cleveland: Adapter = {
       url?: string; images?: { web?: { url?: string }; print?: { url?: string } };
       share_license_status?: string;
     }>; info?: { total?: number } }>("https://openaccess-api.clevelandart.org/api/artworks/?cc0=1&has_image=1&limit=" +
-      limit + (medium ? "&type=" + facet[medium] : "") + "&q=" + encodeURIComponent(q));
+      limit + (offset > 0 ? "&skip=" + offset : "") + (medium ? "&type=" + facet[medium] : "") + "&q=" + encodeURIComponent(q));
     const items = (d.data ?? []).map((a) => ({
       source: "cleveland" as const, remoteId: String(a.id),
       title: a.title || "Untitled",
@@ -253,7 +279,8 @@ const cleveland: Adapter = {
       licence: a.share_license_status || "CC0",
       keepable: (a.share_license_status || "CC0").toUpperCase() === "CC0",
     }));
-    return { items, total: d.info?.total ?? null };
+    const total = d.info?.total ?? null;
+    return { items, total, exhausted: total != null ? offset + items.length >= total : items.length < limit, consumed: (d.data ?? []).length };
   },
 };
 
@@ -276,7 +303,11 @@ const rijks: Adapter = {
       RIJKS_SEARCH + "?imageAvailable=True&type=painting");
     return { detail: n(d.partOf?.totalItems) + " paintings with images" };
   },
-  async search(q, limit, medium) {
+  async search(q, limit, medium, offset = 0) {
+    /* the linked-art walk cannot seek: past its first page there is no
+       honest continuation, so offset answers empty-and-exhausted rather
+       than repeats dressed as depth */
+    if (offset > 0) return { items: [], total: null, exhausted: true };
     const d = await getJson<{ orderedItems?: Array<{ id: string }>; partOf?: { totalItems?: number } }>(
       RIJKS_SEARCH + "?imageAvailable=True" + (medium ? "&type=" + medium : "") +
       "&title=" + encodeURIComponent(q));
@@ -317,13 +348,13 @@ const europeana: Adapter = {
     if (d.success === false) throw new SourceError(d.error || "Europeana refused the key");
     return { detail: n(d.totalResults) + " records with media" };
   },
-  async search(q, limit) {
+  async search(q, limit, _medium, offset = 0) {
     const key = process.env.ATLAS_EUROPEANA_KEY?.trim() ?? "";
     const d = await getJson<{ totalResults?: number; items?: Array<{
       id: string; title?: string[]; dcCreator?: string[];
       guid?: string; edmPreview?: string[]; rights?: string[];
     }> }>(EUROPEANA_BASE + "/record/v2/search.json?wskey=" + encodeURIComponent(key) +
-      "&rows=" + limit + "&media=true&query=" + encodeURIComponent(q));
+      "&rows=" + limit + (offset > 0 ? "&start=" + (offset + 1) : "") + "&media=true&query=" + encodeURIComponent(q));
     const items = (d.items ?? []).map((i) => {
       const rights = i.rights?.[0] ?? null;
       /* only the genuinely open rights statements count as keepable; anything
@@ -340,7 +371,8 @@ const europeana: Adapter = {
         keepable: open,
       };
     });
-    return { items, total: d.totalResults ?? null };
+    const eTotal = d.totalResults ?? null;
+    return { items, total: eTotal, exhausted: eTotal != null ? offset + items.length >= eTotal : items.length < limit, consumed: (d.items ?? []).length };
   },
 };
 
@@ -365,12 +397,18 @@ const arena: Adapter = {
     const d = await getJson<{ channels?: unknown[] }>(ARENA + "/channels?per=1");
     return { detail: Array.isArray(d.channels) ? "public channels reachable" : "reachable" };
   },
-  async search(q, limit) {
+  async search(q, limit, _medium, offset = 0) {
     const out: Candidate[] = [];
     const seen = new Set<number>();
+    /* continuation re-walks the same deterministic route — search blocks,
+       then channels in the API's order, paginated — and skips the first
+       `offset` images it meets. A few pages are re-fetched to get past the
+       skip; the page budget below grows to cover them. */
+    let toSkip = offset;
     const push = (b: ArenaBlock) => {
       const thumb = b.image?.thumb?.url;
       if (!thumb || seen.has(b.id) || out.length >= limit) return;
+      if (toSkip > 0) { toSkip--; seen.add(b.id); return; }
       seen.add(b.id);
       out.push({
         source: "arena", remoteId: String(b.id),
@@ -417,11 +455,15 @@ const arena: Adapter = {
       .slice(0, 5);
     /* pagination is bounded by REQUESTS, not channels, so one giant channel
        cannot eat the whole budget and a page of text blocks costs a retry
-       elsewhere rather than the hunt */
-    let pageBudget = 8;
+       elsewhere rather than the hunt. A continuation earns extra budget to
+       re-cross the ground it is skipping, and deeper pages per channel to
+       reach the fresh ground beyond it. */
+    let pageBudget = Math.min(16, 8 + Math.ceil(offset / 24));
+    const pagesPerChannel = Math.min(8, 3 + Math.ceil(offset / 24));
+    let walkedDry = true;
     for (const ch of channels) {
-      if (out.length >= limit || pageBudget <= 0) break;
-      const pages = Math.min(3, Math.max(1, Math.ceil((ch.length ?? 24) / 24)));
+      if (out.length >= limit || pageBudget <= 0) { walkedDry = false; break; }
+      const pages = Math.min(pagesPerChannel, Math.max(1, Math.ceil((ch.length ?? 24) / 24)));
       for (let page = 1; page <= pages && out.length < limit && pageBudget > 0; page++) {
         pageBudget--;
         try {
@@ -433,8 +475,11 @@ const arena: Adapter = {
           for (const b of c.contents ?? []) push(b);
         } catch { break; /* a private or empty channel must not fail the search */ }
       }
+      if (out.length >= limit || pageBudget <= 0) { walkedDry = false; break; }
     }
-    return { items: out, total: population || null };
+    /* dry only when the walk finished every channel it knew with room to
+       spare — a budget-stopped walk has more behind it, not less */
+    return { items: out, total: population || null, exhausted: walkedDry && out.length < limit };
   },
 };
 
@@ -450,10 +495,11 @@ const pinterest: Adapter = {
     const boards = typeof me.board_count === "number" ? n(me.board_count) + " boards" : "authorised";
     return { detail: boards, account: me.username ?? null };
   },
-  async search(q, limit) {
+  async search(q, limit, _medium, offset = 0) {
     /* Pinterest has no public search. "Search" here means YOUR pins, filtered
        locally by note or title -- which is the only thing the API will serve
-       and the only thing this product claims. */
+       and the only thing this product claims. Continuation is a window over
+       that local filter. */
     const token = tokenFor("pinterest");
     if (!token) throw new SourceError("no Pinterest authorisation");
     const d = await getJson<{ items?: Array<{
@@ -465,7 +511,7 @@ const pinterest: Adapter = {
     const hits = (d.items ?? [])
       .filter((p) => !needle || (p.title || p.note || "").toLowerCase().includes(needle));
     const items = hits
-      .slice(0, limit)
+      .slice(offset, offset + limit)
       .map((p) => {
         const imgs = p.media?.images ?? {};
         const pick = imgs["600x"] ?? imgs["400x300"] ?? imgs["1200x"] ?? Object.values(imgs)[0];
@@ -482,7 +528,7 @@ const pinterest: Adapter = {
       });
     /* the count is of the fetched page of YOUR pins, not a corpus — the
        only population Pinterest's API will admit to */
-    return { items, total: null };
+    return { items, total: null, exhausted: offset + items.length >= hits.length };
   },
 };
 
@@ -504,6 +550,13 @@ export type OutsideSearch = {
   /* what each source says the query MATCHED — the population behind the
      preview. null where a source cannot say. */
   totals: { source: SourceId; total: number | null }[];
+  /* sources past the end of what they hold for this query, at the offset
+     they were asked to continue from — how a pull knows the well is dry
+     rather than merely guessing from a thin page */
+  exhausted: SourceId[];
+  /* how far each source's own cursor advanced — the amount to add to its
+     offset to continue past what this call read. See Adapter.search. */
+  consumed: { source: SourceId; consumed: number }[];
 };
 
 /**
@@ -515,7 +568,13 @@ export type OutsideSearch = {
  */
 export async function searchConnected(
   q: string,
-  opts: { limit?: number; only?: SourceId | null; medium?: Medium | null; allow?: SourceId[] | null } = {},
+  opts: {
+    limit?: number; only?: SourceId | null; medium?: Medium | null; allow?: SourceId[] | null;
+    /* per-source continuation: how many of this query each source has
+       already delivered, so a pull resumes where delivery stopped instead
+       of re-reading page one. Sources absent from the map start fresh. */
+    offsets?: Partial<Record<SourceId, number>> | null;
+  } = {},
 ): Promise<OutsideSearch> {
   const limit = Math.max(1, Math.min(40, opts.limit ?? 12));
   /* `allow` is the caller's own gate, and it NARROWS the connected set —
@@ -529,10 +588,16 @@ export async function searchConnected(
 
   const settled = await Promise.all(targets.map(async (id) => {
     try {
-      const r = await ADAPTERS[id].search(q, limit, opts.medium ?? undefined);
-      return { id, items: r.items, total: r.total };
+      /* each source resumes from ITS OWN mark: a sweep where one source has
+         given up 90 and another 12 must not restart them together */
+      const r = await ADAPTERS[id].search(q, limit, opts.medium ?? undefined, opts.offsets?.[id] ?? 0);
+      return {
+        id, items: r.items, total: r.total, exhausted: r.exhausted === true,
+        consumed: typeof r.consumed === "number" ? r.consumed : r.items.length,
+        error: undefined as string | undefined,
+      };
     } catch (e) {
-      return { id, items: [] as Candidate[], total: null, error: reason(e) as string | undefined };
+      return { id, items: [] as Candidate[], total: null, exhausted: false, consumed: 0, error: reason(e) as string | undefined };
     }
   }));
 
@@ -541,6 +606,8 @@ export async function searchConnected(
     searched: targets,
     failed: settled.filter((s) => s.error).map((s) => ({ source: s.id, error: s.error! })),
     totals: settled.map((s) => ({ source: s.id, total: s.total })),
+    exhausted: settled.filter((s) => s.exhausted).map((s) => s.id),
+    consumed: settled.map((s) => ({ source: s.id, consumed: s.consumed })),
   };
 }
 

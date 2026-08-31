@@ -91,7 +91,13 @@ type ThreadItem =
      source to go deeper into, and a line of the human's own words — all
      layered into ONE refined hunt. sent: null = live, a string = the
      refinement that went, "-" = passed over by a newer prompt. */
-  | { type: "refine"; base: string; sources: { id: string; total: number | null }[]; sent: string | null };
+  | { type: "refine"; base: string; sources: { id: string; total: number | null }[]; sent: string | null;
+      /* what the strip holds and roughly what is still out there, so the
+         fork can state the stakes instead of asking blind */
+      held?: number; remaining?: number | null;
+      /* the wording this refinement narrowed FROM — the one step back, so a
+         refinement that missed costs one click rather than a retyped hunt */
+      prev?: string | null };
 
 type Candidate = {
   source: string; remoteId: string; title: string;
@@ -399,6 +405,41 @@ const SOURCE_NAME: Record<string, string> = {
 };
 const fmtPop = (t: number) => "~" + t.toLocaleString("en-GB");
 
+/* The light table's ceiling. A pull can run to a thousand across turns;
+   past that it is a warehouse, and nobody is looking at image 900. */
+const STRIP_MAX = 1000;
+
+type LightTable = { query: string; items: Candidate[]; totals?: Record<string, number> };
+
+/*
+  A PULL adds to the strip; a new hunt replaces it.
+
+  The server marks a continuation turn with pulled=true, because only it
+  knows whether the model asked to continue or started again. Merging on
+  anything softer — a query string that looks similar, a source in common —
+  would eventually append one hunt onto an unrelated one, and the human
+  would be scrolling someone else's search.
+*/
+function mergeCandidates(
+  prev: LightTable | null,
+  next: { query?: unknown; items: Candidate[]; totals?: Record<string, number>; pulled?: boolean },
+): LightTable {
+  const query = String(next.query ?? "");
+  const totals = { ...(prev?.totals ?? {}), ...(next.totals ?? {}) };
+  if (!prev || !next.pulled) return { query, items: next.items.slice(0, STRIP_MAX), totals };
+  const seen = new Set(prev.items.map((c) => c.source + ":" + c.remoteId));
+  const items = prev.items.slice();
+  for (const c of next.items) {
+    if (items.length >= STRIP_MAX) break;
+    const k = c.source + ":" + c.remoteId;
+    if (!seen.has(k)) { seen.add(k); items.push(c); }
+  }
+  /* the label keeps every distinct probe behind the strip, not just the
+     last pull's wording */
+  const label = [...new Set([...prev.query.split(", "), ...query.split(", ")].filter(Boolean))].join(", ");
+  return { query: label, items, totals };
+}
+
 function RefineBlock({ item, busy, onGo }: {
   item: Extract<ThreadItem, { type: "refine" }>;
   busy: boolean;
@@ -426,12 +467,41 @@ function RefineBlock({ item, busy, onGo }: {
   };
 
   if (spent && item.sent !== "-") {
-    /* the refinement that went, kept as the block's receipt */
-    return <div className="agent-refine is-spent"><span className="mono-label">refined</span><p>{item.sent}</p></div>;
+    /* The refinement that went, kept as the block's receipt — and, while the
+       wording it narrowed FROM is still known, a way back out of it. A
+       refinement that misses is an ordinary event: it should cost one click
+       to undo, not a retyped hunt, and it should not need admitting to. */
+    return (
+      <div className="agent-refine is-spent">
+        <span className="mono-label">refined</span>
+        <p>{item.sent}</p>
+        {item.prev && (
+          <button
+            className="agent-refine__back"
+            disabled={busy}
+            onClick={() => onGo("That narrowed it the wrong way. Go back to the hunt for " + item.prev + " as it was, and keep what it found.")}
+          >
+            not what I meant — go back
+          </button>
+        )}
+      </div>
+    );
   }
+  const remaining = item.remaining ?? null;
   return (
     <div className={"agent-refine" + (item.sent === "-" ? " is-passed" : "")}>
-      <span className="mono-label">Refine the hunt</span>
+      <div className="agent-refine__head">
+        <span className="mono-label">Refine the hunt</span>
+        {/* The stakes, stated once. Without this the fork asks the human to
+            choose between narrowing and pulling with no idea how much is
+            behind either — which is how "we only found 8" happened. */}
+        {typeof item.held === "number" && (
+          <span className="agent-refine__scale mono-xs">
+            {item.held} on the table
+            {remaining && remaining > 0 ? " · about " + remaining.toLocaleString("en-GB") + " more out there" : ""}
+          </span>
+        )}
+      </div>
       <div className="agent-refine__row">
         <span className="agent-refine__k">tone</span>
         {REFINE_TONES.map((t) => (
@@ -494,6 +564,26 @@ function RefineBlock({ item, busy, onGo }: {
           go deeper
         </button>
       </div>
+      {/* The other half of the fork, and the reason this block is not a
+          questionnaire: the hunt as it stands is already an answer. Pull it
+          without narrowing anything, and leaving it alone is simply not
+          pressing either — no dismissal, no "are you sure", no third step. */}
+      {(remaining === null || remaining > 0) && (
+        <div className="agent-refine__pull">
+          <button
+            className="agent-refine__more"
+            disabled={spent || busy}
+            onClick={() => onGo(
+              chosen
+                ? compose() + " Pull the next chunk of that, do not just preview it."
+                : "Pull the next chunk for " + item.base + " — more of the same hunt, no narrowing.",
+            )}
+          >
+            {chosen ? "narrow, then pull more" : "pull more of these"}
+          </button>
+          <span className="mono-xs agent-refine__hint">or leave it as it is</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -577,6 +667,13 @@ export default function GraphView({
      the moment the historian's row starts playing — and holds the images;
      the thread keeps only a one-line trace that can reopen it. */
   const [lightTable, setLightTable] = useState<{ query: string; items: Candidate[]; totals?: Record<string, number> } | null>(null);
+  /* The hunt's odometer, held here because the server holds nothing between
+     requests: query → source → how many that source has already handed over.
+     Echoed back on every turn, which is the whole reason "pull more" can
+     continue where the last pull stopped instead of re-reading page one. A
+     ref, not state: nothing renders from it, and a re-render per pull would
+     be a re-render for nobody. */
+  const continuationRef = useRef<Record<string, Record<string, number>>>({});
   const [ltOpen, setLtOpen] = useState(false);
   const [logCopied, setLogCopied] = useState(false);
   const [filterTags, setFilterTags] = useState<string[]>([]);
@@ -2134,17 +2231,25 @@ export default function GraphView({
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, field: fieldIds(), historian: historianEnabled(), mute: mutedSources() }),
+        body: JSON.stringify({
+          messages: history, field: fieldIds(), historian: historianEnabled(), mute: mutedSources(),
+          continuation: continuationRef.current,
+          /* what the table already shows, so a pull's arithmetic is about
+             what the human is looking at rather than about this request */
+          stripHeld: lightTable?.items.length ?? 0,
+        }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "the agent failed");
+      /* the odometer comes back advanced by whatever this turn pulled */
+      if (d.continuation && typeof d.continuation === "object") continuationRef.current = d.continuation;
       let ltShown = false;
       for (const t of (d.toolLog ?? []) as { tool: string; args: Record<string, unknown>; result: string }[]) {
         /* the light table slides out AS the historian's row starts playing,
            so the finds are on the canvas while the work is still visible */
         if (!ltShown && t.tool === "search_outside" && d.candidates?.items?.length) {
           ltShown = true;
-          setLightTable({ query: String(d.candidates.query ?? ""), items: d.candidates.items, totals: d.candidates.totals });
+          setLightTable((prev) => mergeCandidates(prev, d.candidates));
           setLtOpen(true);
         }
         await playToolRow(t.tool, fmtDetail(t.tool, t.args), fmtResult(t.result));
@@ -2184,11 +2289,26 @@ export default function GraphView({
            human's own words — layered into the next hunt */
         const srcs = [...new Set((d.candidates.items as Candidate[]).map((c) => c.source))];
         const totals: Record<string, number> = d.candidates.totals ?? {};
+        /* what the strip now holds against what the sources say exists, less
+           everything already handed over for these words — the same
+           arithmetic the agent is given, so the block and the sentence
+           beside it can never quote different numbers */
+        const base = String(d.candidates.query ?? "");
+        const pop = Object.values(totals).reduce((a, b) => a + b, 0);
+        const taken = Object.values(continuationRef.current)
+          .reduce((a, per) => a + Object.values(per ?? {}).reduce((x, y) => x + (y ?? 0), 0), 0);
+        /* the wording the LAST refinement narrowed from, so this block can
+           offer one step back */
+        const prev = [...thread].reverse().find((x) => x.type === "refine") as
+          Extract<ThreadItem, { type: "refine" }> | undefined;
         setThread((it) => [...it, {
           type: "refine",
-          base: String(d.candidates.query ?? ""),
+          base,
           sources: srcs.map((id) => ({ id, total: totals[id] ?? null })),
           sent: null,
+          held: (d.candidates.items as Candidate[]).length,
+          remaining: pop ? Math.max(0, pop - taken) : null,
+          prev: prev && prev.base !== base ? prev.base : null,
         }]);
       } else if (Array.isArray(d.ids) && d.ids.length) {
         pushCtas([
