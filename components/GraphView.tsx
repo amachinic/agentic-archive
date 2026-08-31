@@ -617,9 +617,15 @@ export default function GraphView({
   const [stageW, setStageW] = useState(Infinity);
   const railCollapsed = selected !== null || stageW < RAIL_FITS_AT;
   /* which room the collapsed panel is showing: null = the category list,
-     a kind = that category's terms */
+     a kind = that category's terms. Whether the panel is actually DEEP is
+     derived later, from whether that room exists in kinds — never from the
+     key alone. A drillKind pointing at a room that is not there (a stale
+     value surviving a hot reload, a vocabulary that changed underneath it)
+     used to put the track at translateX(-50%) with an EMPTY second pane:
+     the category list slid out of view and the panel rendered as a void
+     with a working footer. A dangling key now falls back to the category
+     list, which is always a room that exists. */
   const [drillKind, setDrillKind] = useState<string | null>(null);
-  const drillDeep = drillKind !== null;
 
   const [fieldSort, setFieldSort] = useState<FieldSortMode | null>(null);
   /* the home panel introduces itself: Atlas thinks, speaks, then its
@@ -977,7 +983,15 @@ export default function GraphView({
       .filter((g) => g.items.length > 0);
     const known = new Set<string>(KIND_ORDER);
     const rest = keyterms.filter((t) => !known.has(t.kind));
-    if (rest.length) groups.push({ kind: "tag", items: rest });
+    /* the remainder JOINS the manual group rather than becoming a second
+       {kind:"tag"} — two groups with one kind meant two identical React keys
+       everywhere kinds is mapped, and duplicate keys do not merely warn:
+       they scramble which subtree gets which state on re-render */
+    if (rest.length) {
+      const manual = groups.find((g) => g.kind === "tag");
+      if (manual) manual.items = [...manual.items, ...rest];
+      else groups.push({ kind: "tag", items: rest });
+    }
     return groups;
   }, [keyterms]);
   const [raw, setRaw] = useState<{ nodes: RawNode[]; edges: GEdge[] }>(
@@ -2705,6 +2719,8 @@ export default function GraphView({
      counts CATEGORIES engaged while Clear counts TERMS — two different facts,
      rather than the same integer printed twice. */
   const drillGroup = drillKind ? kinds.find((g) => g.kind === drillKind) ?? null : null;
+  /* deep only when the room is real — see the drillKind note above */
+  const drillDeep = drillGroup !== null;
   const engagedKinds = useMemo(
     () => kinds.filter((g) => g.items.some((t) => filterTags.includes(t.name))).length,
     [kinds, filterTags],
