@@ -693,9 +693,18 @@ export async function POST(req: Request) {
            the union, deduped by identity, capped so it stays a strip. */
         const held = out.candidates?.items ?? [];
         const before = held.length;
-        /* seeded with what the table ALREADY shows, so a pull cannot spend
-           its chunk re-delivering tiles the human is looking at */
-        const seen = new Set([...stripKeys, ...held.map((c) => c.source + ":" + c.remoteId)]);
+        /* Does this turn ADD to the table or REPLACE it? The client merges
+           only what is marked pulled, so everything downstream — the dedupe
+           seed and the count quoted to the human — has to ask the same
+           question. A new hunt inherits neither: its tiles are about to be
+           swept away, so counting them makes the agent say 55 at a table
+           showing 19 (measured), and skipping them would under-deliver a
+           fresh hunt to avoid repeating material nobody will see again. */
+        const pulledTurn = isMore || out.candidates?.pulled === true;
+        const seen = new Set([
+          ...(pulledTurn ? stripKeys : []),
+          ...held.map((c) => c.source + ":" + c.remoteId),
+        ]);
         const delivered: Partial<Record<string, number>> = {};
         for (const c of results) {
           if (held.length >= capThisTurn) break;
@@ -791,7 +800,7 @@ export async function POST(req: Request) {
         const handBack = "STOP probing and " + handBackTail;
         /* the table as the HUMAN sees it: this turn's take on top of what was
            already showing */
-        const onTable = stripHeld + held.length;
+        const onTable = (pulledTurn ? stripHeld : 0) + held.length;
 
         const next = isMore
           ? (allDry
