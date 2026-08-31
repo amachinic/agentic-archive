@@ -1146,6 +1146,13 @@ export default function GraphView({
 
     const fitCanvas = () => {
       const r = wrap.getBoundingClientRect();
+      /* The world is anchored to the stage CENTRE below (W/2 + s.ox), so a
+         stage that narrows by Δ slides the whole field — including the card
+         just clicked — Δ/2 to the left in one frame. Opening the inspector
+         moved everything ~300px sideways. Compensating ox by half the width
+         change keeps the world still while the box around it changes. */
+      const prevW = canvas.width / devicePixelRatio;
+      if (prevW > 0 && r.width > 0) s.ox += (prevW - r.width) / 2;
       canvas.width = r.width * devicePixelRatio;
       canvas.height = r.height * devicePixelRatio;
       canvas.style.width = r.width + "px";
