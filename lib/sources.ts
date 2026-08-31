@@ -211,7 +211,13 @@ const artic: Adapter = {
       licence: a.is_public_domain ? "public domain" : "in copyright",
       keepable: !!a.is_public_domain,
     }));
-    return { items, total: d.pagination?.total ?? null };
+    /* pagination.total here is Elasticsearch's scored-documents count, and
+       for any real word it is the ENTIRE catalogue — "sad" reports 132,731
+       (measured), the same number as "grief" and as everything else. The
+       top of the ranking is excellent; the count is not a match count. An
+       honest adapter says it cannot say, or the agent ends up telling the
+       human the Art Institute holds 132,731 sad works. */
+    return { items, total: null };
   },
 };
 
@@ -381,25 +387,54 @@ const arena: Adapter = {
     };
     /* /v2/search answers keyless with BLOCKS as well as channels — measured:
        a compound query ("melancholic dark muted") that matches no channel
-       NAME still returns image blocks here. A refined hunt used to come
-       back empty because only channel names were consulted; the blocks are
-       the direct answer, the channels the supplement. */
-    const s = await getJson<{ blocks?: ArenaBlock[] | null; channels?: Array<{ slug?: string }> }>(
-      ARENA + "/search?per=" + Math.min(24, limit * 3) + "&q=" + encodeURIComponent(q));
+       NAME still returns image blocks here. But for a MOOD the proportions
+       are the other way round, and by a mile (measured 31 Aug 2026):
+       "sad" text-matches 10 blocks, while the same search surfaces 12
+       channels holding ~1,600 blocks between them; "melancholy" matches 11
+       blocks against 824 held in channels. Are.na's blocks are mostly
+       untitled images — text search cannot see them — and its wealth is the
+       human curation: someone already spent an evening filling a channel
+       called mad-ting-sad-ting. So the blocks open the answer and the
+       CHANNELS are the answer: walked several deep, paginated ("closed"
+       status means others cannot add, the contents read fine keyless), each
+       carrying a length field that finally gives this source an honest
+       population — which is what lets the agent see it only skimmed. */
+    const s = await getJson<{
+      blocks?: ArenaBlock[] | null;
+      channels?: Array<{ slug?: string; length?: number; status?: string }>;
+    }>(ARENA + "/search?per=" + Math.min(24, Math.max(12, limit * 2)) + "&q=" + encodeURIComponent(q));
     for (const b of s.blocks ?? []) push(b);
-    const slugs = (s.channels ?? []).map((c) => c.slug).filter(Boolean).slice(0, 3) as string[];
-    for (const slug of slugs) {
-      if (out.length >= limit) break;
-      try {
-        /* a channel's first blocks are often text and links; ask for a full
-           page so the IMAGES in it are actually reached (measured) */
-        const c = await getJson<{ contents?: ArenaBlock[] | null }>(
-          ARENA + "/channels/" + encodeURIComponent(slug) + "/contents?per=24");
-        for (const b of c.contents ?? []) push(b);
-      } catch { /* a private or empty channel must not fail the search */ }
+    /* what the query MATCHED, as against what was walked: the text-matched
+       blocks plus every matched channel's holdings. Approximate — a channel
+       holds text and links too — but the right order of magnitude, where
+       null taught the agent that eight was all there was. */
+    const population =
+      (s.blocks ?? []).length +
+      (s.channels ?? []).reduce((a, c) => a + (typeof c.length === "number" ? c.length : 0), 0);
+    /* keep the API's relevance order; skip shells too small to be curation */
+    const channels = (s.channels ?? [])
+      .filter((c): c is { slug: string; length?: number } => Boolean(c.slug) && (c.length ?? 0) >= 8)
+      .slice(0, 5);
+    /* pagination is bounded by REQUESTS, not channels, so one giant channel
+       cannot eat the whole budget and a page of text blocks costs a retry
+       elsewhere rather than the hunt */
+    let pageBudget = 8;
+    for (const ch of channels) {
+      if (out.length >= limit || pageBudget <= 0) break;
+      const pages = Math.min(3, Math.max(1, Math.ceil((ch.length ?? 24) / 24)));
+      for (let page = 1; page <= pages && out.length < limit && pageBudget > 0; page++) {
+        pageBudget--;
+        try {
+          /* a channel's first blocks are often text and links; walk full
+             pages so the IMAGES in it are actually reached (measured) */
+          const c = await getJson<{ contents?: ArenaBlock[] | null }>(
+            ARENA + "/channels/" + encodeURIComponent(ch.slug) + "/contents?per=24&page=" + page);
+          if (!(c.contents ?? []).length) break;
+          for (const b of c.contents ?? []) push(b);
+        } catch { break; /* a private or empty channel must not fail the search */ }
+      }
     }
-    /* Are.na has channels, not a corpus: there is no honest total */
-    return { items: out, total: null };
+    return { items: out, total: population || null };
   },
 };
 
