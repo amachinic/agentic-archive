@@ -9,7 +9,7 @@ export default function AgentsPage() {
       <header className="topbar">
         <div className="topbar__lede">
           <h1 className="topbar__title">Agents</h1>
-          <span className="pill pill--static">one agent · three archetypes</span>
+          <span className="pill pill--static">one agent · four archetypes</span>
         </div>
         <div className="topbar__spacer" />
         <span className="mono-xs">agents want · you decide · one door writes</span>
