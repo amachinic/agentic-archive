@@ -1737,6 +1737,41 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 }
 .agent-refine__send:disabled { opacity: 0.4; cursor: default; }
 
+/* the stakes line: what is on the table against what is still out there,
+   sat on the block's own header rather than shouted in a banner */
+.agent-refine__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.agent-refine__scale { color: var(--text-muted); text-transform: none; letter-spacing: 0.02em; }
+
+/* The second half of the fork. Deliberately QUIET — an outline against the
+   filled "go deeper", because pulling more is the ordinary next step and
+   ordinary steps do not need to shout. The hint beside it says the third
+   option out loud, since leaving it alone has no button and would otherwise
+   read as unavailable. */
+.agent-refine__pull { display: flex; align-items: center; gap: 10px; }
+.agent-refine__more {
+  flex: none;
+  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  border-radius: var(--radius-md); padding: 7px 12px 6px; cursor: pointer;
+  background: transparent; color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  transition: color var(--motion-duration) var(--motion-ease),
+              border-color var(--motion-duration) var(--motion-ease);
+}
+.agent-refine__more:hover { color: var(--text-primary); border-color: var(--text-primary); }
+.agent-refine__more:disabled { opacity: 0.4; cursor: default; }
+.agent-refine__hint { color: var(--text-muted); text-transform: none; letter-spacing: 0.02em; }
+
+/* one step back out of a refinement that missed — a plain link, because
+   undoing should read as ordinary rather than as an admission */
+.agent-refine__back {
+  align-self: flex-start;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em;
+  background: none; border: 0; padding: 2px 0 0; cursor: pointer;
+  color: var(--text-muted); text-decoration: underline; text-underline-offset: 3px;
+}
+.agent-refine__back:hover { color: var(--text-primary); }
+.agent-refine__back:disabled { opacity: 0.4; cursor: default; }
+
 /* ---- the light table: outside finds on a TEMPORARY canvas ----
    ONE BODY with the prompt panel: when the Historian brings work in, the
    panel itself widens — thread and table are two panes of the same frame,
