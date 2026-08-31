@@ -1988,8 +1988,13 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
     height: 34px;
     padding: 0 13px;
   }
-  /* the mode toggle rises to the filter pill's height: one visual line */
-  .graph-rail .viewswitch { height: 34px; }
+  /* the mode toggle rises to the filter pill's height: one visual line.
+     order:-1 pins it to the left here: on the desktop rail it now sits at
+     the far right, above the conversation it switches, but the phone has no
+     conversation beside the field — the panels are drawers off the bottom —
+     so the toggle keeps the leading position it has always had, and Filter
+     keeps the thumb's end of the rail. */
+  .graph-rail .viewswitch { height: 34px; order: -1; }
   .graph-rail .viewswitch button {
     display: inline-flex; align-items: center; justify-content: center;
     padding: 0 13px;

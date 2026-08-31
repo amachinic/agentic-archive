@@ -2956,19 +2956,6 @@ export default function GraphView({
             />
             <div className="graph-top">
               <div className="graph-rail">
-                <div className={"viewswitch" + (panel === "search" ? " is-search" : "")} role="group" aria-label="Mode">
-                  {/* Switching mode shows a different panel. That is ALL it does.
-                      Search used to call clearPrompt() on the way in, which threw away the
-                      conversation, the ids the agent had put on the field, the colour grid and the
-                      undo history: a whole session, discarded by a control that looks like a tab.
-                      Nothing needed it. effectiveQ below already ignores the query outside search
-                      mode, so a stale query cannot silently intersect the agent's results, and the
-                      input says "Search the field" because that is what it does: it narrows what
-                      is showing rather than starting again. Clear, in the conversation's own head,
-                      is the one door that empties it. */}
-                  <button className={panel === "prompt" ? "is-active" : ""} onClick={() => { setPanel("prompt"); setSheetOpen(true); }}>Prompt</button>
-                  <button className={panel === "search" ? "is-active" : ""} onClick={() => { setPanel("search"); setSheetOpen(true); }}>Search</button>
-                </div>
                 <button
                   className={"graph-rail__cat graph-filterbtn" + (filterTags.length > 0 ? " has-active" : "")}
                   onClick={() => { setFilterSheetOpen(true); setSheetOpen(false); }}
@@ -3213,7 +3200,6 @@ export default function GraphView({
                   )}
                 </div>
                 )}
-                <div className="graph-rail__spacer" />
                 <span className="graph-catwrap graph-tunewrap">
                   <button
                     type="button"
@@ -3271,6 +3257,20 @@ export default function GraphView({
                     </div>
                   )}
                 </span>
+                <div className="graph-rail__spacer" />
+                <div className={"viewswitch" + (panel === "search" ? " is-search" : "")} role="group" aria-label="Mode">
+                  {/* Switching mode shows a different panel. That is ALL it does.
+                      Search used to call clearPrompt() on the way in, which threw away the
+                      conversation, the ids the agent had put on the field, the colour grid and the
+                      undo history: a whole session, discarded by a control that looks like a tab.
+                      Nothing needed it. effectiveQ below already ignores the query outside search
+                      mode, so a stale query cannot silently intersect the agent's results, and the
+                      input says "Search the field" because that is what it does: it narrows what
+                      is showing rather than starting again. Clear, in the conversation's own head,
+                      is the one door that empties it. */}
+                  <button className={panel === "prompt" ? "is-active" : ""} onClick={() => { setPanel("prompt"); setSheetOpen(true); }}>Prompt</button>
+                  <button className={panel === "search" ? "is-active" : ""} onClick={() => { setPanel("search"); setSheetOpen(true); }}>Search</button>
+                </div>
               </div>
 
               {/* mobile: the whole filter section as a bottom drawer */}
