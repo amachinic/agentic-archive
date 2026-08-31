@@ -2234,9 +2234,11 @@ export default function GraphView({
         body: JSON.stringify({
           messages: history, field: fieldIds(), historian: historianEnabled(), mute: mutedSources(),
           continuation: continuationRef.current,
-          /* what the table already shows, so a pull's arithmetic is about
-             what the human is looking at rather than about this request */
+          /* what the table already shows — the identities, not just the
+             count, so a pull dedupes against the real table and the number
+             the agent quotes is the number the human can see */
           stripHeld: lightTable?.items.length ?? 0,
+          stripKeys: lightTable?.items.map((c) => c.source + ":" + c.remoteId) ?? [],
         }),
       });
       const d = await res.json();
@@ -2962,6 +2964,13 @@ export default function GraphView({
                     working with no second listener. */}
                 {railCollapsed ? (
                   <>
+                    {/* No vocabulary, no door. The wide rail gets this for
+                        free — it maps kinds, so an untagged archive simply
+                        shows no chips — but the collapsed rail renders ONE
+                        control and would have rendered it over nothing: a
+                        FILTERS button opening on an empty panel, which is
+                        the same void by another route. */}
+                    {kinds.length > 0 && (
                     <span className="graph-catwrap graph-drillwrap" data-filter-kind="all">
                       <button
                         type="button"
@@ -3096,6 +3105,7 @@ export default function GraphView({
                         </div>
                       )}
                     </span>
+                    )}
                     {/* Clear stays ON the rail as well as in the panel: removing
                         everything should never require opening anything. */}
                     {filterTags.length > 0 && (
