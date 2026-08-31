@@ -104,7 +104,7 @@ Continue with image-aware conversation, or stage two images as a diptych for str
 
 Atlas follows six visible rules in the dashboard:
 
-1. **One brain, three lenses.** Archetypes are capability namespaces, not competing personalities.
+1. **One brain, four lenses.** Archetypes are capability namespaces, not competing personalities.
 2. **Hand-off is shared data.** Every archetype works from the same vocabulary, palettes, fingerprints, and current field.
 3. **Autonomy is explicit.** `ACTS` may change the canvas; `PROPOSES` may only stage a library change.
 4. **Agent writes have one door.** A staged folder proposal becomes persistent only after acceptance.

@@ -421,7 +421,7 @@
   .archmap__brain b { font-size: 15px; font-weight: 400; }
   .archmap__brain span { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
   .archmap__route { text-align: center; font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); padding: 10px 0 14px; }
-  .archmap__cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .archmap__cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
   .archcol { border: 1px solid var(--border); border-radius: 10px; background: var(--bg); padding: 14px; }
   .archcol__head { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
   .archcol__glyph { width: 26px; height: 26px; border: 1px solid var(--border-strong); border-radius: 7px; display: grid; place-items: center; padding: 3px; }
@@ -713,7 +713,7 @@
 <div class="tabview" id="tab-arch">
   <div class="section" style="max-width:1400px">
     <div class="section__head">
-      <span class="v">04</span><h2>One agent, three archetypes</h2>
+      <span class="v">04</span><h2>One agent, four archetypes</h2>
       <p>one brain routes intent · talk to it, tap a CTA, or type "/" — same registry</p>
     </div>
   </div>
@@ -732,11 +732,15 @@
           <ul><li>find</li><li>sort_by</li><li>filter</li><li>sequence</li><li>build_collection</li></ul>
         </div>
         <div class="archcol">
+          <div class="archcol__head"><span class="archcol__glyph" data-pix="radar"></span><div><div class="archcol__name">Historian</div><span class="archcol__role">hunts what the archive does not hold · read-only</span></div></div>
+          <ul><li>search_outside</li><li>plan_probes</li><li>medium_facet</li><li>read_licence</li></ul>
+        </div>
+        <div class="archcol">
           <div class="archcol__head"><span class="archcol__glyph" data-pix="drop"></span><div><div class="archcol__name">Media Manager</div><span class="archcol__role">puts things where they live · proposes</span></div></div>
           <ul><li>save_folder</li><li>create_folder</li><li>export_local</li><li>collect_source</li><li>report_paths</li></ul>
         </div>
       </div>
-      <div class="archmap__foot">hand-off = <b>shared data</b>: the Archivist writes the vocabulary · the Curator sorts with it · the Manager files what the Curator built</div>
+      <div class="archmap__foot">hand-off = <b>shared data</b>: the Archivist writes the vocabulary · the Curator sorts with it · the Manager files what the Curator built · the Historian works outside the chain and writes nothing into it</div>
     </div>
 
     <div>
@@ -785,12 +789,14 @@
   <div class="section" style="max-width:1500px">
     <div class="section__head">
       <span class="v">05</span><h2>A full run</h2>
-      <p>one job end to end &middot; find &rarr; arrange &rarr; file &middot; played in the app, not in a mockup</p>
+      <p>one job end to end &middot; find &rarr; arrange &rarr; hunt &rarr; file &middot; played in the app, not in a mockup</p>
     </div>
   <p class="lede">
     One job, start to finish, in the running app below: find the photography, arrange it by colour,
-    file it as a folder. The demo types into the real composer and the real agent answers &mdash; the
-    tool calls, the counts and the field re-forming are its own. At the end it presses Accept on
+    hunt the connected museums for what the archive does not hold, and file the result as a folder.
+    The demo types into the real composer and the real agent answers &mdash; the tool calls, the
+    counts, the museum probes and the field re-forming are its own. What the hunt turns up stays on
+    the light table beside the conversation and never enters the library. At the end it presses Accept on
     the proposal, so the folder it names is really created &mdash; through the app&rsquo;s own
     button, the only door that writes &mdash; and then removes it again, because a simulation
     should hand the library back the way it found it.
@@ -801,7 +807,8 @@
     <div class="runsteps">
       <span class="runstep" data-step="1"><b>1</b> Find &middot; <i>curator</i></span>
       <span class="runstep" data-step="2"><b>2</b> Sort by colour &middot; <i>curator</i></span>
-      <span class="runstep" data-step="3"><b>3</b> File the folder &middot; <i>media manager</i></span>
+      <span class="runstep" data-step="3"><b>3</b> Hunt outside &middot; <i>historian</i></span>
+      <span class="runstep" data-step="4"><b>4</b> File the folder &middot; <i>media manager</i></span>
     </div>
   </div>
 
@@ -1503,7 +1510,7 @@ function liveApp(id) {
 
     /* Hold close for the thinking and the first tool rows, then pull back
        so the field re-forming is the thing on screen. Tight on purpose:
-       three acts share this beat, so every 100ms here is 300ms off the mark
+       four acts share this beat, so every 100ms here is 400ms off the mark
        the ending has to hit.
 
        The shot drifts DOWN before it pulls out. The panel grows as the
@@ -1569,7 +1576,7 @@ function liveApp(id) {
     const deadline = performance.now() + 40000;
     while (performance.now() < deadline) {
       const done = Array.from(doc().querySelectorAll(".agent-tool")).some(
-        (r) => r.textContent.includes("add_to_collection") && !r.classList.contains("is-running")
+        (r) => (r.getAttribute("title") || "").startsWith("add_to_collection") && !r.classList.contains("is-running")
       );
       if (done) break;
       await sleep(200);
@@ -2464,12 +2471,15 @@ sortbar.insertAdjacentHTML("beforeend",
   '<span class="handnote"><span class="ic">' + ic("tag") + "</span>vocabulary \u00b7 written by archivist \u00b7 read by curator</span>");
 
 /* ================= 05 · A FULL RUN =================
-   The same job as before -- find the photography, arrange it by colour,
-   file it as a folder -- except it is no longer mimed. The three acts are
-   three real prompts to the real agent in the frame, and the step chips
-   follow the hand-off between archetypes as the app answers them. The run
-   stops at the proposal on purpose: the accept is the human's, and a demo
-   that pressed it would be lying about the one rule that matters. */
+   The same job as before -- find the photography, arrange it by colour, hunt
+   the museums for what it does not hold, file it as a folder -- except it is
+   no longer mimed. The four acts are four real prompts to the real agent in
+   the frame, and the step chips follow the hand-off between archetypes as the
+   app answers them. Act three writes nothing: the Historian's finds sit on the
+   light table and the folder filed in act four is the same photography either
+   way. The accept is still the human's -- a drawn hand travels to the app's
+   own Accept and presses it on camera, so the one door that writes is shown
+   being used rather than skipped past. */
 
 const FOLDER = "Photography Project";
 /* The beat between acts. It exists to let the field be read, nothing more.
@@ -2531,7 +2541,7 @@ async function playRun() {
   /* ---- the shot list ----
      Wide to establish and to let the field answer; in for anything being
      typed or pressed. ask() carries its own move (in to compose, out when
-     the agent takes over) so the rhythm is the same in all three acts, and
+     the agent takes over) so the rhythm is the same in all four acts, and
      the beats below are only the ones this run does not share with them. */
   try {
     if (!(await run.boot())) throw new Error("the frame never came up");
@@ -2569,14 +2579,32 @@ async function playRun() {
     rStep(2, true);
     await sleep(ACT_GAP);   // a beat on the grid, which reads top to bottom
 
-    /* ---------- act 3 · the media manager files ---------- */
+    /* ---------- act 3 · the historian hunts outside ----------
+       The archive reaching past itself is the newest thing it does, and the
+       one an archive cannot fake: the probes are real calls to the Met, the
+       Art Institute, Cleveland and the Rijksmuseum, and what comes back is
+       held on the light table -- outside, temporary, nothing written. The
+       ask names a number so the plan stays short enough to film: measured,
+       eight paintings about solitude costs five probes and six seconds,
+       where the same ask without a number plans fourteen. */
     rStep(3);
-    await run.ask("file these as a folder called " + FOLDER);
+    await run.ask("find 8 paintings about solitude in the museums");
+    rStep(3, true);
+    run.say("the light table holds what came back \u2014 outside the library, nothing written", "outside", "step");
+    await sleep(2200);
+
+    /* ---------- act 4 · the media manager files ----------
+       The ask names the field rather than saying "these": outside candidates
+       are shown beside the conversation, never folded into the working set,
+       so what gets filed is the same 232 either way -- but only the explicit
+       ask makes the model sure of that. */
+    rStep(4);
+    await run.ask("file the photography on the canvas as a folder called " + FOLDER);
     /* Wide through the whole accept: the press, the write, and the folder
        appearing in the sidebar are one shot with nothing cropped out of
        it. See accept() for why it no longer moves the camera itself. */
     await run.accept();
-    rStep(3, true);
+    rStep(4, true);
     run.say("folder written at " + mark(), "filed", "step");
 
     /* The row does not land with the write. It arrives a beat later, on the
@@ -2621,7 +2649,7 @@ async function playRun() {
          drain -- the viewer sees WHO cleared it */
       await run.handClick(clr);
     }
-    run.say("cleared the conversation at " + mark(), "46s", "step");
+    run.say("cleared the conversation at " + mark(), "clear", "step");
 
     /* the Clear press holds two seconds and fades: the stitch waits for
        the cursor to be gone rather than dissolving over it */
@@ -2637,7 +2665,7 @@ async function playRun() {
   await standby;
   await run.fadeToStandby(1000);
   await run.unfile(FOLDER);                   // behind the fade, off camera
-  run.say("transitioned at " + mark(), "48s", "step");
+  run.say("transitioned at " + mark(), "stitch", "step");
   await at(49);                               // 49s · out
 
   run.drive(false);

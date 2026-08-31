@@ -3041,8 +3041,8 @@ export default function GraphView({
                             <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                           ) : (
                             <p className="agent-home__say">{readOnly
-                              ? "One agent, three lenses. Ask me to hunt through the archive, filter it by keyterm, or sort what is showing into a grid. This is the public copy, so I can look but not write: tagging and filing need the local build."
-                              : "One agent, three lenses. Find or filter to narrow the field, sort what is showing, save what is worth keeping. Type “/” for every command, or just ask."}</p>
+                              ? "One agent, four lenses. Ask me to hunt through the archive, filter it by keyterm, sort what is showing into a grid, or search the connected museums for what the archive does not hold. This is the public copy, so I can look but not write: tagging and filing need the local build."
+                              : "One agent, four lenses. Find or filter to narrow the field, sort what is showing, hunt the connected museums, save what is worth keeping. Type “/” for every command, or just ask."}</p>
                           )}
                         </div>
                         {boot >= 2 && (
