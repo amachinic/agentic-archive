@@ -326,6 +326,15 @@ export async function POST(req: Request) {
          strip now holds 46" at a table the human can see holds 82 — and the
          thousand-candidate ceiling would reset every turn. */
       stripHeld?: number;
+      /* WHICH candidates it shows: "source:remoteId" per tile.
+         The count alone was not enough to be honest with. Different queries
+         return overlapping material — "sad" and "mourning" share objects —
+         so a pull could hand back items the table already had, and a server
+         counting its own take reported 104 at a table holding 100 (measured).
+         With the identities, the dedupe happens where the material arrives:
+         the count is exact, and the chunk is entirely new rather than
+         partly spent on repeats. */
+      stripKeys?: string[];
     } | null;
   if (!Array.isArray(body?.messages) || !body.messages.length) {
     return Response.json({ error: "messages required" }, { status: 400 });
@@ -378,7 +387,12 @@ export async function POST(req: Request) {
      asks for the next chunk. */
   /* what the light table already shows, so this turn's arithmetic is about
      the table the human is looking at rather than about this request */
-  const stripHeld = Math.max(0, Math.min(STRIP_MAX, Math.trunc(Number(body.stripHeld)) || 0));
+  const stripKeys = Array.isArray(body.stripKeys)
+    ? body.stripKeys.filter((k): k is string => typeof k === "string").slice(0, STRIP_MAX)
+    : [];
+  const stripHeld = stripKeys.length
+    ? stripKeys.length
+    : Math.max(0, Math.min(STRIP_MAX, Math.trunc(Number(body.stripHeld)) || 0));
   const consumed: Record<string, Partial<Record<string, number>>> = {};
   if (body.continuation && typeof body.continuation === "object") {
     for (const [cq, per] of Object.entries(body.continuation)) {
@@ -679,7 +693,9 @@ export async function POST(req: Request) {
            the union, deduped by identity, capped so it stays a strip. */
         const held = out.candidates?.items ?? [];
         const before = held.length;
-        const seen = new Set(held.map((c) => c.source + ":" + c.remoteId));
+        /* seeded with what the table ALREADY shows, so a pull cannot spend
+           its chunk re-delivering tiles the human is looking at */
+        const seen = new Set([...stripKeys, ...held.map((c) => c.source + ":" + c.remoteId)]);
         const delivered: Partial<Record<string, number>> = {};
         for (const c of results) {
           if (held.length >= capThisTurn) break;
