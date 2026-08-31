@@ -335,6 +335,13 @@ export async function POST(req: Request) {
          the count is exact, and the chunk is entirely new rather than
          partly spent on repeats. */
       stripKeys?: string[];
+      /* The keyterms standing on the field right now. The field ids already
+         arrive narrowed by these, so the agent has always been working
+         inside them — it simply could not SEE them, and so could not say
+         why a search came back with eleven. Three narrowings intersect on
+         this surface (keyterms, the search box, and whatever the agent last
+         put on the field); this is the one the agent was blind to. */
+      filters?: string[];
     } | null;
   if (!Array.isArray(body?.messages) || !body.messages.length) {
     return Response.json({ error: "messages required" }, { status: 400 });
@@ -387,6 +394,9 @@ export async function POST(req: Request) {
      asks for the next chunk. */
   /* what the light table already shows, so this turn's arithmetic is about
      the table the human is looking at rather than about this request */
+  const standingFilters = Array.isArray(body.filters)
+    ? body.filters.filter((t): t is string => typeof t === "string" && t.trim().length > 0).slice(0, 24)
+    : [];
   const stripKeys = Array.isArray(body.stripKeys)
     ? body.stripKeys.filter((k): k is string => typeof k === "string").slice(0, STRIP_MAX)
     : [];
@@ -913,7 +923,24 @@ export async function POST(req: Request) {
       ? "\n\nOutside sources (museum and platform search) are a local-runtime capability and are not available on this hosted archive. If the human asks to search museums or outside platforms, say that plainly."
       : "\n\nNo outside source is connected, and you have no tool for reaching one. If the human asks to search museums or outside platforms, say so plainly and point them to Agents → Connections.";
 
-  const system = SYSTEM + hosted + holding + outside + "\n\nKEYTERM VOCABULARY (term(count)):\n" + vocabulary();
+  /* What the human has pinned by hand, spoken to the agent.
+
+     Three narrowings intersect on this surface — these keyterms, the search
+     box, and whatever the agent last put on the field — and the field ids
+     arrive already cut by all three. So the agent has always been answering
+     inside the filters; it just could not see them, which is why "only
+     eleven?" had no answer it could give. Naming them lets the count be
+     explained instead of merely reported, and lets the agent offer the one
+     move that would widen the result. */
+  const standing = standingFilters.length
+    ? "\n\nSTANDING FILTERS the human has pinned on the field: " + standingFilters.join(", ") +
+      ".\n- Everything on the field is INSIDE these, and so is every count you quote. They are ANDed: an image must carry all of them." +
+      "\n- When a result comes back small or empty, say which of these narrowed it before offering anything else — that is usually the whole explanation, and it is invisible to the human until you say it." +
+      "\n- They are the human's own choice, not an obstacle. Never remove one on your own. When lifting one would plainly open up what they are asking for, name it and offer — once." +
+      "\n- A search for something these exclude will return nothing NO MATTER how it is worded. Say that rather than re-searching."
+    : "";
+
+  const system = SYSTEM + hosted + holding + standing + outside + "\n\nKEYTERM VOCABULARY (term(count)):\n" + vocabulary();
   const turns = body.messages
     .filter((m) => m.role === "user" || m.role === "assistant")
     .slice(-10)

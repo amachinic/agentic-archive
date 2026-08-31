@@ -2233,6 +2233,10 @@ export default function GraphView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: history, field: fieldIds(), historian: historianEnabled(), mute: mutedSources(),
+          /* the keyterms standing on the field. The ids above already arrive
+             narrowed by them, so without this the agent answers from inside
+             a box it cannot see the walls of. */
+          filters: filterTags,
           continuation: continuationRef.current,
           /* what the table already shows — the identities, not just the
              count, so a pull dedupes against the real table and the number
@@ -3430,6 +3434,36 @@ export default function GraphView({
                         </button>
                       </div>
                     </div>
+                    {/* The combination, made visible where it is acted on.
+                        Keyterms, the search box and the agent's own results
+                        all narrow the same field and INTERSECT — so an answer
+                        of eleven can be eleven because of a filter pinned ten
+                        minutes ago, on the far side of the stage, with the
+                        menu shut. The conversation is where that number gets
+                        read, so the standing terms belong here too, and each
+                        one lifts from the same spot rather than sending the
+                        human back across the rail to find it. */}
+                    {!conversationCollapsed && filterTags.length > 0 && (
+                      <div className="chatfilters">
+                        <span className="mono-xs chatfilters__k">narrowed by</span>
+                        {filterTags.map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            className="chatfilters__chip"
+                            onClick={() => toggleFilterTag(t)}
+                            title={"Stop narrowing by " + t}
+                          >
+                            {t}<span aria-hidden>×</span>
+                          </button>
+                        ))}
+                        {filterTags.length > 1 && (
+                          <button type="button" className="chatfilters__all" onClick={() => setFilterTags([])}>
+                            clear all
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <div
                       id="graph-conversation-content"
                       className="conversation-body"
