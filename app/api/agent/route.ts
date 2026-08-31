@@ -637,7 +637,16 @@ export async function POST(req: Request) {
            own mark. A pull with no number still moves a real chunk, on top
            of whatever the strip already holds. */
         const isMore = args.more === true;
-        const offsets = isMore ? (consumed[q] ?? {}) : {};
+        /* The odometer is keyed on the query AND the facet, because those
+           together are what define the result set an offset counts into.
+           Keyed on the query alone, a pull that also narrowed by medium
+           resumed at a mark counted against the UNFILTERED list and skipped
+           the whole first page of the narrowed one — measured against the
+           Met: all nine top-ranked "sad" paintings, gone, silently, and not
+           recoverable by pulling further. A different facet is a different
+           well; it starts at the top. */
+        const odo = q + " " + (medium ?? "");
+        const offsets = isMore ? (consumed[odo] ?? {}) : {};
         if (isMore && !wantThisTurn) {
           /* a chunk on top of this turn's own take, and never past the
              ceiling counting what the table already shows */
@@ -725,7 +734,7 @@ export async function POST(req: Request) {
            re-offered, which against populations in the thousands is
            invisible; a repeat is not. */
         {
-          const slot = (consumed[q] = consumed[q] ?? {});
+          const slot = (consumed[odo] = consumed[odo] ?? {});
           for (const a of advanced) if (a.consumed > 0) slot[a.source] = (slot[a.source] ?? 0) + a.consumed;
         }
         /* a source is only dry once it has ALSO stopped delivering: an
@@ -765,7 +774,7 @@ export async function POST(req: Request) {
            everything this query has already handed over. Approximate by
            construction — the populations are, and channels hold text as well
            as images — so it is spoken as "about", never as a promise. */
-        const takenSoFar = Object.values(consumed[q] ?? {}).reduce((a: number, b) => a + (b ?? 0), 0);
+        const takenSoFar = Object.values(consumed[odo] ?? {}).reduce((a: number, b) => a + (b ?? 0), 0);
         const remaining = Math.max(0, totalMatched - takenSoFar);
         const allDry = searched.length > 0 && dryNow.length >= searched.length;
 
