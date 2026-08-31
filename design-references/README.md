@@ -4,9 +4,15 @@ Frozen studies worth returning to. Each file here is **self-contained** —
 typefaces embedded, no server, no network, no repository. Double-click one
 and it plays.
 
-These are snapshots, not living code. The working copies stay in `public/`
-and are free to drift; these are kept as they were the day the decision was
-made, so the reasoning behind a shipped design can be re-entered later.
+These are snapshots, not living code. The working copies stay in
+`public/sandboxes/` and are free to drift; these are kept as they were the day
+the decision was made, so the reasoning behind a shipped design can be
+re-entered later.
+
+The two folders differ on purpose: `public/sandboxes/` is git-ignored, local,
+and disposable — everything that is still an open question. This folder is
+committed, because a decision that cannot be re-read is a decision that gets
+made again.
 
 | File | What it holds |
 | --- | --- |
