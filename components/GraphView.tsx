@@ -224,7 +224,7 @@ function FilterCheckboxRow({
       role="checkbox"
       aria-checked={checked}
       tabIndex={tabIndex}
-      title={checked ? "Deselect " + term.name : "Also require " + term.name}
+      title={checked ? "Deselect " + term.name : "Add " + term.name + " to the filter"}
     >
       <span className="frow__check" aria-hidden>{checked && <IconCheck width={10} height={10} />}</span>
       <span className="frow__name">{term.name}</span>
@@ -1104,6 +1104,41 @@ export default function GraphView({
     }
     return groups;
   }, [keyterms]);
+  /* Checked terms are OR within a facet and AND across them.
+
+     They used to be AND everywhere -- every() over the flat list -- and for
+     the three facets holding exactly one value per image (work, carrier,
+     period) that made any second tick a guaranteed nothing: an image cannot be
+     of the 1930s AND the 1940s, so ticking 1930s (13) and 1940s (13) emptied a
+     field that should hold 26. The counts beside the terms were telling the
+     truth and the field was contradicting them.
+
+     Across facets AND is still right and still what the eye expects: period
+     1930s with work photograph is narrower than either alone. Within one facet
+     the question is "or", because a facet's values are alternatives -- which is
+     also why the arithmetic comes out, 13 and 13 giving 26 on a facet whose
+     values cannot overlap, and something under the sum on one whose can. */
+  const filterGroups = useMemo(() => {
+    if (!filterTags.length) return [] as string[][];
+    const kindOf = new Map(keyterms.map((t) => [t.name, t.kind]));
+    const byKind = new Map<string, string[]>();
+    for (const name of filterTags) {
+      /* a term whose kind is outside the vocabulary groups with the manual
+         tags, exactly as it does in `kinds` -- so it behaves here the way it
+         looks in the panel */
+      const k = kindOf.get(name) ?? "tag";
+      const got = byKind.get(k);
+      if (got) got.push(name);
+      else byKind.set(k, [name]);
+    }
+    return [...byKind.values()];
+  }, [filterTags, keyterms]);
+
+  const matchesFilters = useCallback(
+    (tags: string[]) => filterGroups.every((group) => group.some((t) => tags.includes(t))),
+    [filterGroups],
+  );
+
   const [raw, setRaw] = useState<{ nodes: RawNode[]; edges: GEdge[] }>(
     initialGraph ?? { nodes: [], edges: [] }
   );
@@ -1199,9 +1234,7 @@ export default function GraphView({
 
   useEffect(() => {
     const s = sim.current;
-    let pool = filterTags.length
-      ? raw.nodes.filter((n) => filterTags.every((t) => n.tags.includes(t)))
-      : raw.nodes;
+    let pool = filterTags.length ? raw.nodes.filter((n) => matchesFilters(n.tags)) : raw.nodes;
     const q = effectiveQ;
     if (q) {
       pool = pool.filter((n) =>
@@ -1242,7 +1275,7 @@ export default function GraphView({
     s.edges = edges;
     s.live = new Map();
     s.hovered = null;
-  }, [raw, filterTags, promptIds, effectiveQ, fieldSort]);
+  }, [raw, filterTags, matchesFilters, promptIds, effectiveQ, fieldSort]);
 
   /* recentre camera when the arrangement itself changes */
   useEffect(() => {
@@ -2852,9 +2885,7 @@ export default function GraphView({
   /* the pill tells the truth: the pool it reports is the SAME pool the
      field forms from, prompt results included */
   const poolSize = useMemo(() => {
-    let pool = filterTags.length
-      ? raw.nodes.filter((n) => filterTags.every((t) => n.tags.includes(t)))
-      : raw.nodes;
+    let pool = filterTags.length ? raw.nodes.filter((n) => matchesFilters(n.tags)) : raw.nodes;
     const q = effectiveQ;
     if (q) {
       pool = pool.filter((n) =>
@@ -2866,7 +2897,7 @@ export default function GraphView({
       pool = pool.filter((n) => rank.has(n.id));
     }
     return pool.length;
-  }, [raw.nodes, filterTags, effectiveQ, promptIds]);
+  }, [raw.nodes, filterTags, matchesFilters, effectiveQ, promptIds]);
 
 
   /* the collapsed panel's second room, and the number on its chip. The chip
