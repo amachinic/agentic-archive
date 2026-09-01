@@ -31,10 +31,10 @@ function merge(prev, next) {
   }
   return out;
 }
-async function turn(text) {
+async function turn(text, filters = []) {
   messages.push({ role: "user", content: text });
   const r = await fetch(URL, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, field: [], historian: true, mute: [], continuation,
+    body: JSON.stringify({ messages, field: [], historian: true, mute: [], continuation, filters,
       stripHeld: strip.length, stripKeys: strip.map((c) => c.source + ":" + c.remoteId) }) });
   const d = await r.json();
   if (!r.ok) throw new Error("HTTP " + r.status + " " + d.error);
@@ -42,7 +42,9 @@ async function turn(text) {
   if (d.continuation) continuation = d.continuation;
   strip = merge(strip, d.candidates);
   const calls = (d.toolLog ?? []).filter((t) => t.tool === "search_outside");
-  return { d, calls, reply: String(d.reply ?? "") };
+  /* every tool, so a scenario can assert what the agent did NOT reach for */
+  const tools = (d.toolLog ?? []).map((t) => t.tool);
+  return { d, calls, tools, reply: String(d.reply ?? "") };
 }
 
 console.log("═══ TURN 1 — an open hunt, no number named");
@@ -80,6 +82,31 @@ console.log(`   reply: ${t3.reply}`);
 ok("respects a stop — no further probing", t3.calls.length === 0, `${t3.calls.length} probes`);
 ok("does not re-offer after being told to stop",
    !/would you like|shall i|want me to|should i pull/i.test(t3.reply), t3.reply.slice(0, 120));
+
+console.log("\n═══ TURN 4 — a filter is standing, and the field is inside it");
+/* Keyterms, the search box and the agent's own results all narrow the same
+   pool and INTERSECT. The field ids arrive already cut by the keyterms, so a
+   result can be small for a reason that is nowhere on the agent's screen —
+   and, before it was told, nowhere in its reply either. Ask for something the
+   standing filters exclude: the answer has to name them. */
+messages.length = 0; strip = []; continuation = {};
+const t4 = await turn("Find me bright colourful posters.", ["monochrome", "1970s"]);
+console.log(`   tools: ${t4.tools.join(", ") || "(none)"}`);
+console.log(`   reply: ${t4.reply}`);
+const namesFilter = /monochrome|1970s/i.test(t4.reply);
+ok("names the standing filter when the result is narrow", namesFilter, t4.reply.slice(0, 170));
+ok("does not blame the archive for the human's own filter",
+   namesFilter || !/nothing|no images|no results|couldn't find|could not find/i.test(t4.reply),
+   "a bare 'nothing found' with a filter standing is the bug this guards");
+ok("never lifts the filter itself", !t4.tools.includes("release_field"), t4.tools.join(", ") || "(no tools)");
+
+console.log("\n═══ TURN 5 — 'why so few?' is a question the filters answer");
+const t5 = await turn("Why so few?", ["monochrome", "1970s"]);
+console.log(`   tools: ${t5.tools.join(", ") || "(none)"}`);
+console.log(`   reply: ${t5.reply}`);
+ok("explains the narrowing rather than searching again",
+   /monochrome|1970s|filter/i.test(t5.reply), t5.reply.slice(0, 170));
+ok("still does not lift it unasked", !t5.tools.includes("release_field"), t5.tools.join(", ") || "(no tools)");
 
 const pass = res.filter(Boolean).length;
 console.log(`\n═══ ${pass}/${res.length} PASS`);
