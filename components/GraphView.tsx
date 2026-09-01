@@ -2542,7 +2542,9 @@ export default function GraphView({
     };
     const scroll = document.querySelector(".chatscroll") as HTMLElement | null; // the view renders exactly one
     if (clearingRef.current) return;
-    if (conversationCollapsed || !scroll || thread.length === 0 || matchMedia("(prefers-reduced-motion: reduce)").matches) { finish(); return; }
+    const drawer = document.querySelector(".lighttable.is-in") as HTMLElement | null;
+    const nothingToDrain = thread.length === 0 && !drawer;
+    if (conversationCollapsed || !scroll || nothingToDrain || matchMedia("(prefers-reduced-motion: reduce)").matches) { finish(); return; }
     clearingRef.current = true;
 
     scroll.dataset.draining = "1";
@@ -2589,6 +2591,19 @@ export default function GraphView({
     /* the row gaps go with them, over the whole sweep, or fourteen pixels
        per message would be left standing after the messages had gone */
     scroll.animate([{ rowGap: "14px" }, { rowGap: "0px" }], { duration: total, easing: EASE, fill: "both" });
+
+    if (drawer) {
+      const w = drawer.getBoundingClientRect().width;
+      drawer.getAnimations().forEach((a) => a.cancel());
+      drawer.animate(
+        [
+          { width: w + "px", opacity: 1, transform: "translateX(0px)" },
+          { width: w * 0.58 + "px", opacity: 0, transform: "translateX(44px)", offset: 0.6 },
+          { width: "0px", opacity: 0, transform: "translateX(44px)" },
+        ],
+        { duration: total, easing: EASE, fill: "both" },
+      );
+    }
 
     window.setTimeout(() => {
       finish();
