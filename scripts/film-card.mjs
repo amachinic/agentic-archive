@@ -33,7 +33,7 @@ const argv = process.argv.slice(2);
 const flag = (n, d) => { const i = argv.indexOf("--" + n); return i === -1 ? d : argv[i + 1]; };
 
 const BASE   = flag("base", "http://localhost:4400");
-const PAGE   = flag("page", "/card-art.html");
+const PAGE   = flag("page", "/sandboxes/card-art.html");
 const WIDTH  = Number(flag("width", 1920));
 /* 1392, not 1008: the portfolio card runs about 1.38:1 and crops with
    object-fit cover, so the artwork must BE 1.38:1 (1920x1392) or cover eats

@@ -41,6 +41,9 @@ const CRF     = Number(flag("crf", 16));     // 16 is visually lossless on UI
 const OUT     = path.resolve(flag("out", "run.mp4"));
 const RAW     = path.resolve(".film");
 const CEILING = Number(flag("timeout", 600)) * 1000;
+/* the studies live under /sandboxes/ since #65 -- public/, so next dev still
+   serves them, but git-ignored so they never reach the deployed archive */
+const PAGE    = flag("page", "/sandboxes/agent-sandbox.html");
 
 const log = (m) => console.log("  " + m);
 const pad = (n) => String(n).padStart(6, "0");
@@ -56,8 +59,8 @@ function ffmpeg(args) {
 }
 
 async function main() {
-  const ping = await fetch(BASE + "/agent-sandbox.html").catch(() => null);
-  if (!ping || !ping.ok) throw new Error("nothing serving " + BASE + " -- start `npm run dev` first");
+  const ping = await fetch(BASE + PAGE).catch(() => null);
+  if (!ping || !ping.ok) throw new Error("nothing serving " + BASE + PAGE + " -- start `npm run dev` first, and check public/sandboxes/ still has the study (it is git-ignored, so a fresh clone will not)");
 
   await rm(RAW, { recursive: true, force: true });
   await mkdir(RAW, { recursive: true });
@@ -86,7 +89,7 @@ async function main() {
   /* ?film=1 strips the page to the app: no intro, tabs, chips, play button
      or readout, and the frame loses its card border and rounded corners.
      It also selects the run tab itself, since the tab bar is gone. */
-  await page.goto(BASE + "/agent-sandbox.html?film=1", { waitUntil: "domcontentloaded" });
+  await page.goto(BASE + PAGE + "?film=1", { waitUntil: "domcontentloaded" });
 
   /* The frame boots the whole app. Wait for the field to actually carry
      cards -- the canvas mounts empty and the pool lands after it, and an
