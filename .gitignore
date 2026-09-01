@@ -21,6 +21,7 @@ t.mjs
 run.mp4
 runv2.mp4
 runv3.mp4
+runv4.mp4
 run-failed.webm
 
 # card art render
@@ -30,6 +31,7 @@ run-failed.webm
 public/card/
 public/image-archivist.mp4
 public/runv3.mp4
+public/runv4.mp4
 
 # Design sandboxes — local references, never shipped.
 # They live under public/ so `next dev` still serves them at /sandboxes/<name>.html,
