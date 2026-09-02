@@ -1765,13 +1765,23 @@ export default function GraphView({
   function atlasEnabled(): boolean {
     try {
       const v = JSON.parse(localStorage.getItem("atlas-agents-enabled") || "{}");
-      return v.atlas !== false && v.discovery !== false && v.curator !== false;
+      return v.atlas !== false;
     } catch { return true; }
   }
 
   /* The Historian's switch travels WITH the request: the server drops the
      outside-search tool for a turn that says false, so switching the lens off
      in Agents genuinely retires the capability rather than hiding a button. */
+  /** every archetype switch, as the request carries them */
+  function agentSwitches(): Record<string, boolean> {
+    try {
+      const v = JSON.parse(localStorage.getItem("atlas-agents-enabled") || "{}") as Record<string, unknown>;
+      const out: Record<string, boolean> = {};
+      for (const k of ["archivist", "curator", "historian", "manager"]) out[k] = v[k] !== false;
+      return out;
+    } catch { return { archivist: true, curator: true, historian: true, manager: true }; }
+  }
+
   function historianEnabled(): boolean {
     try {
       const v = JSON.parse(localStorage.getItem("atlas-agents-enabled") || "{}");
@@ -2265,7 +2275,7 @@ export default function GraphView({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: history, field: fieldIds(), historian: historianEnabled(), mute: mutedSources(),
+          messages: history, field: fieldIds(), historian: historianEnabled(), agents: agentSwitches(), mute: mutedSources(),
           /* the keyterms standing on the field. The ids above already arrive
              narrowed by them, so without this the agent answers from inside
              a box it cannot see the walls of. */
