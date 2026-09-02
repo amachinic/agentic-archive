@@ -40,6 +40,13 @@ const ROUNDS = IS_HOSTED_READ_ONLY ? HOSTED_ROUNDS : 6;
    size: anything lower silently shrinks the canvas every time the agent
    re-forms it. */
 const FIELD_CAP = 1200;
+/* words that carry no signal as tag substrings — see search_library */
+const SEARCH_STOPWORDS = new Set([
+  "the", "and", "for", "with", "from", "that", "this", "these", "those",
+  "are", "was", "were", "has", "have", "had", "its", "his", "her", "their",
+  "any", "all", "not", "but", "our", "your", "out", "into", "onto", "about",
+  "some", "more", "most", "very", "just", "like", "then", "than", "them",
+]);
 
 /*
   Two backs for the same agent. Groq is the house model; Claude is here for
@@ -101,10 +108,13 @@ const TOOLS = [
     type: "function",
     function: {
       name: "filter_by_terms",
-      description: "Narrow the current working set to images carrying ALL of the given keyterms (exact vocabulary terms).",
+      description: "Narrow the current working set by keyterms (exact vocabulary terms). match 'all' (default) keeps images carrying EVERY term; match 'any' keeps images carrying AT LEAST ONE; match 'none' keeps images carrying NONE of them. Use 'any' whenever the human offers alternatives — 'X or Y', 'either', a list of eras — and always for two values of the same facet (two periods, two works, two carriers): no image holds two, so 'all' finds nothing there by definition. Use 'none' for exclusions: 'not X', 'without X', 'everything except X'.",
       parameters: {
         type: "object",
-        properties: { terms: { type: "array", items: { type: "string" } } },
+        properties: {
+          terms: { type: "array", items: { type: "string" } },
+          match: { type: "string", enum: ["all", "any", "none"] },
+        },
         required: ["terms"],
       },
     },
@@ -301,6 +311,7 @@ const SYSTEM = [
   "- Category-like requests (photography, posters, book spreads, paintings, the 1960s) are filter_by_terms even when the exact word is not in the vocabulary: the filter resolves everyday aliases itself, and tells you what it substituted. search_library is for names, phrases and free text, not categories.",
   "- If the human asked to file, collect or organize, stage it with propose_folder — never claim you created anything yourself.",
   "- To FIND an artist's work, search_library(their name) FIRST: it reads the credit on every image and reaches artists not listed below. Artist names also work inside filter_by_terms, but only to narrow a set you already have.",
+  "- 'X or Y' is ONE filter_by_terms call with both terms and match: 'any' — never two calls and never picking one. Two values of the same facet (two periods, two works) are ALWAYS alternatives. 'not X' / 'without X' is match: 'none'.",
   "- filter_by_terms accepts ONLY terms from the KEYTERM VOCABULARY below, verbatim. Translate the human's words into the nearest vocabulary terms (e.g. 'deep rich colours' -> colorful, dark; 'moodboard for product photography' -> photography, still life, object).",
   "- Never repeat a tool call that just failed with the same arguments. If a filter matches nothing, try DIFFERENT vocabulary terms or simply show what the search found.",
   "- A decent set you can show beats a perfect set you cannot. When in doubt, show_field.",
@@ -417,7 +428,7 @@ export async function POST(req: Request) {
   }
   const out: {
     shownIds: number[] | null;
-    proposal: { name: string; note: string; ids: number[] } | null;
+    proposal: { name: string; note: string; ids: number[]; exists: boolean } | null;
     sort: { by: "colour" | "light" | "period" | "kind" | "off" } | null;
     release: boolean;
     /* what search_outside found this turn: shown in the conversation, never
@@ -461,7 +472,8 @@ export async function POST(req: Request) {
         const found = new Map<number, string>();
         const { rows } = listImages({ q, limit: 400, sort: "newest" });
         rows.forEach((r) => found.set(r.id, (r.ai_title || r.filename).slice(0, 40)));
-        const words = q.toLowerCase().split(/[,\s]+/).filter((w) => w.length > 2).slice(0, 6);
+        const words = q.toLowerCase().split(/[,\s]+/)
+          .filter((w) => w.length > 2 && !SEARCH_STOPWORDS.has(w)).slice(0, 6);
         for (const w of words) {
           const trows = conn.prepare(
             "SELECT DISTINCT i.id, i.ai_title, i.filename FROM image_tags it " +
@@ -510,15 +522,32 @@ export async function POST(req: Request) {
               : "none of these are vocabulary terms; the set is unchanged. Pick terms from the KEYTERM VOCABULARY.",
           });
         }
+        /* "any" is a union, "none" an exclusion, "all" an intersection — the
+           same query, differing in how many of the asked terms an image must
+           carry and in which side of that line survives. The UI learned the
+           union half of this the hard way (#80): values of a single-valued
+           facet are alternatives, and demanding both of a period pair is not
+           a narrow ask but an impossible one. The agent had the identical
+           blindness plus no exclusion at all, so "not photography" could only
+           be faked — and was, inverted. */
+        const mode = args.match === "any" && terms.length > 1 ? "any"
+          : args.match === "none" ? "none" : "all";
         const ids = ws.map((r) => r.id);
         const ph = ids.map(() => "?").join(",");
         const tph = terms.map(() => "?").join(",");
         const rows = conn.prepare(
           "SELECT it.image_id AS id, COUNT(DISTINCT t.name) AS n FROM image_tags it " +
           "JOIN tags t ON t.id = it.tag_id WHERE it.image_id IN (" + ph + ") AND t.name IN (" + tph + ") " +
-          "GROUP BY it.image_id HAVING n = ?"
-        ).all(...ids, ...terms, terms.length) as { id: number }[];
-        const keep = new Set(rows.map((r) => r.id));
+          "GROUP BY it.image_id HAVING n >= ?"
+        ).all(...ids, ...terms, mode === "all" ? terms.length : 1) as { id: number }[];
+        const hit = new Set(rows.map((r) => r.id));
+        if (mode === "none") {
+          const before = ws.length;
+          ws = ws.filter((r) => !hit.has(r.id));
+          narrowed = true;
+          return JSON.stringify({ count: ws.length, excluded: before - ws.length, terms, match: "none", unknown, sample: sample() });
+        }
+        const keep = hit;
         /* a miss reports itself instead of destroying the set */
         if (!keep.size) {
           /* Which of them would have worked alone. "Try fewer" is advice; a
@@ -533,12 +562,12 @@ export async function POST(req: Request) {
           }
           return JSON.stringify({
             count: ws.length, matched: 0, terms, unknown, each,
-            note: "no image carries ALL of these at once, so the set is unchanged. each is how many carry each term on its own: call filter_by_terms again with just the one you want.",
+            note: "no image carries ALL of these at once, so the set is unchanged. each is how many images IN THE CURRENT SET carry each term on its own — not a library-wide count, so never say a term matches nothing in the library from this. If the human meant alternatives (X or Y), call filter_by_terms again with the SAME terms and match: 'any' to take their union; otherwise call again with just the one you want.",
           });
         }
         ws = ws.filter((r) => keep.has(r.id));
         narrowed = true;
-        return JSON.stringify({ count: ws.length, terms, unknown, sample: sample() });
+        return JSON.stringify({ count: ws.length, terms, match: mode, unknown, sample: sample() });
       }
       case "expand_similar": {
         if (!ws.length) return JSON.stringify({ count: 0, added: 0, note: "nothing to grow from: search or filter first." });
@@ -610,12 +639,20 @@ export async function POST(req: Request) {
         if (!ws.length) {
           return JSON.stringify({ staged: false, count: 0, note: "the working set is empty, so there is nothing to file. Search or show a set first, then propose." });
         }
+        const proposedName = String(args.name ?? "Untitled").slice(0, 60);
+        const proposedSlug = proposedName.toLowerCase().replace(/[^\w]+/g, "-").replace(/^-+|-+$/g, "") || "untitled";
+        const taken = conn.prepare("SELECT id FROM collections WHERE slug = ? AND parent_id IS NULL")
+          .get(proposedSlug) as { id: number } | undefined;
         out.proposal = {
-          name: String(args.name ?? "Untitled").slice(0, 60),
+          name: proposedName,
           note: String(args.note ?? "").slice(0, 160),
           ids: ws.slice(0, FIELD_CAP).map((r) => r.id),
+          exists: !!taken,
         };
-        return JSON.stringify({ staged: true, count: out.proposal.ids.length });
+        return JSON.stringify({
+          staged: true, count: out.proposal!.ids.length, exists: !!taken,
+          ...(taken ? { note: "a folder with this name already exists: accepting ADDS these images to it (nothing is removed). Say so plainly; offer a different name only if the human seems to want a new folder." } : {}),
+        });
       }
       case "search_outside": {
         if (!outsideSources.length) {

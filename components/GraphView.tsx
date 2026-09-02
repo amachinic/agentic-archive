@@ -79,7 +79,7 @@ type ThreadItem =
      is being done; the tool rows nest beneath it and the reply closes the
      block (treatment I from the presence sandbox) */
   | { type: "head"; what: string; status: "running" | "done" }
-  | { type: "proposal"; name: string; note: string; ids: number[]; status: "pending" | "accepted" | "rejected" }
+  | { type: "proposal"; name: string; note: string; ids: number[]; exists?: boolean; status: "pending" | "accepted" | "rejected" }
   | { type: "ctas"; options: CtaOpt[]; picked: string | null }
   | { type: "timeline" }
   | { type: "outcome"; rows: OutRow[] }
@@ -2313,7 +2313,7 @@ export default function GraphView({
         logLedger("curator", off ? "put the field back in its own order" : "sorted the field by " + d.sort.by + " · grid");
       }
       if (d.proposal) {
-        setThread((it) => [...it, { type: "proposal", name: d.proposal.name, note: d.proposal.note ?? "", ids: d.proposal.ids, status: "pending" }]);
+        setThread((it) => [...it, { type: "proposal", name: d.proposal.name, note: d.proposal.note ?? "", ids: d.proposal.ids, exists: !!d.proposal.exists, status: "pending" }]);
         logLedger("curator", "proposed “" + d.proposal.name + "” · " + d.proposal.ids.length + " images");
       }
       if (d.candidates && Array.isArray(d.candidates.items) && d.candidates.items.length) {
@@ -3718,7 +3718,12 @@ export default function GraphView({
                         <div key={i} className={"agent-prop" + (m.status !== "pending" ? " is-" + m.status : "") + nested}>
                           <div className="agent-prop__t">proposal · needs you</div>
                           <p>
-                            Create <b>{m.name}</b> and file {m.ids.length} image{m.ids.length === 1 ? "" : "s"} into it.
+                            {/* "Create" on a name that already exists was a lie told at the
+                                decision point: the write path reuses the folder whose slug
+                                matches and adds to it. The card now says which it is. */}
+                            {m.exists
+                              ? <>Add {m.ids.length} image{m.ids.length === 1 ? "" : "s"} to the existing folder <b>{m.name}</b>.</>
+                              : <>Create <b>{m.name}</b> and file {m.ids.length} image{m.ids.length === 1 ? "" : "s"} into it.</>}
                             {m.note ? " " + m.note : ""} Nothing is written until you accept.
                           </p>
                           {m.status === "pending" ? (
