@@ -3006,6 +3006,26 @@ export default function GraphView({
 
         <main className="pane pane--flush" tabIndex={-1}>
           <div className="graph-stage" ref={wrapRef}>
+            {poolSize === 0 && (
+              <div className="graph-empty" role="status">
+                <b>Nothing on the field.</b>
+                <span>
+                  {effectiveQ
+                    ? <>No image matches &ldquo;{effectiveQ}&rdquo;.</>
+                    : filterTags.length
+                      ? <>No image carries {filterTags.length === 1 ? "that term" : "every one of those categories"}.</>
+                      : <>The library has nothing to show.</>}
+                </span>
+                {(effectiveQ || filterTags.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => { setFilterTags([]); setSearchQ(""); setAppliedQ(""); setPromptIds(null); }}
+                  >
+                    Show everything again
+                  </button>
+                )}
+              </div>
+            )}
             <canvas
               ref={canvasRef}
               onPointerDown={onPointerDown}
@@ -3725,7 +3745,11 @@ export default function GraphView({
                       }
                       return (
                         <div key={i} className={"agent-prop" + (m.status !== "pending" ? " is-" + m.status : "") + nested}>
-                          <div className="agent-prop__t">proposal · needs you</div>
+                          <div className="agent-prop__t">proposal &middot; {
+                            m.status === "pending" ? "needs you"
+                            : m.status === "superseded" ? "replaced"
+                            : m.status
+                          }</div>
                           <p>
                             {/* "Create" on a name that already exists was a lie told at the
                                 decision point: the write path reuses the folder whose slug
@@ -3740,11 +3764,7 @@ export default function GraphView({
                               <button className="agent-prop__yes" onClick={() => acceptProposal(i)}>Accept</button>
                               <button className="agent-prop__no" onClick={() => rejectProposal(i)}>Reject</button>
                             </div>
-                          ) : (
-                            <span className="mono-xs" style={{ color: m.status === "accepted" ? "var(--accent)" : m.status === "superseded" ? "var(--text-muted)" : "#dc2626" }}>
-                              {m.status}
-                            </span>
-                          )}
+                          ) : null}
                         </div>
                       );
                     })}

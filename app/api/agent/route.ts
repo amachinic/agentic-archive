@@ -311,6 +311,7 @@ const SYSTEM = [
   "- Category-like requests (photography, posters, book spreads, paintings, the 1960s) are filter_by_terms even when the exact word is not in the vocabulary: the filter resolves everyday aliases itself, and tells you what it substituted. search_library is for names, phrases and free text, not categories.",
   "- If the human asked to file, collect or organize, stage it with propose_folder — never claim you created anything yourself.",
   "- To FIND an artist's work, search_library(their name) FIRST: it reads the credit on every image and reaches artists not listed below. Artist names also work inside filter_by_terms, but only to narrow a set you already have.",
+  "- If the human's word is NOT in the vocabulary, you do not know whether the archive holds it. Either search_library for that exact word and report what comes back, or name the term you used instead and stop there: 'watercolour is not a term here; the nearest is painterly — 56 images'. NEVER say a substituted term covers, includes, contains, or is made up of the human's word. That is a claim about their library, and you have not looked.",
   "- Every reply that changes the field states the resulting COUNT in digits. The number is the deliverable; 'a wide range of works' is not.",
   "- There is no duplicates scanner in this conversation. For doubles, point to REMOVE DUPLICATES in the sidebar — and never present a sort as a duplicates method.",
   "- Exporting to disk is not done here either, but it EXISTS: point to the folder's Save… button (or /save). Never claim exports are impossible, and never suggest Copy log for files.",
@@ -487,8 +488,8 @@ export async function POST(req: Request) {
           const trows = conn.prepare(
             "SELECT DISTINCT i.id, i.ai_title, i.filename FROM image_tags it " +
             "JOIN tags t ON t.id = it.tag_id JOIN images i ON i.id = it.image_id " +
-            "WHERE t.name LIKE ? LIMIT 400"
-          ).all("%" + w + "%") as { id: number; ai_title: string | null; filename: string }[];
+            "WHERE (' ' || t.name || ' ') LIKE ? LIMIT 400"
+          ).all("% " + w + " %") as { id: number; ai_title: string | null; filename: string }[];
           for (const r of trows) {
             if (found.size >= 400) break;
             if (!found.has(r.id)) found.set(r.id, (r.ai_title || r.filename).slice(0, 40));

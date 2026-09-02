@@ -299,6 +299,25 @@
 }
 .graph-drop__list .drop-find__none { display: block; padding: 12px; }
 
+.graph-empty {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 24px; text-align: center;
+  pointer-events: none;                 /* the canvas keeps the pointer */
+  color: var(--text-secondary);
+  font-size: var(--font-body-sm, 13px);
+}
+.graph-empty b { font-weight: 400; font-size: 15px; color: var(--text-primary); }
+.graph-empty button {
+  pointer-events: auto;                 /* except this, which is the way out */
+  padding: 7px 12px;
+  background: transparent; color: var(--text-primary);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  font-family: var(--font-mono); font-size: var(--font-input-xs, 10px);
+  letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer;
+}
+.graph-empty button:hover { border-color: var(--text-secondary); }
+
 /* One checkbox-row contract serves both the desktop menus and mobile sheet. */
 .frow {
   display: flex; align-items: center; gap: 11px;
