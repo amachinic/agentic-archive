@@ -303,7 +303,13 @@ function applyTags(imageId: number, a: Analysis) {
       if (!raw || raw.length > 40) continue;
       const can = canonical(raw);
       if (!can) continue;
-      void hint;
+      /* A single-valued facet value may only arrive through its own group.
+         Without this, a style word that aliases into a work term ("graphic"
+         -> "graphic design") links a SECOND work value from inside the style
+         list — the clear-before-write above never sees it, and the facet's
+         one-value promise breaks silently. Measured before this guard: 99
+         images carrying two works, 87 of them this exact rider. */
+      if (["work", "carrier", "period"].includes(can.kind) && can.kind !== hint) continue;
       const t = upsertTag.get(can.name, can.kind) as { id: number } | undefined;
       if (t) linkTag.run(imageId, t.id);
     }

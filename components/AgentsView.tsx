@@ -29,13 +29,13 @@ const ARCHETYPES: Archetype[] = [
   {
     key: "archivist", mode: "scan", name: "Archivist", autonomy: "proposes",
     desc: "Names what a thing is. Tags new images against your existing vocabulary first and mints a new keyterm only when nothing fits; keeps meta tags, duplicates and the history honest.",
-    tools: ["tag_images", "mint_keyterm", "meta_tags", "dedupe", "history"],
+    tools: ["tag_images", "mint_keyterm", "meta_tags", "dedupe", "timeline"],
     status: "live · analyze studio", budget: "vision · per image",
   },
   {
     key: "curator", mode: "forms", name: "Curator", autonomy: "acts",
     desc: "Decides what belongs together. Finds, filters, sequences and sorts the canvas, and because its sort keys are the Archivist's own keyterms and palettes, the hand-off is invisible.",
-    tools: ["find", "filter", "sort_field", "sequence", "build_collection"],
+    tools: ["find", "filter", "sort_field", "sequence", "expand_similar"],
     status: "live · in the Network panel", budget: "per turn · ~2k tokens",
   },
   {
