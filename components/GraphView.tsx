@@ -3460,7 +3460,7 @@ export default function GraphView({
                   <div className="chatbox">
                     <div className="chathead">
                       <span className={"mono-label graph-topic" + (topic ? " has-topic" : "")} title={topic ?? undefined}>
-                        {topic ?? "Conversation"}
+                        {topic ?? "Agent"}
                       </span>
                       <div className="filtersheet__actions">
                         {thread.length > 0 && (

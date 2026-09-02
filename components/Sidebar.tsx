@@ -221,7 +221,25 @@ export default function Sidebar({
           <AtlasMark className="sidebar__mark-logo" />
           Atlas
         </Link>
-        {hostedDemo && <span className="sidebar__demo" title="Hosted archive. Archive changes and model calls are disabled.">read only</span>}
+        {hostedDemo && (
+          <a
+            className="sidebar__demo"
+            href="https://github.com/amachinic/agentic-archive"
+            target="_blank"
+            rel="noreferrer noopener"
+            aria-describedby="sidebar-demo-tip"
+          >
+            read only
+            <span className="sidebar__demo-tip" id="sidebar-demo-tip" role="tooltip">
+              <b>The public copy.</b> It can look but not write: tagging, filing
+              and exports are off, and one archive is shared by everyone who
+              visits — so nothing here is yours to change, and nothing you do is
+              kept for your next visit.
+              <i>Run it from the repo for the writable build — your own images,
+              your own folders, on your own machine.</i>
+            </span>
+          </a>
+        )}
       </div>
 
       <div className="sidebar__scroll">
