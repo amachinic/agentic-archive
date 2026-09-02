@@ -270,6 +270,7 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 }
 .sidebar__mark-logo { width: 18px; height: 18px; flex: none; }
 .sidebar__demo {
+  position: relative;
   flex: none;
   padding: 3px 5px;
   border: 1px solid var(--border-strong);
@@ -278,6 +279,52 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   font-size: 8px;
   line-height: 1;
   text-transform: uppercase;
+  text-decoration: none;
+}
+.sidebar__demo:hover,
+.sidebar__demo:focus-visible { color: var(--text-primary); border-color: var(--text-secondary); }
+
+/* The tip hangs under the badge, anchored to its RIGHT edge: .sidebar is
+   overflow:hidden and the rail is draggable down to a narrow strip, so a tip
+   that grew leftward from the badge would be cut off at the rail's edge
+   exactly when the rail is small enough to need it. */
+.sidebar__demo-tip {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: 206px;
+  padding: 9px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.32);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-secondary);
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px);
+  transition: opacity 140ms var(--motion-ease), transform 140ms var(--motion-ease), visibility 140ms;
+  pointer-events: none;
+}
+.sidebar__demo-tip b { display: block; color: var(--text-primary); font-weight: 400; }
+.sidebar__demo-tip i {
+  display: block; margin-top: 7px; padding-top: 7px;
+  border-top: 1px solid var(--border);
+  font-style: normal; color: var(--text-primary);
+}
+.sidebar__demo:hover .sidebar__demo-tip,
+.sidebar__demo:focus-visible .sidebar__demo-tip {
+  opacity: 1; visibility: visible; transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar__demo-tip { transition: none; }
 }
 .sidebar__meta { display: inline-flex; align-items: center; gap: 8px; }
 .sidebar__scroll {
