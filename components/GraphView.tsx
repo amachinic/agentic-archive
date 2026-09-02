@@ -79,7 +79,7 @@ type ThreadItem =
      is being done; the tool rows nest beneath it and the reply closes the
      block (treatment I from the presence sandbox) */
   | { type: "head"; what: string; status: "running" | "done" }
-  | { type: "proposal"; name: string; note: string; ids: number[]; exists?: boolean; status: "pending" | "accepted" | "rejected" }
+  | { type: "proposal"; name: string; note: string; ids: number[]; exists?: boolean; status: "pending" | "accepted" | "rejected" | "superseded" }
   | { type: "ctas"; options: CtaOpt[]; picked: string | null }
   | { type: "timeline" }
   | { type: "outcome"; rows: OutRow[] }
@@ -2313,7 +2313,10 @@ export default function GraphView({
         logLedger("curator", off ? "put the field back in its own order" : "sorted the field by " + d.sort.by + " · grid");
       }
       if (d.proposal) {
-        setThread((it) => [...it, { type: "proposal", name: d.proposal.name, note: d.proposal.note ?? "", ids: d.proposal.ids, exists: !!d.proposal.exists, status: "pending" }]);
+        setThread((it) => [
+          ...it.map((x) => (x.type === "proposal" && x.status === "pending" ? { ...x, status: "superseded" as const } : x)),
+          { type: "proposal", name: d.proposal.name, note: d.proposal.note ?? "", ids: d.proposal.ids, exists: !!d.proposal.exists, status: "pending" },
+        ]);
         logLedger("curator", "proposed “" + d.proposal.name + "” · " + d.proposal.ids.length + " images");
       }
       if (d.candidates && Array.isArray(d.candidates.items) && d.candidates.items.length) {
@@ -2394,12 +2397,18 @@ export default function GraphView({
       }));
       router.refresh();
       /* your Accept closed the last block; the filing opens a new one */
-      pushHead("filing the accepted folder");
-      await playToolRow("create_collection", "“" + d.name + "”", "created");
-      await playToolRow("add_to_collection", d.filed + " ids → " + d.name, "filed · " + d.filed);
-      logLedger("media manager", "filed " + d.filed + " into “" + d.name + "”");
-      closeHead("filed");
-      setThread((it) => [...it, { type: "msg", role: "assistant", content: "Filed. " + d.name + " is in your folders now." }]);
+      pushHead(d.created ? "filing the accepted folder" : "adding to the folder");
+      /* "created" was narrated for every accept, including the ones that
+         reused an existing folder and added nothing new — the row said a
+         thing happened that did not. The apply route now says which. */
+      if (d.created) await playToolRow("create_collection", "“" + d.name + "”", "created");
+      await playToolRow("add_to_collection", d.filed + " ids → " + d.name, d.filed ? "filed · " + d.filed : "already there");
+      logLedger("media manager", (d.created ? "filed " : "added ") + d.filed + " into “" + d.name + "”");
+      closeHead(d.created ? "filed" : "added");
+      setThread((it) => [...it, { type: "msg", role: "assistant", content:
+        d.created ? "Filed. " + d.name + " is in your folders now."
+        : d.filed ? "Added " + d.filed + " image" + (d.filed === 1 ? "" : "s") + " to " + d.name + "."
+        : "Nothing to add — every one of these was already in " + d.name + "." }]);
       pushNext(["save", "find", "sort"]);
     } catch (e) {
       setThread((it) => [...it, { type: "msg", role: "assistant", content: "Applying failed: " + (e instanceof Error ? e.message.slice(0, 120) : "unknown") }]);
@@ -3148,7 +3157,7 @@ export default function GraphView({
                           <div className="drill__foot">
                             <span className="mono-xs">
                               {filterTags.length > 0
-                                ? filterTags.length + (filterTags.length === 1 ? " term · " : " terms · ") + "all must match"
+                                ? filterTags.length + (filterTags.length === 1 ? " term" : " terms · any per category, every category")
                                 : "no filters · all media showing"}
                             </span>
                             {filterTags.length > 0 && (
@@ -3732,7 +3741,7 @@ export default function GraphView({
                               <button className="agent-prop__no" onClick={() => rejectProposal(i)}>Reject</button>
                             </div>
                           ) : (
-                            <span className="mono-xs" style={{ color: m.status === "accepted" ? "var(--accent)" : "#dc2626" }}>
+                            <span className="mono-xs" style={{ color: m.status === "accepted" ? "var(--accent)" : m.status === "superseded" ? "var(--text-muted)" : "#dc2626" }}>
                               {m.status}
                             </span>
                           )}
@@ -3812,7 +3821,7 @@ export default function GraphView({
                       <span className="lt__sub">nothing is written</span>
                     </div>
                     <div className="lt__grid">
-                      {lightTable.items.filter((c) => c.thumbUrl).map((c) => (
+                      {lightTable.items.map((c) => (
                         <a
                           key={c.source + c.remoteId}
                           className="lt__cell"

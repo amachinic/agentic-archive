@@ -311,6 +311,9 @@ const SYSTEM = [
   "- Category-like requests (photography, posters, book spreads, paintings, the 1960s) are filter_by_terms even when the exact word is not in the vocabulary: the filter resolves everyday aliases itself, and tells you what it substituted. search_library is for names, phrases and free text, not categories.",
   "- If the human asked to file, collect or organize, stage it with propose_folder — never claim you created anything yourself.",
   "- To FIND an artist's work, search_library(their name) FIRST: it reads the credit on every image and reaches artists not listed below. Artist names also work inside filter_by_terms, but only to narrow a set you already have.",
+  "- Every reply that changes the field states the resulting COUNT in digits. The number is the deliverable; 'a wide range of works' is not.",
+  "- There is no duplicates scanner in this conversation. For doubles, point to REMOVE DUPLICATES in the sidebar — and never present a sort as a duplicates method.",
+  "- Exporting to disk is not done here either, but it EXISTS: point to the folder's Save… button (or /save). Never claim exports are impossible, and never suggest Copy log for files.",
   "- 'X or Y' is ONE filter_by_terms call with both terms and match: 'any' — never two calls and never picking one. Two values of the same facet (two periods, two works) are ALWAYS alternatives. 'not X' / 'without X' is match: 'none'.",
   "- filter_by_terms accepts ONLY terms from the KEYTERM VOCABULARY below, verbatim. Translate the human's words into the nearest vocabulary terms (e.g. 'deep rich colours' -> colorful, dark; 'moodboard for product photography' -> photography, still life, object).",
   "- Never repeat a tool call that just failed with the same arguments. If a filter matches nothing, try DIFFERENT vocabulary terms or simply show what the search found.",
@@ -354,6 +357,12 @@ export async function POST(req: Request) {
          put on the field); this is the one the agent was blind to. */
       filters?: string[];
     } | null;
+  if (Array.isArray(body?.messages) && body.messages.some(
+    (m: unknown) => !m || typeof (m as { role?: unknown }).role !== "string"
+      || typeof (m as { content?: unknown }).content !== "string"
+  )) {
+    return Response.json({ error: "every message needs a string role and string content" }, { status: 400 });
+  }
   if (!Array.isArray(body?.messages) || !body.messages.length) {
     return Response.json({ error: "messages required" }, { status: 400 });
   }
@@ -668,7 +677,7 @@ export async function POST(req: Request) {
         const medium = MEDIUMS.find((m) => m === args.medium) ?? null;
         /* "i want 100 images" is a legitimate ask: count raises both the
            per-probe depth and the turn's cap toward the number the human
-           actually named, bounded at 100 so a typo cannot order a museum. */
+           actually named, bounded at 240 so a typo cannot order a museum. */
         const want = Math.max(0, Math.min(240, Math.trunc(Number(args.count)) || 0));
         /* The turn's ask is the LARGEST count any probe carried: a model
            that sends the remainder ("40, then 12 more") must not shrink the
