@@ -330,6 +330,8 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null) as
     {
       messages?: ChatMsg[]; field?: number[]; historian?: boolean; mute?: string[];
+      /* every archetype switch, so a lens the human turned off cannot act */
+      agents?: Record<string, boolean>;
       /* the hunt's odometer, echoed back by the client between turns:
          query → source → how many that source has already delivered for it.
          This is what lets "pull 40 more" continue where delivery stopped
@@ -460,6 +462,23 @@ export async function POST(req: Request) {
      has switched it off in Agents, and the tool is genuinely withdrawn for
      the turn, not hidden client-side. */
   const historianOff = body.historian === false;
+  /* which archetype owns which tool — the same attribution the conversation
+     shows on every row, so a switch removes precisely the work the human
+     watched that agent do */
+  const OWNER: Record<string, string> = {
+    search_library: "curator", filter_by_terms: "curator", expand_similar: "curator",
+    show_field: "curator", sort_field: "curator", release_field: "curator",
+    search_outside: "historian",
+    propose_folder: "manager",
+  };
+  /* a switch is off only when it says so: an absent key is on, which keeps
+     an older client (and a request that carries no agents block at all)
+     working exactly as before */
+  const agentsOff = new Set(
+    Object.entries((body.agents ?? {}) as Record<string, unknown>)
+      .filter(([, on]) => on === false).map(([k]) => k)
+  );
+  if (historianOff) agentsOff.add("historian");
   /* Sources the reader switched off in Connections. On the hosted archive
      that switch is the only one they have — nothing connects there — so the
      preference arrives with the request and the source is genuinely dropped
@@ -987,7 +1006,23 @@ export async function POST(req: Request) {
       "\n- A search for something these exclude will return nothing NO MATTER how it is worded. Say that rather than re-searching."
     : "";
 
-  const system = SYSTEM + hosted + holding + standing + outside + "\n\nKEYTERM VOCABULARY (term(count)):\n" + vocabulary();
+  const offNote = [...agentsOff]
+    .filter((a) => ["curator", "manager", "archivist"].includes(a))
+    .map((a) => a === "curator"
+      ? "The Curator is switched off in Agents, so you cannot search, filter, sort or re-form the field this turn. Say which agent is off and that its switch is on the Agents page. Do not claim Atlas is off. Do not pretend to have done the work. And do NOT reach for another lens instead: a question about the human OWN library is never answered with outside or museum results — the Historian is a different agent, not a stand-in for this one."
+      : a === "manager"
+      ? "The Media Manager is switched off in Agents, so you cannot stage a folder this turn. Say so and name the switch; never imply something was filed."
+      : "The Archivist is switched off in Agents, so tagging and cataloguing are unavailable this turn. Say so and name the switch.")
+    .join(" ");
+  /* BEFORE the vocabulary, not after it. Appended at the end, this sat behind
+     the entire keyterm dump and was ignored in 3 of 3 runs: with the Curator
+     switched off the model simply reached for search_outside and answered a
+     question about the human's own library with museum results. The historian
+     note has always lived here, which is exactly why that one has always been
+     obeyed. */
+  const system = SYSTEM + hosted + holding + standing + outside
+    + (offNote ? "\n\n" + offNote : "")
+    + "\n\nKEYTERM VOCABULARY (term(count)):\n" + vocabulary();
   const turns = body.messages
     .filter((m) => m.role === "user" || m.role === "assistant")
     .slice(-10)
@@ -999,12 +1034,24 @@ export async function POST(req: Request) {
      and never hosted, where outbound calls would spend the host's quota on
      anonymous traffic. One list, used by BOTH provider paths: the Anthropic
      loop mapping the unfiltered constant is how a tool escapes its gate. */
+  /* the last thing the human actually said, for the one decision below that
+     depends on what they asked rather than on what is switched on */
+  const lastAsk = [...(body.messages ?? [])].reverse()
+    .find((m) => m.role === "user")?.content?.toLowerCase() ?? "";
+  const askedOutside = /\b(museum|museums|outside|elsewhere|the met\b|metropolitan|rijks|cleveland|art institute|artic\b|europeana|collections?\b)/.test(lastAsk);
+
   const tools = TOOLS.filter((t) => {
+    const owner = OWNER[t.function.name];
+    if (owner && agentsOff.has(owner)) return false;
+    /* see above: with the field-forming lens off, an outside hunt is only on
+       the table when the human asked for one */
+    if (t.function.name === "search_outside" && agentsOff.has("curator") && !askedOutside) return false;
     if (t.function.name === "propose_folder") return !IS_HOSTED_READ_ONLY;
     if (t.function.name === "search_outside") return outsideSources.length > 0;
     return true;
   });
-
+  /* Told plainly, so the refusal names the right agent and the right switch
+     instead of blaming Atlas for a lens the human turned off deliberately. */
   const msgs: LoopMsg[] = [{ role: "system", content: system }, ...turns];
 
   /*
