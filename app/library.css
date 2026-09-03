@@ -1290,7 +1290,7 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
    thumb BREATHES WHERE IT STANDS rather than sliding across: nothing has
    been decided yet, and a thumb that had already travelled would be
    claiming a connection nobody made. It settles when the server answers. */
-.conncard__switch.is-busy::after { animation: switch-probe 1100ms var(--motion-ease) infinite; }
+.conncard__switch.is-busy::after { animation: switch-probe 1100ms var(--motion-ease-loop) infinite; }
 /* mid-probe it is refusing presses without going un-focusable, and on the
    hosted archive it is a readout rather than a control */
 .conncard__switch[aria-disabled="true"] { cursor: default; }
@@ -1491,7 +1491,7 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 /* the one place the dot IS allowed to pulse: mid-probe, where the claim is
    "this is working" and not yet "this is on" */
 .conn-live.is-busy { color: var(--text-secondary); }
-.conn-live.is-busy i { background: var(--processing-accent); animation: switch-probe 1100ms var(--motion-ease) infinite; }
+.conn-live.is-busy i { background: var(--processing-accent); animation: switch-probe 1100ms var(--motion-ease-loop) infinite; }
 @media (prefers-reduced-motion: reduce) { .conn-live.is-busy i { animation: none; } }
 .conn-live.is-on { color: var(--text-primary); }
 .conn-live.is-on i {
@@ -2447,7 +2447,7 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
   background: color-mix(in srgb, var(--surface) 70%, transparent);
   /* a slow, shallow breath — present enough to read as "coming", far too
      quiet to be a spinner demanding attention */
-  animation: fieldskel-breathe 2200ms var(--motion-ease) infinite;
+  animation: fieldskel-breathe 2200ms var(--motion-ease-loop) infinite;
 }
 @keyframes fieldskel-breathe {
   0%, 100% { opacity: 0.30; }
