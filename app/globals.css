@@ -36,7 +36,13 @@
   --radius-2xl: 16px;
 
   --motion-duration: 200ms;
-  --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  /* ease-out: leaves at once, decelerates into place. Interactions should
+     feel answered, not administered. */
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* A LOOP is the exception. A breathing pulse runs 0 -> 1 -> 0 forever, and
+     an ease-out makes each half lopsided — rushing to the peak, crawling
+     back, then rushing again. Symmetric motion wants a symmetric curve. */
+  --motion-ease-loop: cubic-bezier(0.4, 0, 0.6, 1);
 
   --sidebar-w: 244px;
   --topbar-h: 56px;
@@ -81,7 +87,7 @@ body {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transition: opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 500ms var(--motion-ease);
 }
 html[data-atlas-boot="loading"] .atlas-preloader,
 html[data-atlas-boot="leaving"] .atlas-preloader { display: block; }
@@ -128,7 +134,7 @@ html[data-atlas-boot="leaving"] .app {
   background: #020202;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 500ms var(--motion-ease);
 }
 .atlas-preloader__veil.is-on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {

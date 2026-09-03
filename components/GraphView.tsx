@@ -2460,7 +2460,8 @@ export default function GraphView({
        silently never attached */
     const scroll = document.querySelector(".chatscroll") as HTMLElement | null;
     if (!scroll || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+    /* the same ease-out the stylesheet uses: --motion-ease */
+    const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
     const known = new WeakMap<Element, number>();
 
     /* The pin-keeper. The app pins the thread to its bottom when a row
@@ -2609,7 +2610,8 @@ export default function GraphView({
     const items = Array.from(scroll.children) as HTMLElement[];
     const heights = items.map((el) => el.offsetHeight);   // read before any write
 
-    const EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+    /* the same ease-out the stylesheet uses: --motion-ease */
+    const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
     const DUR = 300;
     /* the sweep climbs the thread at a fixed step, capped so a long
        conversation drains in about half a second rather than scrolling
@@ -2649,8 +2651,8 @@ export default function GraphView({
       drawer.getAnimations().forEach((a) => a.cancel());
       drawer.animate(
         [
-          { width: w + "px", opacity: 1, transform: "translateX(0px)" },
-          { width: w * 0.58 + "px", opacity: 0, transform: "translateX(44px)", offset: 0.6 },
+          { width: w + "px", opacity: 1, transform: "translateX(0px)", easing: "linear" },
+          { width: w * 0.34 + "px", opacity: 0, transform: "translateX(44px)", offset: 0.94 },
           { width: "0px", opacity: 0, transform: "translateX(44px)" },
         ],
         { duration: total, easing: EASE, fill: "both" },
