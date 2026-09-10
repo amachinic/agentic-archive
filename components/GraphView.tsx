@@ -601,7 +601,7 @@ function RefineBlock({ item, busy, onGo }: {
           onKeyDown={(e) => { if (e.key === "Enter" && chosen && !busy) onGo(compose()); }}
           aria-label="Your own refinement"
         />
-        <button className="agent-refine__send" disabled={spent || busy || !chosen} onClick={() => onGo(compose())}>
+        <button className="agent-refine__send" disabled={spent || busy || !chosen} title="Search again, narrowed to what you chose" onClick={() => onGo(compose())}>
           go deeper
         </button>
       </div>
@@ -617,13 +617,11 @@ function RefineBlock({ item, busy, onGo }: {
           <button
             className="agent-refine__more"
             disabled={spent || busy}
+            title="The next of the same search, exactly as it stands"
             onClick={() => onGo("Pull the next chunk for " + item.base + " — more of the same search, no narrowing.")}
           >
             pull more
           </button>
-          <span className="mono-xs agent-refine__hint">
-            {chosen ? "go deeper sends what you chose · pull more ignores it and brings the next of the same" : "go deeper narrows · pull more brings the next of the same"}
-          </span>
         </div>
       )}
     </div>
