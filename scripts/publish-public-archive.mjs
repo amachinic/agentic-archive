@@ -67,7 +67,10 @@ function usage() {
   console.log(`Publish a sanitized Image Archivist catalog and its thumbnails.
 
 Usage:
-  node scripts/publish-public-archive.mjs [--dry-run] [--concurrency=N]
+  node scripts/publish-public-archive.mjs [--dry-run] [--concurrency=N] [--out=PATH]
+
+  --out=PATH   also write the verified catalog to PATH (with --dry-run this
+               refreshes the bundled data/atlas-public.db without uploading)
 
 Environment:
   BLOB_READ_WRITE_TOKEN       Vercel Blob read/write token (required unless --dry-run)
@@ -89,6 +92,7 @@ function parseArgs(argv) {
     if (arg === "--dry-run") out.dryRun = true;
     else if (arg === "--help" || arg === "-h") out.help = true;
     else if (arg.startsWith("--concurrency=")) out.concurrency = Number(arg.slice(14));
+    else if (arg.startsWith("--out=")) out.out = arg.slice(6);
     else throw new Error("Unknown argument: " + arg);
   }
   if (!Number.isInteger(out.concurrency) || out.concurrency < 1 || out.concurrency > 16) {
@@ -760,6 +764,15 @@ async function main() {
     const dbSize = (await fsp.stat(snapshotPath)).size;
     console.log(`Verified catalog: ${counts.images} images (${source.counts.images} indexed + ${sanitized.added.length} added), ${counts.tags} tags, ${sanitized.addedTagAssignments} public tag assignments, ${counts.collections} collections, ${counts.similarity} similarity pairs.`);
     console.log(`Verified media: ${media.thumbnails.length} metadata-free WebP thumbnails, ${formatBytes(media.bytes)}; catalog ${formatBytes(dbSize)}.`);
+
+    /* The bundled copy in data/ is what a local ATLAS_ARCHIVE_MODE=public
+       run and a deploy without the pinned URL fall back to. It had gone
+       stale against the live snapshot -- a pre-taxonomy catalogue with 41
+       briefs -- because nothing ever refreshed it. This does. */
+    if (options.out) {
+      await fsp.copyFile(snapshotPath, path.resolve(options.out));
+      console.log(`Wrote the verified catalog to ${options.out}.`);
+    }
 
     if (options.dryRun) {
       console.log("Dry run complete: no files were uploaded.");

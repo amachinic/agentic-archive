@@ -114,6 +114,12 @@ function main() {
     const can = canonical(t.name);
 
     if (!can) {
+      /* A word a PERSON typed in the inspector is theirs, however few images
+         carry it. The prune below exists for a model's one-off captions;
+         before this check it would have taken "watercolour (1)" with them --
+         measured on a dry run. */
+      const byHand = (conn.prepare("SELECT COUNT(*) c FROM image_tags WHERE tag_id = ? AND source = 'manual'").get(t.id) as { c: number }).c;
+      if (byHand) { console.log("   ✓ kept, added by hand: " + t.name + " (" + t.c + ")"); continue; }
       if (t.c <= 2) { prunes.push(t.name + " (" + t.c + ")"); if (APPLY) { conn.prepare("DELETE FROM image_tags WHERE tag_id = ?").run(t.id); conn.prepare("DELETE FROM tags WHERE id = ?").run(t.id); } }
       else console.log("   ? kept outside vocabulary: " + t.name + " (" + t.c + ")");
       continue;

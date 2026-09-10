@@ -44,6 +44,9 @@ const LIMIT = Number(flag("limit", "0"));
 const IDS = flag("ids", "").split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0);
 const CONCURRENCY = Math.max(1, Number(flag("concurrency", "4")));
 const STAMP = " · catalogue-v2";
+/* a re-catalogue keeps each image's title unless asked: titles are the
+   names folders, exports and the human refer to */
+const RETITLE = argv.includes("--retitle");
 
 if (process.env.ATLAS_VISION_PROVIDER?.trim() !== "openai" && !argv.includes("--allow-groq")) {
   console.error("This pass is ~2M tokens; Groq's free day is ~200k. Set ATLAS_VISION_PROVIDER=openai (or pass --allow-groq to insist).");
@@ -63,17 +66,19 @@ console.log("catalogue pass · " + todo.length + " image" + (todo.length === 1 ?
 const dropMedium = conn.prepare(
   "DELETE FROM image_tags WHERE image_id = ? AND tag_id IN (SELECT id FROM tags WHERE kind = 'medium')"
 );
-const stamp = conn.prepare("UPDATE images SET ai_model = ? WHERE id = ?");
 
 let done = 0, failed: { id: number; err: string }[] = [];
 const t0 = Date.now();
 
 async function one(id: number) {
   try {
-    const a = await analyzeImage(id);
+    /* analyzeImage stamps the record itself, with the model that actually
+       ran plus the catalogue-v2 mark. This runner used to overwrite that
+       with gpt-4.1-mini whatever the provider -- under --allow-groq the
+       house model did the work and OpenAI took the credit, measured. */
+    const a = await analyzeImage(id, { retitle: RETITLE });
     /* the medium era ends for this image the moment its facets exist */
     dropMedium.run(id);
-    stamp.run((process.env.OPENAI_VISION_MODEL || "gpt-4.1-mini") + STAMP, id);
     done++;
     const rate = done / ((Date.now() - t0) / 60000);
     console.log(

@@ -123,6 +123,8 @@ The repository includes the working [Archivist agent specification](.claude/agen
 
 The canonical taxonomy lives in [`lib/taxonomy.ts`](lib/taxonomy.ts).
 
+Two scripts keep the record honest: [`scripts/archivist-audit.ts`](scripts/archivist-audit.ts) asserts what the Archivist promises (one work, carrier and period per image; every keyterm inside the taxonomy; the brief and the keyterms agreeing; provenance and the ledger) and [`scripts/repair-record.ts`](scripts/repair-record.ts) makes it true again when they drift.
+
 ## Local-first architecture
 
 Agentic Archive is local-first, not offline-only.

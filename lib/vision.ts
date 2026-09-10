@@ -2,6 +2,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { db, now, LIBRARY_DIR } from "./db";
+import { recordEvent } from "./events";
 import { canonical, vocabularyBlock, facetBlock, TAXONOMY } from "./taxonomy";
 
 /* ============================================================
@@ -22,15 +23,32 @@ const MODEL = process.env.GROQ_VISION_MODEL || "qwen/qwen3.6-27b";
 const OAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const OAI_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-4.1-mini";
 const USE_OAI = process.env.ATLAS_VISION_PROVIDER?.trim() === "openai";
+/* The model that will actually answer, given the provider in force. Every
+   provenance stamp goes through this: a record used to say the house model
+   had catalogued it when OpenAI had, and the reverse under --allow-groq. */
+const activeModel = (model = MODEL) => (USE_OAI ? OAI_MODEL : model);
 // Text-only work rides a separate model with its OWN rate bucket, so prompt
 // discovery never competes with image analysis for tokens-per-minute.
 const TEXT_MODEL = process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-120b";
 
+/**
+ * `client` marks a fault in the ASK, not the model: a missing image, a
+ * history that ends on the assistant, a compare of an image with itself.
+ * Those carry their own status and must never be reported as a model
+ * outage -- measured: "Image 999999 not found" answering 502, and the studio
+ * offering Retry on a request that could never succeed.
+ */
 export class VisionError extends Error {
-  constructor(message: string, readonly status?: number) {
+  constructor(message: string, readonly status?: number, readonly client = false) {
     super(message);
     this.name = "VisionError";
   }
+}
+
+/** the HTTP status a route should answer with for a thrown error */
+export function httpStatus(e: unknown): number {
+  if (e instanceof VisionError) return e.client ? (e.status ?? 400) : 502;
+  return 500;
 }
 
 type Msg = {
@@ -38,12 +56,17 @@ type Msg = {
   content: string | ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[];
 };
 
-async function chat(messages: Msg[], maxTokens = 3600, retries = 6, json = true, effort?: "none" | "low", model = MODEL): Promise<string> {
-  const oai = USE_OAI;
+async function chat(
+  messages: Msg[], maxTokens = 3600, retries = 6, json = true, effort?: "none" | "low", model = MODEL,
+  /* a per-call provider: the process-wide switch still wins when set */
+  provider?: "groq" | "openai",
+): Promise<string> {
+  const oai = provider ? provider === "openai" : USE_OAI;
   const key = oai ? process.env.OPENAI_API_KEY : process.env.GROQ_API_KEY;
   if (!key) throw new VisionError((oai ? "OPENAI_API_KEY" : "GROQ_API_KEY") + " is not set. Add it to .env.local");
 
   let lastErr = "";
+  let effortNow = effort;
   for (let attempt = 0; attempt <= retries; attempt++) {
     let res: Response;
     try {
@@ -56,7 +79,7 @@ async function chat(messages: Msg[], maxTokens = 3600, retries = 6, json = true,
           temperature: json ? 0.3 : 0.5,
           /* reasoning_format / reasoning_effort are Groq dialect */
           ...(oai ? {} : { reasoning_format: "hidden" }),
-          ...(!oai && effort ? { reasoning_effort: effort } : {}),
+          ...(!oai && effortNow ? { reasoning_effort: effortNow } : {}),
           ...(json ? { response_format: { type: "json_object" } } : {}),
           messages,
         }),
@@ -73,6 +96,12 @@ async function chat(messages: Msg[], maxTokens = 3600, retries = 6, json = true,
       const content = json.choices?.[0]?.message?.content;
       if (content) return content;
       lastErr = "empty completion";
+      /* A reasoning model can spend the whole completion budget thinking and
+         hand back no text at all. Retrying the same request only does it
+         again -- measured: six empties in a row, a minute of waiting, then
+         "Try again" in the studio. The next attempt goes without the
+         reasoning pass, which is what the quick pass already does. */
+      if (!oai) effortNow = "none";
       await sleep(backoff(attempt));
       continue;
     }
@@ -92,12 +121,37 @@ async function chat(messages: Msg[], maxTokens = 3600, retries = 6, json = true,
       }
       throw new VisionError("The daily analysis quota has been reached · retry " + eta, res.status);
     }
+    // "Request too large ... on output tokens per minute (OTPM): Limit 1000,
+    // Requested 2000." This organisation's tier allows a thousand output
+    // tokens a minute on the house model, and Groq counts max_tokens as the
+    // request's expected output -- so a chat asked right after an analysis
+    // is refused outright, and retrying the same request seven times only
+    // waits a minute to be told the same thing, measured. Groq says when
+    // the window opens; wait for it, bounded, and try again. A request
+    // that is over the cap on its own (no window will fit it) fails fast.
+    if (/request too large/i.test(body)) {
+      /* the text carries no hint; the headers do: x-ratelimit-reset-tokens
+         is "11.572s" or "1m2.3s" until the token window opens again */
+      const reset = res.headers.get("x-ratelimit-reset-tokens") ?? "";
+      const m = reset.match(/^(?:(\d+)m)?([\d.]+)s$/);
+      let waitMs = m ? ((Number(m[1]) || 0) * 60 + Number(m[2])) * 1000 + 1500 : 15_000;
+      /* the header times the TOKEN window; the OUTPUT window is a full
+         minute and has no header of its own -- twelve seconds three times
+         over was measured to arrive at the same refusal */
+      if (/OTPM|output tokens per minute/i.test(body)) waitMs = Math.max(waitMs, 61_000);
+      if (waitMs <= 120_000 && attempt < 3) { await sleep(waitMs); continue; }
+      throw new VisionError("The model's output budget for this minute is used up (" + (oai ? OAI_MODEL : model) + "). " + lastErr.replace(/^\{.*?"message":"/, "").slice(0, 160), res.status);
+    }
     // 429 / 5xx are transient on this model. 4xx other than 429 will not fix
     // itself, so fail fast rather than burning the retry budget.
     // json_validate_failed is a sampling flake on this reasoning model: retrying
     // with the same prompt usually lands. Everything else 4xx is a real bug.
     const transient = res.status === 429 || res.status >= 500 || /capacity|json_validate_failed/i.test(body);
     if (!transient) throw new VisionError("Groq " + res.status + ": " + lastErr, res.status);
+    // "max completion tokens reached before generating a valid document": the
+    // reasoning pass ate the budget the JSON needed. The same request will
+    // do it again; the next attempt goes without the reasoning pass.
+    if (!oai && /json_validate_failed|max completion tokens/i.test(body)) effortNow = "none";
     await sleep(backoff(attempt));
   }
   throw new VisionError("Groq unavailable after " + (retries + 1) + " attempts. Last error: " + lastErr);
@@ -201,11 +255,121 @@ The carrier says how the work got here: "direct" when the file IS the work (nati
 The period is when the work was CREATED, judged from evidence -- a printed date, the process, dress, typography, devices. A contemporary design in a 1960s style is 2010s or 2020s, not 1960s. Answer "undated" when the evidence is not there, and say so in period_evidence.
 work, carrier and period must NEVER be empty and never a word outside their lists: when none fits exactly, pick the nearest listed value. A photographic portrait or figure study is "photograph". A hardback seen from outside is "book cover"; open pages are "book spread". Physical things -- sculpture, buildings, garments, products -- are never work values: they are subjects, and an image that exists to show one is "photograph" when the photograph has its own authorship, or "artwork reproduction" when the file is purely a record of another artwork. Anything created before 1900 is "pre-1900".`;
 
-export async function analyzeImage(imageId: number): Promise<Analysis> {
+/* ---- the vocabulary gate, applied to a model's answer ----
+   Lists are folded through canonical() and keep only the terms that belong
+   to the list they came from, so the stored brief IS the set of keyterms
+   the image carries: "photographic" in a style list becomes nothing (it is
+   a work word), "serious" becomes solemn. Before this the brief kept the
+   raw words and 310 briefs showed terms the filter panel could not offer. */
+const arr = (v: unknown) =>
+  Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).map((s) => String(s).trim().toLowerCase()) : [];
+function canonList(v: unknown, kind: string, max = 12): string[] {
+  const out: string[] = [];
+  for (const raw of arr(v)) {
+    if (raw.length > 40) continue;
+    const can = canonical(raw);
+    if (can && can.kind === kind && !out.includes(can.name)) out.push(can.name);
+  }
+  return out.slice(0, max);
+}
+
+/**
+ * An off-list facet answer is FOLDED, never blanked. The old gate accepted
+ * only an exact list member, so a model that dated an engraving "1810s" or
+ * called a work "photography" produced an empty facet -- which applyTags
+ * then did not clear, leaving the tag from an earlier pass standing while
+ * the brief went blank. Measured: 11 periods and 9 works blank in the
+ * brief with a keyterm on the image. Decades before 1900 fold to pre-1900;
+ * a bare year finds its decade; a century before the twentieth is pre-1900;
+ * a work word goes through the same aliases every other tagger uses.
+ */
+export function foldFacet(v: unknown, kind: "work" | "carrier" | "period"): string {
+  const n = String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!n) return "";
+  if (TAXONOMY[kind].includes(n)) return n;
+  if (kind === "period") {
+    const century = n.match(/^(\d{1,2})(?:st|nd|rd|th) century$/);
+    if (century) return Number(century[1]) <= 19 ? "pre-1900" : "undated";
+    const year = n.match(/(\d{4})/);
+    if (year) {
+      const decade = Math.floor(Number(year[1]) / 10) * 10;
+      if (decade < 1900) return "pre-1900";
+      const d = decade + "s";
+      return TAXONOMY.period.includes(d) ? d : "undated";
+    }
+    if (/^(unknown|none|n\/a|contemporary|modern|unclear|uncertain)$/.test(n)) return "undated";
+    return "";
+  }
+  const can = canonical(n);
+  return can && can.kind === kind ? can.name : "";
+}
+
+export type Filed = { work: string; carrier: string; period: string; materials: string[]; processes: string[] };
+
+/** what the image actually carries, read back after a write */
+export function filedFacets(imageId: number): Filed {
+  const rows = db().prepare(
+    "SELECT t.kind, t.name FROM image_tags it JOIN tags t ON t.id = it.tag_id WHERE it.image_id = ? " +
+    "AND t.kind IN ('work','carrier','period','material','process') ORDER BY t.name"
+  ).all(imageId) as { kind: string; name: string }[];
+  const one = (k: string) => rows.find((r) => r.kind === k)?.name ?? "";
+  const many = (k: string) => rows.filter((r) => r.kind === k).map((r) => r.name);
+  return { work: one("work"), carrier: one("carrier"), period: one("period"), materials: many("material"), processes: many("process") };
+}
+
+/**
+ * ONE door for writing a record. The studio pass, the quick pass and the
+ * hand-tag loop all come through here, so the three cannot drift: the
+ * keyterms are filed first, the brief is written from what was filed, the
+ * provenance names the model that ran, and the ledger hears about it.
+ *
+ * The title is an identifier -- folders, exports and the human refer to
+ * it -- so a re-analysis keeps the one the image already has unless the
+ * caller asks to retitle. Measured before this: pressing Re-analyze turned
+ * "Eye in the Clouds" into "The Watchful Eye" with no one asking.
+ */
+export function fileRecord(
+  imageId: number,
+  a: Partial<Analysis> & Pick<Analysis, "title" | "description">,
+  model: string,
+  opts: { via: "analyze" | "quick-tag" | "handtag"; retitle?: boolean },
+): Analysis {
+  const conn = db();
+  const prior = conn.prepare("SELECT ai_title FROM images WHERE id = ?").get(imageId) as { ai_title: string | null } | undefined;
+  if (!prior) throw new VisionError("Image " + imageId + " not found", 404, true);
+  const keepTitle = !!prior.ai_title && prior.ai_title !== "Untitled" && !opts.retitle;
+  const title = keepTitle ? String(prior.ai_title) : (a.title.trim() || "Untitled");
+
+  const filed = applyTags(imageId, a);
+  const record = {
+    ...a,
+    title,
+    subjects: a.subjects ?? [],
+    style: a.style ?? [],
+    mood: a.mood ?? [],
+    work: filed.work,
+    carrier: filed.carrier,
+    period: filed.period,
+    materials: filed.materials,
+    processes: filed.processes,
+  } as Analysis;
+
+  conn.prepare(
+    "UPDATE images SET ai_title=?, ai_description=?, ai_analysis=?, ai_model=?, ai_at=? WHERE id=?"
+  ).run(title, a.description, JSON.stringify(record), model, now(), imageId);
+  recordEvent("archivist", opts.via, {
+    model, work: filed.work, carrier: filed.carrier, period: filed.period,
+    keyterms: record.subjects.length + record.style.length + record.mood.length,
+    retitled: !keepTitle && !!prior.ai_title && prior.ai_title !== title,
+  }, imageId);
+  return record;
+}
+
+export async function analyzeImage(imageId: number, opts: { retitle?: boolean } = {}): Promise<Analysis> {
   const conn = db();
   const row = conn.prepare("SELECT rel_path, prompt_text FROM images WHERE id = ?").get(imageId) as
     { rel_path: string; prompt_text: string | null } | undefined;
-  if (!row) throw new VisionError("Image " + imageId + " not found");
+  if (!row) throw new VisionError("Image " + imageId + " not found", 404, true);
 
   const dataUrl = await encodeImage(row.rel_path);
   const hint = row.prompt_text
@@ -224,25 +388,17 @@ export async function analyzeImage(imageId: number): Promise<Analysis> {
   ], 4400);
 
   const a = parseJson<Analysis>(content);
-  const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).map((s) => String(s).trim().toLowerCase()) : []);
-  /* a facet answer is either on its controlled list or it is nothing */
-  const facet = (v: unknown, kind: keyof typeof TAXONOMY) => {
-    const n = String(v ?? "").trim().toLowerCase();
-    return TAXONOMY[kind].includes(n) ? n : "";
-  };
-  const facets = (v: unknown, kind: keyof typeof TAXONOMY, max: number) =>
-    arr(v).filter((n) => TAXONOMY[kind].includes(n)).slice(0, max);
   const clean: Analysis = {
     title: String(a.title ?? "").trim() || "Untitled",
     description: String(a.description ?? "").trim(),
-    subjects: arr(a.subjects),
-    style: arr(a.style),
-    mood: arr(a.mood),
-    work: facet(a.work, "work"),
-    carrier: facet(a.carrier, "carrier"),
-    period: facet(a.period, "period"),
-    materials: facets(a.materials, "material", 2),
-    processes: facets(a.processes, "process", 2),
+    subjects: canonList(a.subjects, "subject"),
+    style: canonList(a.style, "style"),
+    mood: canonList(a.mood, "mood"),
+    work: foldFacet(a.work, "work"),
+    carrier: foldFacet(a.carrier, "carrier"),
+    period: foldFacet(a.period, "period"),
+    materials: canonList(a.materials, "material", 2),
+    processes: canonList(a.processes, "process", 2),
     period_evidence: String(a.period_evidence ?? "").trim(),
     material: String(a.material ?? "").trim(),
     lighting: String(a.lighting ?? "").trim(),
@@ -257,63 +413,70 @@ export async function analyzeImage(imageId: number): Promise<Analysis> {
     differentiation: String(a.differentiation ?? "").trim(),
   };
 
-  conn.prepare(
-    "UPDATE images SET ai_title=?, ai_description=?, ai_analysis=?, ai_model=?, ai_at=? WHERE id=?"
-  ).run(clean.title, clean.description, JSON.stringify(clean), MODEL, now(), imageId);
-
-  applyTags(imageId, clean);
-  return clean;
+  return fileRecord(imageId, clean, activeModel() + " · catalogue-v2", { via: "analyze", retitle: opts.retitle });
 }
 
-/** Fold the analysis arrays into the shared tag vocabulary, marked source='ai'. */
-function applyTags(imageId: number, a: Analysis) {
+/**
+ * Fold the analysis arrays into the shared tag vocabulary, marked
+ * source='ai', and hand back what the image carries afterwards.
+ *
+ * The archival facets hold ONE value per image (work, carrier, period) or a
+ * small current set (materials, processes): a re-catalogue must replace what
+ * an earlier pass wrote, or an image reclassified from "photograph" to "book
+ * spread" would simply carry both. A single-valued facet with NO new answer
+ * keeps its standing value -- work, carrier and period must never be empty
+ * -- and the caller writes that standing value into the brief, so the two
+ * cannot disagree. A multi-valued facet that is ANSWERED empty is cleared:
+ * "no visible process" on the second pass used to leave the first pass's
+ * guess in place. Subjects, style and mood stay accumulative, as they
+ * always were. Anything not asked for (undefined) is left alone, which is
+ * what lets the quick pass write only what it knows.
+ */
+export function applyTags(imageId: number, a: Partial<Analysis>): Filed {
   const conn = db();
-  const groups: [string[], string][] = [
-    [a.subjects, "subject"],
-    [a.style, "style"],
-    [a.mood, "mood"],
-    [a.work ? [a.work] : [], "work"],
-    [a.carrier ? [a.carrier] : [], "carrier"],
-    [a.period ? [a.period] : [], "period"],
-    [a.materials ?? [], "material"],
-    [a.processes ?? [], "process"],
-  ];
-  /* The archival facets hold ONE value per image (work, carrier, period) or
-     a small current set (materials, processes): a re-catalogue must replace
-     what an earlier pass wrote, or an image reclassified from "photograph"
-     to "book spread" would simply carry both. Subjects, style and mood stay
-     accumulative, as they always were. */
   const clearKind = conn.prepare(
     "DELETE FROM image_tags WHERE image_id = ? AND tag_id IN (SELECT id FROM tags WHERE kind = ?)"
   );
-  for (const [names, kind] of groups) {
-    if (["work", "carrier", "period", "material", "process"].includes(kind) && names.length) {
-      clearKind.run(imageId, kind);
-    }
-  }
   /* a name owns exactly one kind: never let a later tagger flip it (that is
      how tall images once became "portraits") */
   const upsertTag = conn.prepare("INSERT INTO tags (name, kind) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET name=excluded.name RETURNING id");
   const linkTag = conn.prepare("INSERT OR IGNORE INTO image_tags (image_id, tag_id, source, weight) VALUES (?,?,'ai',1)");
-  /* the vocabulary is the gate: a model answer that is not a category gets
-     dropped here rather than minting a keyterm only one image will ever carry.
-     The kind comes from the taxonomy too, never from where the model put it. */
-  for (const [names, hint] of groups) {
-    for (const raw of names) {
-      if (!raw || raw.length > 40) continue;
+  const link = (name: string, kind: string) => {
+    const t = upsertTag.get(name, kind) as { id: number } | undefined;
+    if (t) linkTag.run(imageId, t.id);
+  };
+
+  /* single-valued: replace when answered, keep when not */
+  for (const kind of ["work", "carrier", "period"] as const) {
+    const value = foldFacet(a[kind], kind);
+    if (!value) continue;
+    clearKind.run(imageId, kind);
+    link(value, kind);
+  }
+  /* multi-valued: replace when answered, even with nothing */
+  for (const [list, kind] of [[a.materials, "material"], [a.processes, "process"]] as const) {
+    if (!Array.isArray(list)) continue;
+    clearKind.run(imageId, kind);
+    for (const name of canonList(list, kind, 2)) link(name, kind);
+  }
+  /* accumulative: the vocabulary is the gate. A model answer that is not a
+     category is dropped here rather than minting a keyterm only one image
+     will ever carry, and the kind comes from the taxonomy, never from where
+     the model put the word. A single-valued facet value may only arrive
+     through its own group: without that guard a style word that aliases
+     into a work term ("graphic" -> "graphic design") linked a SECOND work
+     from inside the style list -- measured, 99 images carrying two works. */
+  for (const list of [a.subjects, a.style, a.mood]) {
+    if (!Array.isArray(list)) continue;
+    for (const raw of arr(list)) {
+      if (raw.length > 40) continue;
       const can = canonical(raw);
       if (!can) continue;
-      /* A single-valued facet value may only arrive through its own group.
-         Without this, a style word that aliases into a work term ("graphic"
-         -> "graphic design") links a SECOND work value from inside the style
-         list — the clear-before-write above never sees it, and the facet's
-         one-value promise breaks silently. Measured before this guard: 99
-         images carrying two works, 87 of them this exact rider. */
-      if (["work", "carrier", "period"].includes(can.kind) && can.kind !== hint) continue;
-      const t = upsertTag.get(can.name, can.kind) as { id: number } | undefined;
-      if (t) linkTag.run(imageId, t.id);
+      if (["work", "carrier", "period", "material", "process"].includes(can.kind)) continue;
+      link(can.name, can.kind);
     }
   }
+  return filedFacets(imageId);
 }
 
 /* ---- Quick tagging: the light pass that makes an image SEARCHABLE.
@@ -344,7 +507,7 @@ export async function quickTagImage(imageId: number): Promise<{ title: string; t
   const conn = db();
   const row = conn.prepare("SELECT rel_path FROM images WHERE id = ?").get(imageId) as
     { rel_path: string } | undefined;
-  if (!row) throw new VisionError("Image " + imageId + " not found");
+  if (!row) throw new VisionError("Image " + imageId + " not found", 404, true);
 
   const dataUrl = await encodeImage(row.rel_path, 448);
   const content = await chat([
@@ -363,27 +526,18 @@ export async function quickTagImage(imageId: number): Promise<{ title: string; t
   ], 420, 4, true, "none");
 
   const a = parseJson<Partial<Analysis>>(content);
-  const arr = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).map((x) => String(x).trim().toLowerCase()) : []);
-  const facet = (v: unknown, kind: keyof typeof TAXONOMY) => {
-    const n = String(v ?? "").trim().toLowerCase();
-    return TAXONOMY[kind].includes(n) ? n : "";
-  };
   const clean = {
     title: String(a.title ?? "").trim() || "Untitled",
     description: String(a.description ?? "").trim(),
-    subjects: arr(a.subjects),
-    style: arr(a.style),
-    mood: arr(a.mood),
-    work: facet(a.work, "work"),
-    carrier: facet(a.carrier, "carrier"),
+    subjects: canonList(a.subjects, "subject"),
+    style: canonList(a.style, "style"),
+    mood: canonList(a.mood, "mood"),
+    work: foldFacet(a.work, "work"),
+    carrier: foldFacet(a.carrier, "carrier"),
   };
 
-  conn.prepare(
-    "UPDATE images SET ai_title=?, ai_description=?, ai_analysis=?, ai_model=?, ai_at=? WHERE id=?"
-  ).run(clean.title, clean.description, JSON.stringify(clean), MODEL + " · quick", now(), imageId);
-
-  applyTags(imageId, clean as Analysis);
-  return { title: clean.title, tags: clean.subjects.length + clean.style.length + clean.mood.length };
+  const record = fileRecord(imageId, clean, activeModel() + " · quick", { via: "quick-tag" });
+  return { title: record.title, tags: clean.subjects.length + clean.style.length + clean.mood.length };
 }
 
 export type Comparison = {
@@ -411,14 +565,20 @@ export async function compareImages(aId: number, bId: number): Promise<Compariso
   const conn = db();
   const rows = conn.prepare("SELECT id, rel_path FROM images WHERE id IN (?,?)").all(aId, bId) as
     { id: number; rel_path: string }[];
+  if (aId === bId) throw new VisionError("Compare needs two different images", 400, true);
   const a = rows.find((r) => r.id === aId);
   const b = rows.find((r) => r.id === bId);
-  if (!a || !b) throw new VisionError("Both images must exist");
+  if (!a || !b) throw new VisionError("Both images must exist", 404, true);
 
-  // This org's TPM ceiling for the model is 8000 and Groq counts max_tokens
-  // toward it, so a two-image request must stay small: 448px keeps both
-  // pictures plus a workable reasoning budget under the cap.
-  const [ua, ub] = await Promise.all([encodeImage(a.rel_path, 448), encodeImage(b.rel_path, 448)]);
+  /* Two 448px frames plus a 2400-token ceiling is over the organisation's
+     8k tokens-per-minute cap on the house model: Groq answered "Request too
+     large for model" seven times in a row, measured. With an OpenAI key in
+     .env.local the comparison rides there, where the cap does not apply;
+     without one it shrinks to fit -- smaller frames, a shorter answer, and
+     no reasoning pass. */
+  const viaOai = USE_OAI || !!process.env.OPENAI_API_KEY;
+  const side = viaOai ? 512 : 384;
+  const [ua, ub] = await Promise.all([encodeImage(a.rel_path, side), encodeImage(b.rel_path, side)]);
   const content = await chat([
     { role: "system", content: COMPARE_SYSTEM },
     {
@@ -431,14 +591,11 @@ export async function compareImages(aId: number, bId: number): Promise<Compariso
         { type: "text", text: "Compare them." },
       ],
     },
-  // Two 448px images are ~1800 prompt tokens each and the org TPM cap is 8000
-  // with max_tokens counted in, so the reasoning pass is disabled here: the
-  // model answers directly and the whole request stays inside the window.
-  ], 2400, 6, true, "none");
+  ], viaOai ? 2400 : 1400, 6, true, "none", MODEL, viaOai ? "openai" : "groq");
 
   const c = parseJson<Comparison>(content);
   conn.prepare("INSERT INTO comparisons (a_id,b_id,verdict,body,model,created_at) VALUES (?,?,?,?,?,?)")
-    .run(aId, bId, String(c.verdict ?? ""), JSON.stringify(c), MODEL, now());
+    .run(aId, bId, String(c.verdict ?? ""), JSON.stringify(c), viaOai ? OAI_MODEL : MODEL, now());
   return c;
 }
 
@@ -455,12 +612,15 @@ export async function chatAboutImage(imageId: number, history: ChatMsg[]): Promi
   const conn = db();
   const row = conn.prepare("SELECT rel_path, ai_analysis FROM images WHERE id = ?").get(imageId) as
     { rel_path: string; ai_analysis: string | null } | undefined;
-  if (!row) throw new VisionError("Image " + imageId + " not found");
+  if (!row) throw new VisionError("Image " + imageId + " not found", 404, true);
   if (!history.length || history[history.length - 1].role !== "user") {
-    throw new VisionError("history must end with a user message");
+    throw new VisionError("history must end with a user message", 400, true);
   }
 
-  const dataUrl = await encodeImage(row.rel_path);
+  /* 640px, not 768: with the catalogued brief in the system prompt and a
+     few turns of history, the larger frame plus a 2600-token ceiling sat
+     over the 8k per-minute cap and Groq refused the whole request. */
+  const dataUrl = await encodeImage(row.rel_path, 640);
   let system = CHAT_SYSTEM;
   if (row.ai_analysis) {
     system += "\n\nCatalogued analysis of the image, for context:\n" + row.ai_analysis.slice(0, 1600);
@@ -487,7 +647,11 @@ export async function chatAboutImage(imageId: number, history: ChatMsg[]): Promi
 
   // The model leaks markdown emphasis despite instructions; the chat bubble
   // renders plain text, so strip it rather than display literal asterisks.
-  return (await chat(msgs, 2600, 5, false)).replace(/\*\*|__|(?<![\w*])\*(?=\w)|(?<=\w)\*(?![\w*])/g, "").trim();
+  /* 900 output tokens, no reasoning pass: two short paragraphs need about
+     300, and the organisation's minute holds a thousand. With the
+     reasoning pass on, the hidden thinking counted against that budget
+     and came back as an empty completion. */
+  return (await chat(msgs, 900, 5, false, "none")).replace(/\*\*|__|(?<![\w*])\*(?=\w)|(?<=\w)\*(?![\w*])/g, "").trim();
 }
 
 export type PromptTerms = { terms: string[]; words: string[]; reply: string };
