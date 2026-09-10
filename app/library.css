@@ -2328,15 +2328,88 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
   flex-direction: column;
 }
 .conversation-body[hidden] { display: none; }
+/* The thread's stage: the scroller and, over it, the history drawer. Bled
+   to the panel's edges so the scrollbar rides the far right rather than
+   floating inside the content inset, and so the drawer's rows run edge to
+   edge like the head's rule. */
+.chatstage {
+  position: relative; flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  margin: 0 calc(-1 * var(--space-2));
+  overflow: hidden;
+}
 .chatscroll {
   flex: 1; min-height: 0; overflow-y: auto;
   display: flex; flex-direction: column; gap: 14px;
-  /* bled to the panel's edges so the scrollbar rides the far right rather
-     than floating inside the content inset */
-  margin: 0 calc(-1 * var(--space-2));
   padding: 14px var(--space-2);
+  transition: opacity 360ms var(--motion-ease);
 }
+/* while the drawer is out the thread stands back, a sliver of it showing
+   at the right, and takes no clicks: the sliver is the way to close */
+.chatstage.is-hist .chatscroll { opacity: 0.35; pointer-events: none; }
 .chathead .closebtn:disabled { opacity: 0.45; cursor: default; }
+
+/* ---- History: the panel's memory, as a drawer from its left edge ----
+   Not a popover over the thread (a second window laid on the first) and
+   not a fold from the head: the list slides in from the left on the house
+   ease-out and covers most of the thread, the way every phone taught. One
+   open chat, the dot on it; pick another and the drawer closes on its own.
+   The pill is a word and a clock, no chevron, inverted while it is out. */
+.histpill { display: inline-flex; align-items: center; gap: 6px; }
+.histpill svg { display: block; flex: none; }
+.histpill[aria-expanded="true"] { background: var(--accent); color: var(--on-accent); }
+.histpill[aria-expanded="true"]:hover { background: var(--accent); color: var(--on-accent); }
+.chat-hist {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 82%; z-index: 2;
+  display: flex; flex-direction: column; min-height: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  transform: translateX(-100%); visibility: hidden;
+  transition: transform 360ms var(--motion-ease), visibility 0s linear 360ms;
+}
+.chat-hist.is-open { transform: none; visibility: visible; transition: transform 360ms var(--motion-ease), visibility 0s; }
+.chat-hist__list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.chat-hist__row {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 42px; padding: 0 var(--space-2);
+  background: none; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  color: var(--text-secondary); font-family: var(--font-sans); font-weight: var(--weight-light);
+  text-align: left; cursor: pointer;
+  transition: background var(--motion-duration) var(--motion-ease), color var(--motion-duration) var(--motion-ease);
+}
+.chat-hist__row:hover { background: var(--accent-wash); color: var(--text-primary); }
+.chat-hist__row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.chat-hist__row.is-on { color: var(--text-primary); }
+.chat-hist__new { color: var(--text-primary); }
+.chat-hist__new svg { flex: none; }
+.chat-hist__dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--green-500, #7ebb1c); }
+.chat-hist__t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-body-sm); }
+.chat-hist__w { flex: none; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.04em; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.chat-hist__x {
+  flex: none; width: 18px; height: 18px; display: grid; place-items: center;
+  color: var(--text-muted); opacity: 0; border-radius: var(--radius-sm); font-size: 13px; line-height: 1;
+  transition: opacity var(--motion-duration) var(--motion-ease), color var(--motion-duration) var(--motion-ease);
+}
+.chat-hist__row:hover .chat-hist__x, .chat-hist__row:focus-visible .chat-hist__x { opacity: 1; }
+.chat-hist__x:hover { color: #dc2626; background: var(--accent-wash); }
+.chat-hist__foot {
+  display: flex; align-items: center; gap: 12px; flex: none;
+  padding: 9px var(--space-2); border-top: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-muted); white-space: nowrap;
+}
+.chat-hist__foot .sp { flex: 1; }
+.chat-hist__foot button {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.chat-hist__foot button:hover { color: var(--text-primary); }
+.chat-hist__empty { padding: 14px var(--space-2); font-size: var(--font-body-xs); color: var(--text-muted); }
+/* the sliver of thread the drawer leaves: clicking it closes the drawer */
+.chat-hist__scrim { position: absolute; top: 0; bottom: 0; right: 0; width: 18%; z-index: 1; background: transparent; border: 0; padding: 0; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) {
+  .chat-hist, .chat-hist.is-open, .chatscroll { transition: none; }
+}
 
 
 

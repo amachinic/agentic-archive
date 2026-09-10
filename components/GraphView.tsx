@@ -25,6 +25,7 @@ import { write } from "@/lib/write";
 import GlyphLoader from "./GlyphLoader";
 import Select from "./Select";
 import { IconX, IconPlus, IconCheck, IconCaret, IconChevronDown, IconArrowLeft, IconTag, IconSearch, IconSave, IconSort, IconClock, IconDrive, IconPalette, IconRefresh, IconFolder, IconSparkle, IconUndo, IconCopy, IconTrash, IconAgent } from "./icons";
+import { loadConvos, saveConvos, newConvoId, whenLabel, type Convo } from "@/lib/conversations";
 import ThemeToggle from "./ThemeToggle";
 import ToolCheck from "./ToolCheck";
 import type { PixMode } from "./ArchetypePix";
@@ -163,7 +164,7 @@ const COMMANDS = [
   { cmd: "/sort", key: "sort", label: "Sort the canvas", hint: "re-order the spiral by colour or light", arch: "curator" },
   { cmd: "/tag", key: "tag", label: "Tag my new images", hint: "keyterms for the un-analyzed", arch: "archivist" },
   { cmd: "/save", key: "save", label: "Save a folder", hint: "keep digital, mirror to disk, or both", arch: "media manager" },
-  { cmd: "/history", key: "timeline", label: "History", hint: "everything from this session, in order", arch: "atlas" },
+  { cmd: "/ledger", key: "timeline", label: "Ledger", hint: "everything done, in order", arch: "atlas" },
 ];
 
 /* Every tool the panel can show, attributed to the lens doing it and spoken
@@ -208,7 +209,7 @@ const ctaIcon = (key: string): IconFn | null =>
 const CTA_META: Record<string, CtaOpt> = {
   tag: { key: "tag", label: "Tag my new images", sub: "archivist" },
   dedupe: { key: "dedupe", label: "Find duplicates", sub: "archivist" },
-  timeline: { key: "timeline", label: "History", sub: "archivist" },
+  timeline: { key: "timeline", label: "Ledger", sub: "archivist" },
   find: { key: "find", label: "Find something", sub: "curator" },
   filter: { key: "filter", label: "Filter by keyterm", sub: "curator" },
   sort: { key: "sort", label: "Sort the canvas", sub: "curator" },
@@ -715,7 +716,8 @@ export default function GraphView({
      be a re-render for nobody. */
   const continuationRef = useRef<Record<string, Record<string, number>>>({});
   const [ltOpen, setLtOpen] = useState(false);
-  const [logCopied, setLogCopied] = useState(false);
+  /* the drawer of earlier conversations, out from the panel's left edge */
+  const [histOpen, setHistOpen] = useState(false);
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const toggleFilterTag = useCallback((name: string) => {
     setFilterTags((current) => current.includes(name)
@@ -1048,7 +1050,12 @@ export default function GraphView({
 
   /* the first thing asked becomes the conversation's TOPIC: the rail input
      locks read-only around it and titles the chat below */
-  const topic = thread.find((m): m is Extract<ThreadItem, { type: "msg" }> => m.type === "msg" && m.role === "user")?.content ?? null;
+  const topic = thread.find((m): m is Extract<ThreadItem, { type: "msg" }> => m.type === "msg" && m.role === "user")?.content
+    /* a chat opened from a capability rather than a typed ask is still a chat, and needs a name in the list;
+       one that only holds an answer is named by that answer */
+    ?? (thread.some((m) => m.type === "skills") ? "Everything I can do"
+      : thread.some((m) => m.type === "timeline") ? "Ledger"
+      : thread.find((m): m is Extract<ThreadItem, { type: "msg" }> => m.type === "msg")?.content.slice(0, 48) ?? null);
 
   /* which items sit inside a turn: everything after a head, until the
      conversation returns to the user — their message, or choices offered
@@ -1064,6 +1071,100 @@ export default function GraphView({
     return flags;
   }, [thread]);
   const headRunning = thread.some((x) => x.type === "head" && x.status === "running");
+
+  /* ---- History: the panel's memory ----
+     One open chat, the rest in a list. The list is every conversation this
+     browser has had, newest activity first; the open one is a member of it
+     like any other and carries the dot. Typing continues the open one and
+     brings it to the top; New starts an empty one and the last stays where
+     it was. Kept in localStorage (lib/conversations.ts): the hosted copy
+     must not remember one visitor's chats for the next, and locally one
+     browser is the whole audience. */
+  const [convos, setConvos] = useState<Convo<ThreadItem>[]>([]);
+  const [currentId, setCurrentId] = useState("");
+  const convosReady = useRef(false);
+  /* a conversation being removed must not be written back by the sync
+     below while its thread is still draining out of the panel */
+  const deadIds = useRef(new Set<string>());
+  useEffect(() => {
+    setConvos(loadConvos<ThreadItem>());
+    setCurrentId(newConvoId());
+    convosReady.current = true;
+  }, []);
+  /* whatever the panel holds IS the open conversation: every change to the
+     thread or the field it left behind lands in the list. An empty
+     conversation is not kept, so a fresh panel adds nothing. at moves only
+     when the thread grows -- re-reading is not activity. */
+  useEffect(() => {
+    if (!convosReady.current || !currentId || deadIds.current.has(currentId)) return;
+    setConvos((prev) => {
+      const i = prev.findIndex((c) => c.id === currentId);
+      const was = i >= 0 ? prev[i] : null;
+      if (!was && thread.length === 0) return prev;
+      if (was && was.thread === thread && was.promptIds === promptIds && was.fieldSort === fieldSort && was.filterTags === filterTags && was.lightTable === lightTable) return prev;
+      const grew = !was || was.thread.length !== thread.length;
+      const next: Convo<ThreadItem> = {
+        id: currentId,
+        topic: was?.topic || topic || "",
+        createdAt: was?.createdAt ?? Date.now(),
+        at: grew || !was ? Date.now() : was.at,
+        thread, promptIds, fieldSort, filterTags, lightTable,
+      };
+      return i >= 0 ? prev.map((c, k) => (k === i ? next : c)) : [next, ...prev];
+    });
+  }, [thread, promptIds, fieldSort, filterTags, lightTable, currentId, topic]);
+  useEffect(() => {
+    if (!convosReady.current) return;
+    const t = setTimeout(() => saveConvos(convos), 250);
+    return () => clearTimeout(t);
+  }, [convos]);
+  const histRows = useMemo(() => convos.filter((c) => c.thread.length > 0).sort((a, b) => b.at - a.at), [convos]);
+  const headTopic = convos.find((c) => c.id === currentId)?.topic || topic;
+  /* the times in the list ("4 min") keep up while it is out */
+  const [, histTick] = useState(0);
+  useEffect(() => {
+    if (!histOpen) return;
+    const t = setInterval(() => histTick((n) => n + 1), 30_000);
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setHistOpen(false); };
+    window.addEventListener("keydown", esc);
+    return () => { clearInterval(t); window.removeEventListener("keydown", esc); };
+  }, [histOpen]);
+  /* a stored thread comes back at rest: nothing is still running, and a
+     refinement fork that was live when the page closed is passed over */
+  const restoreItem = (x: ThreadItem): ThreadItem => {
+    if (x.type === "tool") return { ...x, status: "done" };
+    if (x.type === "head") return { ...x, status: "done" };
+    if (x.type === "refine" && x.sent === null) return { ...x, sent: "-" };
+    return x;
+  };
+  function openConvo(id: string) {
+    const c = convos.find((x) => x.id === id);
+    setHistOpen(false);
+    if (!c || id === currentId) return;
+    /* the drawer takes 360ms to leave; the chat arrives as it goes, so the
+       sliver at the right does not flick to the new one before the old one
+       is out of the way */
+    setTimeout(() => {
+      setCurrentId(id);
+      setThread(c.thread.map(restoreItem));
+      setPromptIds(c.promptIds);
+      setFieldSort((c.fieldSort as FieldSortMode | null) ?? null);
+      setFilterTags(c.filterTags ?? []);
+      setLightTable((c.lightTable as typeof lightTable) ?? null);
+      setLtOpen(false);
+      stepsRef.current = [];
+      setSteps(0);
+      continuationRef.current = {};
+      logLedger("you", "opened “" + c.topic + "”");
+    }, 240);
+  }
+  function removeConvo(id: string) {
+    setConvos((prev) => prev.filter((c) => c.id !== id));
+    if (id === currentId) { deadIds.current.add(id); setHistOpen(false); clearPrompt(); }
+  }
+  function clearHistory() {
+    setConvos((prev) => prev.filter((c) => c.id === currentId));
+  }
 
   /* the conversation keeps its newest message in view, like the analysis chat */
   useEffect(() => {
@@ -1878,47 +1979,6 @@ export default function GraphView({
     } catch { /* clipboard blocked */ }
   }
 
-  /* The whole conversation as markdown — messages, tool rows with their
-     lenses, every candidate with its source link, proposals, refinements.
-     Purely client-side, so it works on the hosted archive too: saving a
-     record of the chat never needed a server write. */
-  function chatLog(): string {
-    const L: string[] = ["# Atlas — conversation log", ""];
-    const line = (s: string) => L.push(s);
-    const gap = () => { if (L[L.length - 1] !== "") L.push(""); };
-    for (const m of thread) {
-      if (m.type === "msg") {
-        gap();
-        line((m.role === "user" ? "**you:** " : "**atlas:** ") + m.content);
-      } else if (m.type === "head") {
-        gap();
-        line("_atlas · " + m.what + "_");
-      } else if (m.type === "tool") {
-        const meta = TOOL_META[m.tool];
-        line("- " + (meta ? meta.who + " · " + meta.task : m.tool) + (m.detail ? " (" + m.detail + ")" : "") + " — " + m.result);
-      } else if (m.type === "candidates") {
-        line("- from outside · “" + m.query + "” · " + m.items.length + " candidates, " + m.items.filter((c) => c.keepable).length + " keepable:");
-        for (const c of m.items) {
-          line("  - " + c.title + (c.creator ? " — " + c.creator : "") + " · " + c.source + (c.licence ? " · " + c.licence : "") + (c.pageUrl ? " · " + c.pageUrl : ""));
-        }
-      } else if (m.type === "proposal") {
-        line("- proposal “" + m.name + "” · " + m.ids.length + " images · " + m.status);
-      } else if (m.type === "refine" && m.sent && m.sent !== "-") {
-        line("- refined: " + m.sent);
-      } else if (m.type === "outcome") {
-        for (const r of m.rows) line("- " + r.text);
-      }
-    }
-    return L.join("\n");
-  }
-  async function copyChat() {
-    try {
-      await navigator.clipboard.writeText(chatLog());
-      setLogCopied(true);
-      setTimeout(() => setLogCopied(false), 1400);
-    } catch { /* clipboard blocked */ }
-  }
-
   const pushAtlas = (content: string) => setThread((t) => [...t, { type: "msg", role: "assistant", content }]);
   /*
     Every action that writes, in one place.
@@ -2648,6 +2708,10 @@ export default function GraphView({
       setLtOpen(false);
       stepsRef.current = [];
       setSteps(0);
+      /* the conversation that just drained is already in the list; the
+         panel now belongs to a new one, kept only once something is said */
+      setCurrentId(newConvoId());
+      continuationRef.current = {};
     };
     const scroll = document.querySelector(".chatscroll") as HTMLElement | null; // the view renders exactly one
     if (clearingRef.current) return;
@@ -3547,19 +3611,25 @@ export default function GraphView({
                   ><i aria-hidden /></div>
                   <div className="chatbox">
                     <div className="chathead">
-                      <span className={"mono-label graph-topic" + (topic ? " has-topic" : "")} title={topic ?? undefined}>
-                        {topic ?? "Agent"}
+                      <span className={"mono-label graph-topic" + (headTopic ? " has-topic" : "")} title={headTopic ?? undefined}>
+                        {headTopic ?? "Agent"}
                       </span>
                       <div className="filtersheet__actions">
-                        {thread.length > 0 && (
-                          <button className="closebtn" onClick={() => void copyChat()} title="Copy the whole conversation as markdown — messages, tool calls and finds">
-                            {logCopied ? "Copied" : "Copy log"}
-                          </button>
-                        )}
                         {(thread.length > 0 || promptIds) && (
-                          <button className="closebtn" onClick={clearPrompt} title="Clear the conversation">Clear</button>
+                          <button className="closebtn" onClick={clearPrompt} title="Start a new conversation. This one is kept in History.">New</button>
                         )}
                         <button className="closebtn sheet-only" onClick={() => setSheetOpen(false)}>Close</button>
+                        <button
+                          type="button"
+                          className="closebtn histpill"
+                          onClick={() => setHistOpen((o) => !o)}
+                          aria-expanded={histOpen}
+                          aria-controls="graph-history"
+                          title="Your conversations"
+                        >
+                          <IconClock width={11} height={11} />
+                          History
+                        </button>
                         <button
                           type="button"
                           className="chathead__toggle"
@@ -3612,6 +3682,47 @@ export default function GraphView({
                       className="conversation-body"
                       hidden={conversationCollapsed}
                     >
+                    <div className={"chatstage" + (histOpen ? " is-hist" : "")}>
+                    <div id="graph-history" className={"chat-hist" + (histOpen ? " is-open" : "")} role="listbox" aria-label="Conversations" aria-hidden={!histOpen}>
+                      <div className="chat-hist__list">
+                        <button type="button" className="chat-hist__row chat-hist__new" role="option" aria-selected={false} onClick={() => { setHistOpen(false); clearPrompt(); }}>
+                          <IconPlus width={12} height={12} />
+                          <span className="chat-hist__t">New conversation</span>
+                        </button>
+                        {histRows.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className={"chat-hist__row" + (c.id === currentId ? " is-on" : "")}
+                            role="option"
+                            aria-selected={c.id === currentId}
+                            onClick={() => openConvo(c.id)}
+                            title={c.topic}
+                          >
+                            {c.id === currentId && <span className="chat-hist__dot" aria-hidden />}
+                            <span className="chat-hist__t">{c.topic || "Untitled"}</span>
+                            <span className="chat-hist__w">{whenLabel(c.at)}</span>
+                            <span
+                              className="chat-hist__x"
+                              role="button"
+                              tabIndex={-1}
+                              title="Remove this conversation"
+                              aria-label="Remove this conversation"
+                              onClick={(e) => { e.stopPropagation(); removeConvo(c.id); }}
+                            >×</span>
+                          </button>
+                        ))}
+                        {histRows.length === 0 && (
+                          <div className="chat-hist__empty">Nothing kept yet. Ask something and it will be here.</div>
+                        )}
+                      </div>
+                      <div className="chat-hist__foot">
+                        <span>{histRows.length} conversation{histRows.length === 1 ? "" : "s"}</span>
+                        <span className="sp" />
+                        {histRows.length > 1 && <button type="button" onClick={clearHistory}>clear history</button>}
+                      </div>
+                    </div>
+                    {histOpen && <button type="button" className="chat-hist__scrim" aria-label="Close history" onClick={() => setHistOpen(false)} />}
                     <div className="chatscroll">
                     {thread.length === 0 && !promptBusy && (
                       <div className="agent-home">
@@ -3737,7 +3848,7 @@ export default function GraphView({
                         );
                         return (
                           <div key={i} className="agent-tl">
-                            <span className="mono-label">History · this session</span>
+                            <span className="mono-label">Ledger · this session</span>
                             {ledger.current.length === 0 ? (
                               <p className="agent-tl__empty">Nothing yet. Every hunt, sort, proposal and decision from this session collects here.</p>
                             ) : ledger.current.map(row)}
@@ -3746,7 +3857,7 @@ export default function GraphView({
                                 sessions. Absent on the hosted copy. */}
                             {m.archive && (
                               <>
-                                <span className="mono-label" style={{ marginTop: 6 }}>History · this archive</span>
+                                <span className="mono-label" style={{ marginTop: 6 }}>Ledger · this archive</span>
                                 {m.archive.length === 0
                                   ? <p className="agent-tl__empty">The ledger is empty.</p>
                                   : m.archive.map(row)}
@@ -3860,6 +3971,7 @@ export default function GraphView({
                       </div>
                     )}
                       {(thread.length > 0 || promptBusy) && <div ref={threadEndRef} />}
+                    </div>
                     </div>
                     {draft.trim().startsWith("/") && (
                       <div className="agent-palette" aria-label="Commands">
