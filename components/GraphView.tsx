@@ -606,23 +606,24 @@ function RefineBlock({ item, busy, onGo }: {
         </button>
       </div>
       {/* The other half of the fork, and the reason this block is not a
-          questionnaire: the search as it stands is already an answer. Pull it
-          without narrowing anything, and leaving it alone is simply not
-          pressing either — no dismissal, no "are you sure", no third step. */}
+          questionnaire: the search as it stands is already an answer. Pull
+          more brings the next chunk of it EXACTLY as it stands and ignores
+          the card; go deeper sends what the card composed. Two verbs that
+          never change their names -- the old "narrow, then pull more" tried
+          to do both at once and read as neither. Leaving it alone is simply
+          not pressing either. */}
       {(remaining === null || remaining > 0) && (
         <div className="agent-refine__pull">
           <button
             className="agent-refine__more"
             disabled={spent || busy}
-            onClick={() => onGo(
-              chosen
-                ? compose() + " Pull the next chunk of that, do not just preview it."
-                : "Pull the next chunk for " + item.base + " — more of the same search, no narrowing.",
-            )}
+            onClick={() => onGo("Pull the next chunk for " + item.base + " — more of the same search, no narrowing.")}
           >
-            {chosen ? "narrow, then pull more" : "pull more of these"}
+            pull more
           </button>
-          <span className="mono-xs agent-refine__hint">or leave it as it is</span>
+          <span className="mono-xs agent-refine__hint">
+            {chosen ? "go deeper sends what you chose · pull more ignores it and brings the next of the same" : "go deeper narrows · pull more brings the next of the same"}
+          </span>
         </div>
       )}
     </div>
