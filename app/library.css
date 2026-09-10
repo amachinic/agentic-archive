@@ -1723,9 +1723,9 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 }
 .agent-cands__open:hover { color: var(--text-primary); }
 
-/* ---- the refine surface: an outside hunt's follow-up ----
+/* ---- the refine surface: an outside search's follow-up ----
    Checkable narrows, a source to go deeper into (with the population it
-   reported), and a line of the human's own words — layered into one hunt. */
+   reported), and a line of the human's own words — layered into one search. */
 .agent-refine {
   display: flex; flex-direction: column; gap: 9px;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);

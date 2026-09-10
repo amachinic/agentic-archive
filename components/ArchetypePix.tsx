@@ -88,7 +88,7 @@ export function opacityAt(mode: PixMode, i: number, t: number, step: number): nu
 
   if (mode === "seek") {
     /* Historian: a ring leaves home and goes out, again and again — the
-       hunt departs, the centre stays lit, what it passed keeps a low glow */
+       search departs, the centre stays lit, what it passed keeps a low glow */
     const d = Math.abs(r - 2) + Math.abs(c - 2);       // Manhattan ring 0..4
     const ring = ((t % 1900) / 1900) * 6 - 0.5;
     if (d === 0) return 0.9;

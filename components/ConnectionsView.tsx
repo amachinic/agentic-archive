@@ -35,7 +35,7 @@
   has no visitor accounts for a credential to live in -- so a switch that
   wrote to the server would either lie or let one reader disable the Met for
   everybody. What it does instead is answer the same question for YOU: will
-  Atlas look here in my hunts? That preference is yours alone, kept in your
+  Atlas look here in my searches? That preference is yours alone, kept in your
   own browser and sent with each request, so the tool the agent gets offered
   is genuinely narrowed. A source that needs a credential stays inert there,
   because no preference of yours can conjure one.
@@ -190,10 +190,10 @@ type Toast = { id: number; kind: "ok" | "bad"; text: string };
 function switchTitle(s: Source, on: boolean, st: State | undefined, hosted: boolean): string {
   if (hosted) {
     /* available here, so the switch is yours: it decides whether Atlas
-       looks in this collection during YOUR hunts */
+       looks in this collection during YOUR searches */
     if (st && st.status !== "off") {
       return on
-        ? "Atlas searches " + s.name + " in your hunts — switch off to skip it"
+        ? "Atlas looks in " + s.name + " when you search — switch off to skip it"
         : "Atlas is skipping " + s.name + " — switch on to search it again";
     }
     return s.name + " needs a credential, so it connects only in the local runtime";
@@ -268,7 +268,7 @@ export default function ConnectionsView() {
        Disabling the very control you just pressed makes the browser drop
        focus to <body> mid-probe, and it never comes back -- a keyboard user
        could switch a source on and then be unable to switch it off without
-       hunting for the control again. The switch stays focusable and says
+       searching for the control again. The switch stays focusable and says
        aria-disabled while it works; this line is what actually stops a
        second press from firing. */
     if (busy === s.id) return;
@@ -335,7 +335,7 @@ export default function ConnectionsView() {
               : hosted ? "searching nothing" : "nothing connected"}
           </span>
           {hosted
-            ? <span>The open collections are searchable here — switch any of them off and Atlas skips it in your hunts. Accounts and keys connect only in the local runtime.</span>
+            ? <span>The open collections are searchable here — switch any of them off and Atlas skips it in your searches. Accounts and keys connect only in the local runtime.</span>
             : <span>Runs locally. Credentials live in <code>.env.local</code>, never in the browser.</span>}
         </div>
       </header>
@@ -426,7 +426,7 @@ export default function ConnectionsView() {
 
                         On the hosted archive it flips this reader's own
                         preference instead — whether Atlas looks here during
-                        their hunts — because a press that wrote to the
+                        their searches — because a press that wrote to the
                         server would let one visitor switch the Met off for
                         everybody. Only a source needing a credential is
                         inert there, having nothing a preference could
@@ -498,7 +498,7 @@ export default function ConnectionsView() {
                       </span>
                     ) : hosted ? (
                       <span className="conncard__where">
-                        {on ? "searched in your hunts" : "skipped in your hunts"}
+                        {on ? "searched" : "skipped"}
                       </span>
                     ) : needsAuth ? (
                       /* The door to the account. It leaves for the provider,

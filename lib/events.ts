@@ -29,7 +29,7 @@ export function recordEvent(
 
   Every outside probe is recorded (action "probe": query, found, added). This
   reads that record back as the two lists a planner actually wants: the probes
-  that YIELDED, and the probes that came back EMPTY — so the next hunt starts
+  that YIELDED, and the probes that came back EMPTY — so the next search starts
   from what this archive's sources have already answered, instead of
   rediscovering the same dead words. This is the evolving half of the loop:
   the writer above is the diary, this is the re-reading of it.

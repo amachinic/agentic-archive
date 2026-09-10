@@ -47,7 +47,7 @@ export type Adapter = {
      has channels, not a corpus).
 
      offset CONTINUES a query past what earlier calls already returned, so a
-     hunt can be pulled in chunks instead of re-reading page one forever.
+     search can be pulled in chunks instead of re-reading page one forever.
      Each adapter honours it as its API allows and says when the well is
      genuinely dry: exhausted=true means "past the end of what I hold for
      this query", never "the page happened to be thin". A source that cannot
@@ -455,7 +455,7 @@ const arena: Adapter = {
       .slice(0, 5);
     /* pagination is bounded by REQUESTS, not channels, so one giant channel
        cannot eat the whole budget and a page of text blocks costs a retry
-       elsewhere rather than the hunt. A continuation earns extra budget to
+       elsewhere rather than the search. A continuation earns extra budget to
        re-cross the ground it is skipping, and deeper pages per channel to
        reach the fresh ground beyond it. */
     let pageBudget = Math.min(16, 8 + Math.ceil(offset / 24));
