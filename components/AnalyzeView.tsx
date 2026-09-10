@@ -19,9 +19,14 @@ type PickerItem = { id: number; title: string; w: number; h: number };
 type Detail = { id: number; ai_at: number | null; ai_analysis: Analysis | null; ai_title: string | null; filename: string };
 
 export default function AnalyzeView({
-  initialPicker, initialId,
+  initialPicker, initialId, readOnly = false,
 }: {
   initialPicker: PickerItem[]; initialId: number | null;
+  /* The hosted copy: briefs exist for every catalogued image and nothing
+     new can be analysed. The Network panel already steps its write CTAs
+     aside on that copy; the studio kept offering Re-analyze, Upload and a
+     dropzone that all answered 403 -- measured. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [picker, setPicker] = useState(initialPicker);
@@ -31,6 +36,9 @@ export default function AnalyzeView({
   const [analyzing, setAnalyzing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  /* an id with no image behind it: a URL typed by hand, an image since
+     deleted. Explained once, never retried. */
+  const [missing, setMissing] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [pickerVersion, setPickerVersion] = useState(0);
 
@@ -95,12 +103,17 @@ export default function AnalyzeView({
     setDetail(null);
     setThread([]);
     setError(null);
+    setMissing(false);
     fetch("/api/images/" + selected)
-      .then((r) => r.json())
-      .then((d) => {
+      .then(async (r) => {
+        if (!alive) return;
+        if (r.status === 404) { setMissing(true); return; }
+        const d = await r.json();
         if (!alive) return;
         setDetail(d);
-        if (!d.ai_at && ranFor.current !== selected) {
+        /* nothing catalogues on the read-only copy: the brief is either
+           there or it is not, and asking would only be refused */
+        if (!d.ai_at && !readOnly && ranFor.current !== selected) {
           ranFor.current = selected;
           runAnalysis(selected);
         }
@@ -191,10 +204,12 @@ export default function AnalyzeView({
           <IconSearch width={13} height={13} />
           <input placeholder="Search the library..." value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search library" />
         </div>
-        <button className="btn is-primary" onClick={() => setShowUpload(true)}>
-          <IconUpload width={13} height={13} />
-          Upload
-        </button>
+        {!readOnly && (
+          <button className="btn is-primary" onClick={() => setShowUpload(true)}>
+            <IconUpload width={13} height={13} />
+            Upload
+          </button>
+        )}
       </header>
 
       <div className="work">
@@ -231,7 +246,12 @@ export default function AnalyzeView({
 
             {/* ---- brief + conversation ---- */}
             <div className="analyze__main">
-              {selected == null ? (
+              {selected == null && readOnly ? (
+                <div className="empty">
+                  <h2>Pick an image from the strip</h2>
+                  <p>This is the public copy. Every catalogued image carries its brief, and you can ask about it below; nothing new can be uploaded or analysed here. Run Atlas locally for that.</p>
+                </div>
+              ) : selected == null ? (
                 <div className="empty">
                   <input
                     ref={dropInputRef}
@@ -281,6 +301,15 @@ export default function AnalyzeView({
                     </button>
                   </div>
 
+                  {missing && (
+                    <div className="analysis-wait is-error" role="alert">
+                      <div>
+                        <p>No image with that id</p>
+                        <span className="mono-xs">it may have been removed from the library</span>
+                      </div>
+                      <button className="btn" onClick={() => { setSelected(null); window.history.replaceState(null, "", "/analyze"); }}>Back to the studio</button>
+                    </div>
+                  )}
                   {analyzing && (
                     <div className="analysis-wait" role="status">
                       <span className="spin" />
@@ -290,7 +319,17 @@ export default function AnalyzeView({
                       </div>
                     </div>
                   )}
-                  {error && !analyzing && (
+                  {/* A refusal is an answer, not a failure: the read-only
+                      copy says so in a sentence and offers no Retry. */}
+                  {error && !analyzing && /read.?only/i.test(error) && (
+                    <div className="analysis-wait" role="status">
+                      <div>
+                        <p>This copy is read-only</p>
+                        <span className="mono-xs">{error}</span>
+                      </div>
+                    </div>
+                  )}
+                  {error && !analyzing && !/read.?only/i.test(error) && (
                     <div className="analysis-wait is-error" role="alert">
                       <div>
                         <p>Something failed</p>
@@ -322,16 +361,18 @@ export default function AnalyzeView({
                       className="graph-ci"
                       onSubmit={(e) => { e.preventDefault(); send(); }}
                     >
-                      <button
-                        type="button"
-                        className="graph-ci__icon"
-                        onClick={() => setShowUpload(true)}
-                        disabled={chatBusy}
-                        title="Upload another image"
-                        aria-label="Upload another image"
-                      >
-                        <IconPlus width={14} height={14} />
-                      </button>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          className="graph-ci__icon"
+                          onClick={() => setShowUpload(true)}
+                          disabled={chatBusy}
+                          title="Upload another image"
+                          aria-label="Upload another image"
+                        >
+                          <IconPlus width={14} height={14} />
+                        </button>
+                      )}
                       <textarea
                         ref={composerRef}
                         className="graph-ci__text"
@@ -356,7 +397,11 @@ export default function AnalyzeView({
                         <div className="analyze__cardhead">
                           <h2 className="insp-title">{detail?.ai_title}</h2>
                           <div className="topbar__spacer" />
-                          <button className="btn is-ghost" onClick={() => runAnalysis(selected)}>Re-analyze</button>
+                          {/* a re-analysis keeps the title: it is the name
+                              folders and exports refer to */}
+                          {!readOnly && (
+                            <button className="btn is-ghost" onClick={() => runAnalysis(selected)} title="Read the image again. The title stays.">Re-analyze</button>
+                          )}
                         </div>
                         <AnalysisBrief a={a} />
                       </>

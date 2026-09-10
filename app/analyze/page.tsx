@@ -1,5 +1,6 @@
 import "../library.css";
 import { listImages } from "@/lib/queries";
+import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
 import AnalyzeView from "@/components/AnalyzeView";
 
 export const dynamic = "force-dynamic";
@@ -17,5 +18,5 @@ export default async function AnalyzePage({
     w: r.width ?? 1,
     h: r.height ?? 1,
   }));
-  return <AnalyzeView initialPicker={picker} initialId={sp.id ? Number(sp.id) : null} />;
+  return <AnalyzeView initialPicker={picker} initialId={sp.id ? Number(sp.id) : null} readOnly={IS_HOSTED_READ_ONLY} />;
 }

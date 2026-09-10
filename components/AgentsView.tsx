@@ -28,8 +28,8 @@ type Archetype = {
 const ARCHETYPES: Archetype[] = [
   {
     key: "archivist", mode: "scan", name: "Archivist", autonomy: "proposes",
-    desc: "Names what a thing is. Tags new images against your existing vocabulary first and mints a new keyterm only when nothing fits; keeps meta tags, duplicates and the history honest.",
-    tools: ["tag_images", "mint_keyterm", "meta_tags", "dedupe", "timeline"],
+    desc: "Names what a thing is. Catalogues each image against the controlled vocabulary — work, carrier, period, materials and process, then subjects, style and mood — and never invents a keyterm: a word outside the vocabulary goes in the description, where search reads it. Keeps duplicates and the ledger honest.",
+    tools: ["catalogue", "quick_tag", "hand_tag", "scan_duplicates", "remove_duplicates", "history"],
     status: "live · analyze studio", budget: "vision · per image",
   },
   {

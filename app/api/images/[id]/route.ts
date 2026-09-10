@@ -3,6 +3,7 @@ import { recordEvent } from "@/lib/events";
 import path from "node:path";
 import { db, LIBRARY_DIR, THUMB_DIR } from "@/lib/db";
 import { getImage } from "@/lib/queries";
+import { canonical } from "@/lib/taxonomy";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -33,12 +34,26 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     conn.prepare("UPDATE images SET note = ? WHERE id = ?").run(body.note, id);
   }
   if (body.addTag?.trim()) {
-    const name = body.addTag.trim().toLowerCase();
-    const t = conn.prepare("INSERT INTO tags (name) VALUES (?) ON CONFLICT(name) DO UPDATE SET name=name RETURNING id").get(name) as { id: number };
+    /* A hand-typed keyterm goes through the same vocabulary as a model's:
+       "Poster" is the work value poster, and a work, carrier or period
+       REPLACES the one the image has -- typing poster onto a book cover
+       used to leave the image carrying both, measured. A word outside the
+       vocabulary is kept as the person's own tag (kind 'tag'). */
+    const raw = body.addTag.trim().toLowerCase();
+    const can = canonical(raw);
+    const name = can ? can.name : raw;
+    const kind = can ? can.kind : "tag";
+    if (["work", "carrier", "period"].includes(kind)) {
+      conn.prepare("DELETE FROM image_tags WHERE image_id = ? AND tag_id IN (SELECT id FROM tags WHERE kind = ?)").run(id, kind);
+    }
+    const t = conn.prepare("INSERT INTO tags (name, kind) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET name=name RETURNING id").get(name, kind) as { id: number };
     conn.prepare("INSERT OR IGNORE INTO image_tags (image_id, tag_id, source) VALUES (?,?,'manual')").run(id, t.id);
+    recordEvent("you", "tag", { name, kind, typed: raw !== name ? raw : undefined }, id);
   }
   if (body.removeTagId) {
+    const gone = conn.prepare("SELECT name, kind FROM tags WHERE id = ?").get(body.removeTagId) as { name: string; kind: string } | undefined;
     conn.prepare("DELETE FROM image_tags WHERE image_id = ? AND tag_id = ?").run(id, body.removeTagId);
+    if (gone) recordEvent("you", "untag", { name: gone.name, kind: gone.kind }, id);
   }
   return Response.json(getImage(id));
 }

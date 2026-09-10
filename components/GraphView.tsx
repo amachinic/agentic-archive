@@ -81,7 +81,9 @@ type ThreadItem =
   | { type: "head"; what: string; status: "running" | "done" }
   | { type: "proposal"; name: string; note: string; ids: number[]; exists?: boolean; status: "pending" | "accepted" | "rejected" | "superseded" }
   | { type: "ctas"; options: CtaOpt[]; picked: string | null }
-  | { type: "timeline" }
+  /* the durable ledger (events table) rides in with the block, read once
+     when History is asked for; the session list is rendered live */
+  | { type: "timeline"; archive?: LedgerRow[] }
   | { type: "outcome"; rows: OutRow[] }
   | { type: "skills" }
   /* what search_outside found: outside the library, so shown here in the
@@ -106,7 +108,45 @@ type Candidate = {
 };
 
 type CtaOpt = { key: string; label: string; sub?: string };
+type LedgerRow = { t: string; who: string; what: string };
 type Action = { kind: "cta"; key: string; label: string } | { kind: "prompt"; text: string };
+
+/* A ledger event, spoken. The table keeps agent · action · a small JSON of
+   detail; the panel wants one line a person can read: who, what, and the
+   two or three facts that make the row worth its place. */
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+function describeEvent(e: { at: number; agent: string; action: string; title: string | null; detail: Record<string, unknown> }): LedgerRow {
+  const d = new Date(e.at);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const hm = pad(d.getHours()) + ":" + pad(d.getMinutes());
+  const t = d.toDateString() === new Date().toDateString() ? hm : d.getDate() + " " + MONTHS[d.getMonth()] + " " + hm;
+  const v = (k: string) => { const x = e.detail[k]; return typeof x === "string" && x ? x : typeof x === "number" ? String(x) : null; };
+  const quoted = e.title ? " “" + e.title + "”" : "";
+  let what: string;
+  switch (e.action) {
+    case "analyze": what = "catalogued" + quoted + [v("work"), v("period")].filter(Boolean).map((s) => " · " + s).join(""); break;
+    case "quick-tag": what = "quick-tagged" + quoted; break;
+    case "handtag": what = "hand-tagged" + quoted; break;
+    case "reclassify": what = "reclassified" + quoted + " · " + v("from") + " → " + v("to"); break;
+    case "dedupe": what = "removed " + (v("removed") ?? "0") + " duplicate copies"; break;
+    case "probe": what = "probed “" + (v("q") ?? "") + "” · " + (v("found") ?? "0") + " found"; break;
+    case "file": what = "filed " + (v("filed") ?? v("images") ?? "") + " into “" + (v("collection") ?? "") + "”"; break;
+    case "accept": what = "accepted “" + (v("proposal") ?? "") + "”"; break;
+    case "ingest": what = "added " + (v("filename") ?? "an image"); break;
+    case "tag": what = "tagged" + quoted + " · " + (v("name") ?? "") + (v("kind") && v("kind") !== "tag" ? " (" + v("kind") + ")" : ""); break;
+    case "untag": what = "removed " + (v("name") ?? "a keyterm") + " from" + quoted; break;
+    case "delete": what = "deleted " + (v("rel_path") ?? "an image"); break;
+    case "folder-create": what = "created folder “" + (v("name") ?? "") + "”"; break;
+    case "folder-delete": what = "removed folder “" + (v("name") ?? "") + "”"; break;
+    case "connect": what = "connected " + (v("source") ?? ""); break;
+    case "disconnect": what = "disconnected " + (v("source") ?? ""); break;
+    default: {
+      const rest = ["checked", "kept", "moved", "ok", "drift", "missing", "count"].map((k) => (v(k) ? k + " " + v(k) : null)).filter(Boolean);
+      what = e.action.replace(/-/g, " ") + quoted + (rest.length ? " · " + rest.join(" · ") : "");
+    }
+  }
+  return { t, who: e.agent, what };
+}
 type Step = {
   thread: ThreadItem[];
   promptIds: number[] | null;
@@ -1937,9 +1977,15 @@ export default function GraphView({
 
     if (key === "tag") {
       try {
-        const d = await fetch("/api/list").then((r) => r.json());
-        const total = Number(d.total ?? 0);
-        const untagged = Math.max(0, total - raw.nodes.length);
+        /* Counted from the table, not from the field. The field carries
+           every image, tagged or not, so "total minus nodes" was zero with
+           an untagged upload sitting right there on the canvas -- measured. */
+        const [all, none] = await Promise.all([
+          fetch("/api/list?limit=1").then((r) => r.json()),
+          fetch("/api/list?analyzed=no&limit=1").then((r) => r.json()),
+        ]);
+        const total = Number(all.total ?? 0);
+        const untagged = Number(none.total ?? 0);
         if (untagged) {
           pushAtlas(untagged + " of " + total + " images are not on the field yet: no keyterms. Today the Archivist tags through the Analyze studio; the overnight pass is the next build. Want to go there?");
           pushCtas([{ key: "go-analyze", label: "Open the Analyze studio", sub: "archivist" }, { key: "home", label: "Not now" }]);
@@ -2241,7 +2287,17 @@ export default function GraphView({
     }
 
     if (key === "timeline") {
-      setThread((t) => [...t, { type: "timeline" }]);
+      /* the durable ledger first; the hosted copy has none and answers 403,
+         which leaves the session list on its own, as before */
+      let archive: LedgerRow[] | undefined;
+      try {
+        const r = await fetch("/api/events?limit=40");
+        if (r.ok) {
+          const d = await r.json() as { events: { at: number; agent: string; action: string; title: string | null; detail: Record<string, unknown> }[] };
+          archive = (d.events ?? []).map(describeEvent);
+        }
+      } catch { /* no ledger to read */ }
+      setThread((t) => [...t, { type: "timeline", archive }]);
       pushNext(["tag", "sort", "find", "save"]);
       return;
     }
@@ -3672,18 +3728,30 @@ export default function GraphView({
                         );
                       }
                       if (m.type === "timeline") {
+                        const row = (e: LedgerRow, j: number) => (
+                          <div key={j} className="agent-tl__row">
+                            <span className="agent-tl__t">{e.t}</span>
+                            <span className={"agent-tl__who" + (e.who === "you" ? " is-you" : "")}>{e.who}</span>
+                            <span className="agent-tl__what">{e.what}</span>
+                          </div>
+                        );
                         return (
                           <div key={i} className="agent-tl">
                             <span className="mono-label">History · this session</span>
                             {ledger.current.length === 0 ? (
                               <p className="agent-tl__empty">Nothing yet. Every hunt, sort, proposal and decision from this session collects here.</p>
-                            ) : ledger.current.map((e, j) => (
-                              <div key={j} className="agent-tl__row">
-                                <span className="agent-tl__t">{e.t}</span>
-                                <span className={"agent-tl__who" + (e.who === "you" ? " is-you" : "")}>{e.who}</span>
-                                <span className="agent-tl__what">{e.what}</span>
-                              </div>
-                            ))}
+                            ) : ledger.current.map(row)}
+                            {/* the archive's own ledger, newest first: what
+                                every agent and the human did, kept across
+                                sessions. Absent on the hosted copy. */}
+                            {m.archive && (
+                              <>
+                                <span className="mono-label" style={{ marginTop: 6 }}>History · this archive</span>
+                                {m.archive.length === 0
+                                  ? <p className="agent-tl__empty">The ledger is empty.</p>
+                                  : m.archive.map(row)}
+                              </>
+                            )}
                           </div>
                         );
                       }

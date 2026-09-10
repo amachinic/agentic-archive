@@ -16,7 +16,14 @@ export async function POST(req: Request) {
   if (file.size > 80 * 1024 * 1024) return Response.json({ error: "file too large" }, { status: 400 });
 
   const buf = Buffer.from(await file.arrayBuffer());
-  const tmp = path.join(os.tmpdir(), "atlas-upload-" + Date.now() + "-" + file.name.replace(/[^\w.\-]+/g, "_"));
+  /* The ingest names the library copy after the file it is handed, so the
+     staging copy has to carry the ORIGINAL name: a per-upload temp folder
+     holds it, rather than a temp filename. Before this every upload was
+     filed as "atlas-upload-1789017034633-name.jpg" and wore that as its
+     title until something catalogued it. */
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "atlas-upload-"));
+  const safeName = path.basename(file.name).replace(/[^\w.\- ]+/g, "_") || "upload.jpg";
+  const tmp = path.join(dir, safeName);
   await fsp.writeFile(tmp, buf);
   try {
     const collectionId = ensureCollection("Uploads");
@@ -31,6 +38,6 @@ export async function POST(req: Request) {
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : "ingest failed" }, { status: 500 });
   } finally {
-    fsp.unlink(tmp).catch(() => {});
+    fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }

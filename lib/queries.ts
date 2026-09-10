@@ -50,6 +50,8 @@ export type LibraryFilter = {
   tag?: string;
   q?: string;
   flagged?: "keep" | "reject" | "unsorted";
+  /* "no": the images nothing has catalogued yet -- the Archivist's worklist */
+  analyzed?: "yes" | "no";
   sort?: "newest" | "oldest" | "luma" | "chroma" | "rating";
   limit?: number;
   offset?: number;
@@ -92,6 +94,8 @@ export function listImages(f: LibraryFilter = {}): { rows: ImageRow[]; total: nu
   if (f.flagged === "keep") where.push("flagged = 1");
   if (f.flagged === "reject") where.push("flagged = -1");
   if (f.flagged === "unsorted") where.push("flagged = 0");
+  if (f.analyzed === "no") where.push("ai_at IS NULL");
+  if (f.analyzed === "yes") where.push("ai_at IS NOT NULL");
 
   const whereSql = where.length ? " WHERE " + where.join(" AND ") : "";
   const order =

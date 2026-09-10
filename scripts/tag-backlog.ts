@@ -32,13 +32,21 @@ async function main() {
   console.log("Pace ~3/min (TPM cap) -> ETA ~" + Math.round(backlog / 3) + " min. Resumable; Ctrl+C any time.\n");
 
   const started = Date.now();
-  let processed = 0, failed = 0;
+  let processed = 0;
+  const failed: number[] = [];
+  /* A failed image is SKIPPED for this run, not stamped as done. The old
+     placeholder set ai_at on failure, so the hand-tag loop counted it as
+     tagged and never offered it again -- "925 tagged, 0 to go" with a
+     broken image in the library, measured. The cursor walks past it; it
+     stays in the backlog for the next run, or for handtag. */
+  let cursor = 0;
 
   for (;;) {
     const next = conn.prepare(
-      "SELECT id, filename FROM images WHERE ai_at IS NULL ORDER BY id LIMIT 1"
-    ).get() as { id: number; filename: string } | undefined;
+      "SELECT id, filename FROM images WHERE ai_at IS NULL AND id > ? ORDER BY id LIMIT 1"
+    ).get(cursor) as { id: number; filename: string } | undefined;
     if (!next) break;
+    cursor = next.id;
 
     const t0 = Date.now();
     try {
@@ -63,22 +71,24 @@ async function main() {
         waitMs = Math.max(60_000, Math.min(waitMs, 3 * 3600_000));
         console.log("[quota] daily window full (" + (total - done) + " images left). Waiting " +
           Math.ceil(waitMs / 60000) + " min for the rolling window to free tokens, then continuing...");
+        cursor = next.id - 1; // the same image, once the window opens
         await sleep(waitMs);
         continue;
       }
-      failed++;
+      failed.push(next.id);
       console.log("[skip] #" + next.id + " " + next.filename.slice(0, 30) + " failed: " + msg.slice(0, 90));
-      // mark a placeholder so a broken image cannot wedge the loop; clear
-      // ai_title stays null-ish so a re-run script pass could retry later
-      conn.prepare("UPDATE images SET ai_at = ? , ai_model = 'quick-failed' WHERE id = ?").run(Date.now(), next.id);
-      if (failed > 25) { console.log("Too many consecutive failures; stopping."); return; }
+      /* the note says why; ai_at stays NULL so the image stays in the backlog */
+      conn.prepare("UPDATE images SET ai_model = ? WHERE id = ?").run("quick-failed: " + msg.slice(0, 80), next.id);
+      if (failed.length > 25) { console.log("Too many failures; stopping."); break; }
+      void VisionError;
     }
 
     const spent = Date.now() - t0;
     if (spent < PACE_MS) await sleep(PACE_MS - spent);
   }
 
-  console.log("\nBacklog complete: " + done + "/" + total + " analyzed (" + failed + " failed).");
+  console.log("\nBacklog pass complete: " + done + "/" + total + " analyzed" +
+    (failed.length ? " · " + failed.length + " still in the backlog after failing: " + failed.join(",") : "") + ".");
 }
 
 main().catch((e) => { console.error("tag-backlog crashed:", e); process.exit(1); });
