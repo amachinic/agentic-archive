@@ -656,7 +656,7 @@ export async function chatAboutImage(imageId: number, history: ChatMsg[]): Promi
 
 export type PromptTerms = { terms: string[]; words: string[]; reply: string };
 
-const PROMPT_SYSTEM_HEAD = `You are the search brain of a personal image archive. The user describes imagery they are hunting for: an idea, a mood, a dream, an aesthetic. Translate the LATEST request (interpreting the conversation cumulatively; follow-ups refine earlier asks) into search terms.
+const PROMPT_SYSTEM_HEAD = `You are the search brain of a personal image archive. The user describes imagery they are searching for: an idea, a mood, a dream, an aesthetic. Translate the LATEST request (interpreting the conversation cumulatively; follow-ups refine earlier asks) into search terms.
 
 The archive's existing keyterm vocabulary is:
 `;
@@ -667,7 +667,7 @@ Answer with ONLY a JSON object:
 {
   "terms": ["up to 10 keyterms picked ONLY from the vocabulary above, closest in spirit to the request"],
   "words": ["up to 8 additional lowercase words or short fragments likely to appear in image titles or descriptions matching the request"],
-  "reply": "one short sentence, spoken to the user, describing what you are hunting for on their behalf"
+  "reply": "one short sentence, spoken to the user, describing what you are searching for on their behalf"
 }`;
 
 /** Free-text prompt -> archive search terms, via a text-only pass. */

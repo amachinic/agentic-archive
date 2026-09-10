@@ -28,7 +28,7 @@ export type Convo<T> = {
 
 const KEY = "atlas-conversations";
 const CAP = 50;
-/* localStorage holds about 5MB per origin; the thumbnails of an outside hunt
+/* localStorage holds about 5MB per origin; the thumbnails of an outside search
    are URLs, but a thousand of them add up, so the whole store stays under
    this and the oldest conversations pay when it does not */
 const BYTES = 3_500_000;

@@ -3,7 +3,7 @@
 /*
   One agent, four lenses. Atlas is the only mind; the archetypes below are
   capability namespaces it reasons through — the Archivist names things, the
-  Curator decides what belongs together, the Historian hunts beyond the
+  Curator decides what belongs together, the Historian searches beyond the
   archive, the Media Manager files and ships. Hand-off between them is shared
   data (vocabulary, palettes, fingerprints), never messages you can't see.
   Autonomy is a SETTING per archetype.
@@ -40,7 +40,7 @@ const ARCHETYPES: Archetype[] = [
   },
   {
     key: "historian", mode: "seek", name: "Historian", autonomy: "read-only",
-    desc: "Hunts beyond the archive. Plans a search the way art history files a mood — synonyms, iconography, movements and named artists — sweeps the connected sources' own catalogues, and reads the licence on everything that comes back. Candidates open at their source; nothing enters the library.",
+    desc: "Searches beyond the archive. Plans a search the way art history files a mood — synonyms, iconography, movements and named artists — sweeps the connected sources' own catalogues, and reads the licence on everything that comes back. Candidates open at their source; nothing enters the library.",
     tools: ["search_outside", "plan_probes", "medium_facet", "read_licence"],
     status: "live · via Connections", budget: "per probe · sources' APIs",
   },

@@ -1,10 +1,10 @@
 /*
-  What the outside hunt PROMISES, checked against a real model.
+  What the outside search PROMISES, checked against a real model.
 
   Run scripts/model-bridge.mjs first and point the dev server at it; then this
   drives three ordinary turns and asserts the manners, not the plumbing:
 
-    · a hunt with no number is a PREVIEW that ends — a few probes in different
+    · a search with no number is a PREVIEW that ends — a few probes in different
       registers, then stop, rather than grinding toward a quota
     · the reply quotes the REAL population, so the human knows a preview is a
       preview and not the whole well
@@ -47,7 +47,7 @@ async function turn(text, filters = []) {
   return { d, calls, tools, reply: String(d.reply ?? "") };
 }
 
-console.log("═══ TURN 1 — an open hunt, no number named");
+console.log("═══ TURN 1 — an open search, no number named");
 const t1 = await turn("Find me sad images from the outside sources.");
 console.log(`   probes: ${t1.calls.map((c) => JSON.stringify(c.args)).join("  ")}`);
 console.log(`   strip: ${strip.length}`);

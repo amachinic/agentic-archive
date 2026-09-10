@@ -190,9 +190,9 @@ const TOOLS = [
   },
 ];
 
-/* Three ceilings, because a hunt has three moods.
+/* Three ceilings, because a search has three moods.
 
-   A PREVIEW is a look: enough to judge whether the hunt is pointed the right
+   A PREVIEW is a look: enough to judge whether the search is pointed the right
    way, small enough to read without scrolling. A PULL is a decision already
    made — the human has seen the preview and wants the material — so it moves
    a real chunk, bounded by what the slowest source can actually deliver
@@ -206,11 +206,11 @@ const CANDIDATE_CAP = 40;
 const PULL_CHUNK = 120;
 const STRIP_MAX = 1000;
 /* Per PROBE. The old shape was a flat 4 per source — a QUOTA, which assumed
-   the sources yield evenly. They do not, and the miss was not close: a hunt
+   the sources yield evenly. They do not, and the miss was not close: a search
    for a mood draws almost nothing from the Met's catalogue text while Are.na
    holds it by the thousand ("sad": ~1,600 across its matched channels,
    measured). The even split starved exactly the source that answers, and a
-   three-probe hunt could not clear a dozen before overlap — the session
+   three-probe search could not clear a dozen before overlap — the session
    that provoked this landed on eight.
 
    So the target is per PROBE, not per source: every source may bring up to
@@ -224,7 +224,7 @@ const OUTSIDE_SINGLE_LIMIT = 12;
    the slowest source will serve without refusing */
 const OUTSIDE_PULL_LIMIT = 24;
 
-/* What past hunts already learned, folded into the Historian's briefing.
+/* What past searches already learned, folded into the Historian's briefing.
    The ledger is written at every probe (recordEvent below); this is the
    re-reading — the agent starts from its own record instead of
    rediscovering the same dead words every session. Empty in the read-only
@@ -238,11 +238,11 @@ function probeLedgerBrief(): string {
   const dry = mem.dry.length
     ? " Probes that came back EMPTY twice or more: " + mem.dry.join(", ") + " — do not lead with these."
     : "";
-  return "\n- Your own record from past hunts: " + rich + dry +
+  return "\n- Your own record from past searches: " + rich + dry +
     " Reuse the registers that worked; spend the probes the record has not tried.";
 }
 
-/* the agent picks filter terms from THIS list; guessing was how a hunt for
+/* the agent picks filter terms from THIS list; guessing was how a search for
    "deep rich colours" zeroed its own working set four times in a row */
 let vocabCache: { text: string; at: number } | null = null;
 function vocabulary(): string {
@@ -332,7 +332,7 @@ export async function POST(req: Request) {
       messages?: ChatMsg[]; field?: number[]; historian?: boolean; mute?: string[];
       /* every archetype switch, so a lens the human turned off cannot act */
       agents?: Record<string, boolean>;
-      /* the hunt's odometer, echoed back by the client between turns:
+      /* the search's odometer, echoed back by the client between turns:
          query → source → how many that source has already delivered for it.
          This is what lets "pull 40 more" continue where delivery stopped
          instead of re-reading page one — the client holds it because the
@@ -781,10 +781,10 @@ export async function POST(req: Request) {
         /* Does this turn ADD to the table or REPLACE it? The client merges
            only what is marked pulled, so everything downstream — the dedupe
            seed and the count quoted to the human — has to ask the same
-           question. A new hunt inherits neither: its tiles are about to be
+           question. A new search inherits neither: its tiles are about to be
            swept away, so counting them makes the agent say 55 at a table
            showing 19 (measured), and skipping them would under-deliver a
-           fresh hunt to avoid repeating material nobody will see again. */
+           fresh search to avoid repeating material nobody will see again. */
         const pulledTurn = isMore || out.candidates?.pulled === true;
         const seen = new Set([
           ...(pulledTurn ? stripKeys : []),
@@ -841,7 +841,7 @@ export async function POST(req: Request) {
         const totalMatched = Object.values(matched).reduce((a, b) => a + b, 0);
         probeLog.push({ q, found: results.length, added });
         /* the diary: what this probe asked and what it yielded, durable, so
-           the NEXT session's hunt can start from what this one learned */
+           the NEXT session's search can start from what this one learned */
         recordEvent("historian", "probe", {
           q, sources: searched.length, found: results.length, added,
           matched: totalMatched || null,
@@ -880,7 +880,7 @@ export async function POST(req: Request) {
         const handBackTail =
           "reply. Say plainly what is on the light table and " +
           (totalMatched ? "about how much exists behind it" : "that the sources do not report a total") +
-          ", then offer the choice in ONE short sentence: refine the hunt, pull more, or leave it as it is. " +
+          ", then offer the choice in ONE short sentence: refine the search, pull more, or leave it as it is. " +
           "Offer — do not push, do not ask twice, do not list steps. If they say nothing more, the preview stands on its own.";
         const handBack = "STOP probing and " + handBackTail;
         /* the table as the HUMAN sees it: this turn's take on top of what was
@@ -934,7 +934,7 @@ export async function POST(req: Request) {
              a full strip cannot take more however little this request got */
           can_pull_more: !allDry && (remaining > 0 || totalMatched === 0) && onTable < STRIP_MAX,
           next,
-          note: "candidates appear to the human on the light table beside the conversation. They are NOT in the library and NOT on the canvas. found is only the bounded preview; matched_at_sources is what actually exists — when it dwarfs found, SAY SO (e.g. \"showing 16 of ~3,400 at the Met\") so the human knows the hunt only skimmed the surface. To pull the next chunk, call this tool again with the SAME query and more:true — never re-run a query without more:true expecting different results.",
+          note: "candidates appear to the human on the light table beside the conversation. They are NOT in the library and NOT on the canvas. found is only the bounded preview; matched_at_sources is what actually exists — when it dwarfs found, SAY SO (e.g. \"showing 16 of ~3,400 at the Met\") so the human knows the search only skimmed the surface. To pull the next chunk, call this tool again with the SAME query and more:true — never re-run a query without more:true expecting different results.",
         });
       }
       default:
@@ -967,17 +967,17 @@ export async function POST(req: Request) {
     ? "\n\nsearch_outside is the HISTORIAN lens: it reaches these connected sources: " + outsideSources.join(", ") +
       ". Use it ONLY when the human asks for images beyond the library — new material, museums, 'find more like this from outside'. " +
       "The library always comes first for anything it can answer. Candidates are not in the library: never file, sort or count them as if they were." +
-      "\n- Outside hunts for a MOOD or THEME are a plan of 3 to 5 DIFFERENT probes, because catalogues only match their own words. Probe the synonyms, the iconography (vanitas, lamentation, elegy), and the movements and artists art history files under that mood — a hunt for melancholy that never probes Munch, the Symbolists or Picasso's blue period has only searched the word, not the subject." +
+      "\n- Outside searches for a MOOD or THEME are a plan of 3 to 5 DIFFERENT probes, because catalogues only match their own words. Probe the synonyms, the iconography (vanitas, lamentation, elegy), and the movements and artists art history files under that mood — a search for melancholy that never probes Munch, the Symbolists or Picasso's blue period has only searched the word, not the subject." +
       "\n- One probe sweeps every source at once. Never issue the same query twice, and never once-per-source." +
       "\n- When the human names a kind of work (paintings, prints, photographs), set medium on every probe." +
       "\n- When the human asks to PULL from, SEE, or SHOW the outside sources, SEARCH — immediately, with the conversation's current theme if they named none. Never describe what a search could do instead of running one." +
       "\n- Probes are catalogue queries, not sentences: two or three words each. Fold a refinement's tones and colours into SEPARATE short probes ('dark melancholy', 'blue grief'), never one long string — a compound string matches nothing anywhere." +
-      "\n- Are.na's wealth for a mood is its CHANNELS — human-curated collections someone already spent an evening filling ('sad' surfaces channels holding ~1,600 blocks). A probe walks the matched channels for you; probe with the short evocative words a person would NAME a channel (sad, melancholy, grief, longing, blue), not catalogue phrases. matched_at_sources now reports Are.na's real population — when it dwarfs found, the hunt has only skimmed and should probe again." +
+      "\n- Are.na's wealth for a mood is its CHANNELS — human-curated collections someone already spent an evening filling ('sad' surfaces channels holding ~1,600 blocks). A probe walks the matched channels for you; probe with the short evocative words a person would NAME a channel (sad, melancholy, grief, longing, blue), not catalogue phrases. matched_at_sources now reports Are.na's real population — when it dwarfs found, the search has only skimmed and should probe again." +
       "\n- A zero-result probe is information — loosen the words and try once more before concluding a source holds nothing." +
-      "\n- When the human names ONE source (are.na, the Met), set source on every probe so the hunt goes only there — never sweep everything and report a subset." +
+      "\n- When the human names ONE source (are.na, the Met), set source on every probe so the search goes only there — never sweep everything and report a subset." +
       "\n- When the human names a NUMBER of images, set count to it on every probe and keep probing with DIFFERENT words until gathered_this_turn approaches it or the probes run dry. Never refuse a number; gather toward it." +
-      "\n- A hunt with no number is a PREVIEW, not a delivery. Two or three probes, then STOP and hand back: say what is on the light table, about how much exists behind it, and offer in ONE sentence to refine, pull more, or leave it. The preview is already there when you ask — so ask once, lightly, and never re-ask. If they say nothing about it, the preview was the answer." +
-      "\n- \"More\", \"keep going\", \"pull the rest\", \"all of them\" = the SAME query again with more:true. That continues past everything already delivered; it never re-reads what they have seen. Never answer a request for more by inventing new words — that is a different hunt, and it loses their place." +
+      "\n- A search with no number is a PREVIEW, not a delivery. Two or three probes, then STOP and hand back: say what is on the light table, about how much exists behind it, and offer in ONE sentence to refine, pull more, or leave it. The preview is already there when you ask — so ask once, lightly, and never re-ask. If they say nothing about it, the preview was the answer." +
+      "\n- \"More\", \"keep going\", \"pull the rest\", \"all of them\" = the SAME query again with more:true. That continues past everything already delivered; it never re-reads what they have seen. Never answer a request for more by inventing new words — that is a different search, and it loses their place." +
       "\n- When a refinement lands, check it against what they asked for before pulling deeper: if the narrowed preview drifted off what they meant, say so and offer the previous wording back. A refinement that missed is a normal event, not a failure — going back one step must always be on the table, and must cost them one sentence." +
       "\n- Never pull a large chunk unasked, and never make them ask twice. can_pull_more in the tool result says whether material remains; sources_out_of_material says who is finished. When everything is dry, say so and suggest a different angle rather than offering another pull." +
       "\n- A probe's query must NEVER be empty. If the human named no subject, probe the conversation's standing theme; with none at all, probe broad catalogue staples (portrait, landscape, still life) — never blanks or filler." +
@@ -1043,7 +1043,7 @@ export async function POST(req: Request) {
   const tools = TOOLS.filter((t) => {
     const owner = OWNER[t.function.name];
     if (owner && agentsOff.has(owner)) return false;
-    /* see above: with the field-forming lens off, an outside hunt is only on
+    /* see above: with the field-forming lens off, an outside search is only on
        the table when the human asked for one */
     if (t.function.name === "search_outside" && agentsOff.has("curator") && !askedOutside) return false;
     if (t.function.name === "propose_folder") return !IS_HOSTED_READ_ONLY;
@@ -1142,7 +1142,7 @@ export async function POST(req: Request) {
            existed, which made release_field a silent no-op on Anthropic */
         release: out.release,
         candidates: out.candidates,
-        /* the hunt odometer, handed back for the client to echo next turn —
+        /* the search odometer, handed back for the client to echo next turn —
            the only reason a pull can continue across turns at all */
         continuation: consumed,
       });

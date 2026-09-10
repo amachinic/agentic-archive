@@ -90,16 +90,16 @@ type ThreadItem =
   /* what search_outside found: outside the library, so shown here in the
      conversation rather than on the canvas, which draws by image id */
   | { type: "candidates"; query: string; items: Candidate[]; totals?: Record<string, number> }
-  /* the follow-up surface after an outside hunt: checkable narrows, a
+  /* the follow-up surface after an outside search: checkable narrows, a
      source to go deeper into, and a line of the human's own words — all
-     layered into ONE refined hunt. sent: null = live, a string = the
+     layered into ONE refined search. sent: null = live, a string = the
      refinement that went, "-" = passed over by a newer prompt. */
   | { type: "refine"; base: string; sources: { id: string; total: number | null }[]; sent: string | null;
       /* what the strip holds and roughly what is still out there, so the
          fork can state the stakes instead of asking blind */
       held?: number; remaining?: number | null;
       /* the wording this refinement narrowed FROM — the one step back, so a
-         refinement that missed costs one click rather than a retyped hunt */
+         refinement that missed costs one click rather than a retyped search */
       prev?: string | null };
 
 type Candidate = {
@@ -160,7 +160,7 @@ type OutRow = { icon: "folder" | "foldercheck" | "drive" | "check"; text: string
    contextual triggers — routes into the same keyed actions, so the doors
    can never drift apart */
 const COMMANDS = [
-  { cmd: "/find", key: "find", label: "Find something", hint: "hunt the library, re-form the field", arch: "curator" },
+  { cmd: "/find", key: "find", label: "Find something", hint: "search the library, re-form the field", arch: "curator" },
   { cmd: "/sort", key: "sort", label: "Sort the canvas", hint: "re-order the spiral by colour or light", arch: "curator" },
   { cmd: "/tag", key: "tag", label: "Tag my new images", hint: "keyterms for the un-analyzed", arch: "archivist" },
   { cmd: "/save", key: "save", label: "Save a folder", hint: "keep digital, mirror to disk, or both", arch: "media manager" },
@@ -172,7 +172,7 @@ const COMMANDS = [
    ArchetypePix verb while running, pixel check once done — and the raw
    tool(args) form survives on hover and in the ledger. */
 const TOOL_META: Record<string, { who: string; mode: PixMode; task: string }> = {
-  search_library: { who: "curator", mode: "forms", task: "hunting the library" },
+  search_library: { who: "curator", mode: "forms", task: "searching the library" },
   filter_by_terms: { who: "curator", mode: "forms", task: "narrowing by keyterms" },
   expand_similar: { who: "curator", mode: "forms", task: "widening to what resembles it" },
   show_field: { who: "curator", mode: "forms", task: "re-forming the field" },
@@ -415,7 +415,7 @@ function sortKey(n: { hex: string; tags: string[] }, mode: FieldSortMode): numbe
   return TAXONOMY.work.length * 10 + L * 9;
 }
 
-/* a folder name from the hunt that built the set: strip filler, title-case */
+/* a folder name from the search that built the set: strip filler, title-case */
 function folderNameFrom(q: string): string {
   const stop = new Set(["find", "show", "me", "images", "image", "of", "the", "a", "an", "some", "with", "that", "pull", "up", "give"]);
   const words = q.toLowerCase().replace(/[^a-z0-9\s-]/g, "").split(/\s+/).filter((w) => w && !stop.has(w)).slice(0, 3);
@@ -429,11 +429,11 @@ function folderNameFrom(q: string): string {
    repeated beneath every button; a sub that says something else still shows */
 const ARCH_NAMES = new Set(["archivist", "curator", "media manager", "atlas"]);
 
-/* ---- the refine surface: an outside hunt's follow-up --------------------
+/* ---- the refine surface: an outside search's follow-up --------------------
    Checkable narrows (tones + a medium), a source to go deeper into — shown
    with the population it reported, so "go deeper" is a navigable fact — and
    a free line for the human's own words. Everything checked layers into ONE
-   sentence that goes back through the agent as the next hunt. */
+   sentence that goes back through the agent as the next search. */
 /* every narrow group is MULTI-select — tones, colours and mediums layer
    freely ("dark + blue + paintings + prints"). Only the source stays
    single: going deeper means going deeper into ONE place. */
@@ -453,12 +453,12 @@ const STRIP_MAX = 1000;
 type LightTable = { query: string; items: Candidate[]; totals?: Record<string, number> };
 
 /*
-  A PULL adds to the strip; a new hunt replaces it.
+  A PULL adds to the strip; a new search replaces it.
 
   The server marks a continuation turn with pulled=true, because only it
   knows whether the model asked to continue or started again. Merging on
   anything softer — a query string that looks similar, a source in common —
-  would eventually append one hunt onto an unrelated one, and the human
+  would eventually append one search onto an unrelated one, and the human
   would be scrolling someone else's search.
 */
 function mergeCandidates(
@@ -499,7 +499,7 @@ function RefineBlock({ item, busy, onGo }: {
 
   const compose = () => {
     const narrow = [...tones, ...colours, ...mediums.map((mm) => mm + "s")];
-    let s = "Refine the outside hunt for " + item.base;
+    let s = "Refine the outside search for " + item.base;
     if (narrow.length) s += ": narrow to " + narrow.join(", ");
     if (custom.trim()) s += (narrow.length ? " — " : ": ") + custom.trim();
     if (source) s += ". Search only " + (SOURCE_NAME[source] ?? source) + ".";
@@ -511,7 +511,7 @@ function RefineBlock({ item, busy, onGo }: {
     /* The refinement that went, kept as the block's receipt — and, while the
        wording it narrowed FROM is still known, a way back out of it. A
        refinement that misses is an ordinary event: it should cost one click
-       to undo, not a retyped hunt, and it should not need admitting to. */
+       to undo, not a retyped search, and it should not need admitting to. */
     return (
       <div className="agent-refine is-spent">
         <span className="mono-label">refined</span>
@@ -520,7 +520,7 @@ function RefineBlock({ item, busy, onGo }: {
           <button
             className="agent-refine__back"
             disabled={busy}
-            onClick={() => onGo("That narrowed it the wrong way. Go back to the hunt for " + item.prev + " as it was, and keep what it found.")}
+            onClick={() => onGo("That narrowed it the wrong way. Go back to the search for " + item.prev + " as it was, and keep what it found.")}
           >
             not what I meant — go back
           </button>
@@ -532,7 +532,7 @@ function RefineBlock({ item, busy, onGo }: {
   return (
     <div className={"agent-refine" + (item.sent === "-" ? " is-passed" : "")}>
       <div className="agent-refine__head">
-        <span className="mono-label">Refine the hunt</span>
+        <span className="mono-label">Refine the search</span>
         {/* The stakes, stated once. Without this the fork asks the human to
             choose between narrowing and pulling with no idea how much is
             behind either — which is how "we only found 8" happened. */}
@@ -606,7 +606,7 @@ function RefineBlock({ item, busy, onGo }: {
         </button>
       </div>
       {/* The other half of the fork, and the reason this block is not a
-          questionnaire: the hunt as it stands is already an answer. Pull it
+          questionnaire: the search as it stands is already an answer. Pull it
           without narrowing anything, and leaving it alone is simply not
           pressing either — no dismissal, no "are you sure", no third step. */}
       {(remaining === null || remaining > 0) && (
@@ -617,7 +617,7 @@ function RefineBlock({ item, busy, onGo }: {
             onClick={() => onGo(
               chosen
                 ? compose() + " Pull the next chunk of that, do not just preview it."
-                : "Pull the next chunk for " + item.base + " — more of the same hunt, no narrowing.",
+                : "Pull the next chunk for " + item.base + " — more of the same search, no narrowing.",
             )}
           >
             {chosen ? "narrow, then pull more" : "pull more of these"}
@@ -708,7 +708,7 @@ export default function GraphView({
      the moment the historian's row starts playing — and holds the images;
      the thread keeps only a one-line trace that can reopen it. */
   const [lightTable, setLightTable] = useState<{ query: string; items: Candidate[]; totals?: Record<string, number> } | null>(null);
-  /* The hunt's odometer, held here because the server holds nothing between
+  /* The search's odometer, held here because the server holds nothing between
      requests: query → source → how many that source has already handed over.
      Echoed back on every turn, which is the whole reason "pull more" can
      continue where the last pull stopped instead of re-reading page one. A
@@ -2030,7 +2030,7 @@ export default function GraphView({
     if (!atlasEnabled()) { pushAtlas("Atlas is switched off. Turn it on under Agents in the sidebar and I can act again."); return; }
 
     if (key === "find") {
-      pushAtlas("Describe it: a mood, a subject, a line of text, an artist. I hunt with the library's own tools and re-form the field around what holds. You can also hand me an image with +.");
+      pushAtlas("Describe it: a mood, a subject, a line of text, an artist. I search with the library's own tools and re-form the field around what holds. You can also hand me an image with +.");
       composerRef.current?.focus();
       return;
     }
@@ -2335,7 +2335,7 @@ export default function GraphView({
       const ids = fieldIds();
       if (!ids.length) { pushAtlas("Nothing is on the field to file right now."); return; }
       const name = folderNameFrom(lastQueryRef.current);
-      setThread((t) => [...t, { type: "proposal", name, note: "Named after your hunt.", ids, status: "pending" }]);
+      setThread((t) => [...t, { type: "proposal", name, note: "Named after your search.", ids, status: "pending" }]);
       logLedger("curator", "proposed “" + name + "” · " + ids.length + " images");
       return;
     }
@@ -2452,9 +2452,9 @@ export default function GraphView({
       closeHead("replied");
       setThread((it) => [...it, { type: "msg", role: "assistant", content: d.reply }]);
       if (d.candidates && Array.isArray(d.candidates.items) && d.candidates.items.length) {
-        /* an outside hunt's follow-up is a REFINE surface, not generic
+        /* an outside search's follow-up is a REFINE surface, not generic
            chips: narrows to check, a source to go deeper into, and the
-           human's own words — layered into the next hunt */
+           human's own words — layered into the next search */
         const srcs = [...new Set((d.candidates.items as Candidate[]).map((c) => c.source))];
         const totals: Record<string, number> = d.candidates.totals ?? {};
         /* what the strip now holds against what the sources say exists, less
@@ -3732,8 +3732,8 @@ export default function GraphView({
                             <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                           ) : (
                             <p className="agent-home__say">{readOnly
-                              ? "One agent, four lenses. Ask me to hunt through the archive, filter it by keyterm, sort what is showing into a grid, or search the connected museums for what the archive does not hold. This is the public copy, so I can look but not write: tagging and filing need the local build."
-                              : "One agent, four lenses. Find or filter to narrow the field, sort what is showing, hunt the connected museums, save what is worth keeping. Type “/” for every command, or just ask."}</p>
+                              ? "One agent, four lenses. Ask me to search the archive, filter it by keyterm, sort what is showing into a grid, or look through the connected museums for what the archive does not hold. This is the public copy, so I can look but not write: tagging and filing need the local build."
+                              : "One agent, four lenses. Find or filter to narrow the field, sort what is showing, search the connected museums, save what is worth keeping. Type “/” for every command, or just ask."}</p>
                           )}
                         </div>
                         {boot >= 2 && (
@@ -3850,7 +3850,7 @@ export default function GraphView({
                           <div key={i} className="agent-tl">
                             <span className="mono-label">Ledger · this session</span>
                             {ledger.current.length === 0 ? (
-                              <p className="agent-tl__empty">Nothing yet. Every hunt, sort, proposal and decision from this session collects here.</p>
+                              <p className="agent-tl__empty">Nothing yet. Every search, sort, proposal and decision from this session collects here.</p>
                             ) : ledger.current.map(row)}
                             {/* the archive's own ledger, newest first: what
                                 every agent and the human did, kept across
@@ -4011,7 +4011,7 @@ export default function GraphView({
                            403 is worse than one that says so before you type. */
                         placeholder={readOnly
                           ? "Ask me to find something. Filing needs the local build."
-                          : "Describe what you are hunting for..."}
+                          : "Describe what you are searching for..."}
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendPrompt(); } }}

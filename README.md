@@ -31,7 +31,7 @@ flowchart LR
     Human[Human direction] --> Atlas[Atlas orchestrator]
     Atlas --> Archivist[Archivist<br/>names and describes]
     Atlas --> Curator[Curator<br/>finds and arranges]
-    Atlas --> Historian[Historian<br/>hunts beyond the archive]
+    Atlas --> Historian[Historian<br/>searches beyond the archive]
     Atlas --> Manager[Media Manager<br/>files and exports]
     Archivist --> Data[(Shared vocabulary,<br/>palettes and fingerprints)]
     Curator --> Data
@@ -47,7 +47,7 @@ flowchart LR
 |---|---|---|---|
 | **Archivist** | Names what an image is | controlled keyterms, searchable descriptions, creator attribution, duplicate checks, history | Proposes |
 | **Curator** | Decides what belongs together | find, filter, expand similar, sort the canvas, build working sets and collections | Acts on the canvas |
-| **Historian** | Hunts beyond the archive | plans probes the way art history files a mood (synonyms, iconography, movements, named artists), sweeps connected sources, facets by medium, reads licences | Read-only |
+| **Historian** | Searches beyond the archive | plans probes the way art history files a mood (synonyms, iconography, movements, named artists), sweeps connected sources, facets by medium, reads licences | Read-only |
 | **Media Manager** | Puts images where they live | create or append collections, keep sets in Atlas, export copies to disk | Proposes |
 
 The Curator may change what is visible without changing the archive. The Historian may only look: its candidates open at their source and enter the library through no door but your accept. Folder and library changes are committed only after human acceptance.
