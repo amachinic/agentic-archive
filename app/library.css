@@ -1834,7 +1834,6 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 }
 .agent-refine__more:hover { color: var(--text-primary); border-color: var(--text-primary); }
 .agent-refine__more:disabled { opacity: 0.4; cursor: default; }
-.agent-refine__hint { color: var(--text-muted); text-transform: none; letter-spacing: 0.02em; }
 
 /* one step back out of a refinement that missed — a plain link, because
    undoing should read as ordinary rather than as an admission */
