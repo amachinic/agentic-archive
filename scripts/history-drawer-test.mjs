@@ -55,6 +55,10 @@ ok("New is offered, Clear is not", (await page.locator(".chathead button:has-tex
 await page.click(".histpill"); await page.waitForTimeout(500);
 ok("the list holds the open chat, with the dot", (await rows().count()) === 1 && (await page.locator(".chat-hist__row.is-on .chat-hist__dot").count()) === 1, "rows " + (await rows().count()));
 ok("the sliver closes it", await (async () => { await page.click(".chat-hist__scrim"); await page.waitForTimeout(500); return !(await drawerOpen()); })());
+await page.click(".histpill"); await page.waitForTimeout(500);
+ok("New conversation is the grey pill on the bar, with the X at the far right",
+   await page.evaluate(() => { const bar = document.querySelector(".chat-hist__bar"); if (!bar) return false; const n = bar.querySelector(".chat-hist__new"), x = bar.querySelector(".chat-hist__close"); if (!n || !x) return false; const nb = n.getBoundingClientRect(), xb = x.getBoundingClientRect(), bb = bar.getBoundingClientRect(); return n.classList.contains("closebtn") && getComputedStyle(n).backgroundColor !== "rgba(0, 0, 0, 0)" && xb.left > nb.right && bb.right - xb.right < 30; }));
+ok("the X closes it", await (async () => { await page.click(".chat-hist__close"); await page.waitForTimeout(500); return !(await drawerOpen()); })());
 await page.click(".chathead button:has-text('New')"); await page.waitForTimeout(1600);
 ok("New empties the panel", (await title()) === "Agent" && (await page.locator(".agent-home").count()) === 1, await title());
 await page.click(".histpill"); await page.waitForTimeout(500);
