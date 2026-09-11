@@ -1768,16 +1768,18 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 }
 .refine-v.is-any { color: var(--text-muted); }
 
-/* the pad: mood across, light up; one click says both. The row labels sit
-   in their own column, each centred on the row it names. */
-.refine-matrix { display: grid; grid-template-columns: 88px 1fr; grid-template-rows: auto auto; gap: 4px 8px; }
+/* the pad: mood across, light up; one click says both. The grid sits on
+   the card's left edge; the row words stand to its right, left-aligned, in a
+   column as wide as the sliders' value column, so the grid ends where the
+   tracks end and the words start where the values start. */
+.refine-matrix { display: grid; grid-template-columns: 1fr 104px; grid-template-rows: auto auto; gap: 4px 12px; }
 .refine-matrix__ylab {
-  grid-column: 1; grid-row: 1; display: grid; grid-template-rows: repeat(5, 1fr);
-  align-items: center; height: 120px; text-align: right;
+  grid-column: 2; grid-row: 1; display: grid; grid-template-rows: repeat(5, 1fr);
+  align-items: center; height: 120px; text-align: left;
 }
 .refine-matrix__ylab .refine-k { line-height: 1; white-space: nowrap; }
 .refine-matrix__box {
-  grid-column: 2; grid-row: 1; position: relative; height: 120px;
+  grid-column: 1; grid-row: 1; position: relative; height: 120px;
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(5, 1fr);
   overflow: hidden;
@@ -1802,7 +1804,7 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
   background: var(--accent); pointer-events: none;
   transition: left var(--motion-duration) var(--motion-ease), top var(--motion-duration) var(--motion-ease);
 }
-.refine-matrix__xlab { grid-column: 2; grid-row: 2; display: grid; grid-template-columns: repeat(7, 1fr); }
+.refine-matrix__xlab { grid-column: 1; grid-row: 2; display: grid; grid-template-columns: repeat(7, 1fr); }
 .refine-matrix__xlab .refine-k { text-align: center; font-size: 7px; letter-spacing: 0.04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* the ramps: label, track, and the value left-aligned right after the
