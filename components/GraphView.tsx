@@ -224,7 +224,7 @@ const CTA_META: Record<string, CtaOpt> = {
   "save-local": { key: "save-local", label: "Save to a local folder", sub: "media manager" },
   skills: { key: "skills", label: "Other agent skills", sub: "atlas" },
 };
-const HOME_CTAS: CtaOpt[] = [CTA_META.tag, CTA_META.sort, CTA_META.find, CTA_META.save, CTA_META.skills];
+const HOME_CTAS: CtaOpt[] = [CTA_META.find, CTA_META.sort, CTA_META.save, CTA_META.tag, CTA_META.skills];
 /* The hosted archive reads. The agent runs there, so finding is offered and so
    is everything the field does on its own. What is not offered is what writes:
    tag changes the archive and save files a folder, and both are refused by the
@@ -672,6 +672,67 @@ function RefineBlock({ item, busy, platforms, onGo }: {
       {/* one verb. With nothing chosen there is nothing to press. */}
       <div className="agent-refine__acts">
         <button className="agent-refine__send" disabled={off || !chosen} onClick={go}>search</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- the offer strip ----
+   One row of quick asks above the composer. It scrolls sideways — by wheel,
+   by touch, or by pressing and pulling with the pointer — and whichever
+   edge has more beyond it fades, so the row reads as continuing rather than
+   cut. The fades are a mask on the track itself, so they hold over the
+   panel's translucent ground. */
+function OfferStrip({ opts, reveal, busy, onPick }: {
+  opts: CtaOpt[];
+  reveal: boolean;
+  busy: boolean;
+  onPick: (o: CtaOpt) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edge, setEdge] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const read = () => setEdge({ left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 });
+    read();
+    el.addEventListener("scroll", read, { passive: true });
+    const ro = new ResizeObserver(read); ro.observe(el);
+    return () => { el.removeEventListener("scroll", read); ro.disconnect(); };
+  }, [opts]);
+  /* a press and a pull is a scroll; a pull past a few pixels is not a click */
+  const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  return (
+    <div className={"agent-offers" + (edge.left ? " has-left" : "") + (edge.right ? " has-right" : "")}>
+      <div
+        ref={ref}
+        className="agent-offers__track"
+        role="group"
+        aria-label="Quick asks"
+        onPointerDown={(e) => { if (e.pointerType === "mouse" && e.button !== 0) return; drag.current = { x: e.clientX, left: ref.current?.scrollLeft ?? 0, moved: false }; }}
+        onPointerMove={(e) => {
+          const d = drag.current, el = ref.current;
+          if (!d || !el || e.buttons === 0) return;
+          const dx = e.clientX - d.x;
+          if (!d.moved && Math.abs(dx) > 4) { d.moved = true; try { el.setPointerCapture(e.pointerId); } catch { /* not every pointer can be captured */ } }
+          if (d.moved) el.scrollLeft = d.left - dx;
+        }}
+        onPointerUp={() => { setTimeout(() => { drag.current = null; }, 0); }}
+        onPointerCancel={() => { drag.current = null; }}
+        onClickCapture={(e) => { if (drag.current?.moved) { e.stopPropagation(); e.preventDefault(); } }}
+        onWheel={(e) => { const el = ref.current; if (el && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY; }}
+      >
+        {opts.map((o, i) => (
+          <button
+            key={o.key}
+            type="button"
+            className={"agent-cta agent-offers__cta" + (reveal ? " agent-cta--reveal" : "")}
+            style={reveal ? { animationDelay: i * 60 + "ms" } : undefined}
+            disabled={busy}
+            onClick={() => onPick(o)}
+          >
+            <CtaFace opt={o} />
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -3796,45 +3857,20 @@ export default function GraphView({
                     <div className="chatscroll">
                     {/* The opener is the agent's first turn, and it stays: the
                         conversation reads from its first word, and nothing is
-                        ever wiped. Its offers retire once anything is said —
-                        like every other row of offers — with the taken one
-                        marked; the mark is read off the thread itself, so a
-                        kept conversation reopens with it. */}
-                    {(() => {
-                      const started = thread.length > 0 || promptBusy;
-                      const opts = readOnly ? READ_ONLY_CTAS : HOME_CTAS;
-                      const first = thread.find((x): x is Extract<ThreadItem, { type: "msg" }> => x.type === "msg" && x.role === "user");
-                      const pick = first ? opts.find((o) => o.label === first.content)?.key ?? null : null;
-                      return (
-                      <div className={"agent-home" + (started ? " is-started" : "")}>
-                        <div className="chat-msg is-ai">
-                          <span className="mono-xs">atlas</span>
-                          {boot === 0 && !started ? (
-                            <p className="agent-home__think"><GlyphLoader size={15} working /></p>
-                          ) : (
-                            <p className="agent-home__say">{readOnly
-                              ? "One agent, four lenses. Ask me to search the archive, filter it by keyterm, sort what is showing into a grid, or look through the connected museums for what the archive does not hold. This is the public copy, so I can look but not write: tagging and filing need the local build."
-                              : "One agent, four lenses. Find or filter to narrow the field, sort what is showing, search the connected museums, save what is worth keeping. Type “/” for every command, or just ask."}</p>
-                          )}
-                        </div>
-                        {(boot >= 2 || started) && (
-                          <div className={"agent-ctas" + (started ? " is-done" : "")}>
-                            {opts.map((o, i) => (
-                              <button
-                                key={o.key}
-                                className={"agent-cta" + (started ? "" : " agent-cta--reveal") + (pick === o.key ? " is-picked" : "")}
-                                style={started ? undefined : { animationDelay: i * 80 + "ms" }}
-                                disabled={started}
-                                onClick={() => void dispatchCta(o.key, o.label)}
-                              >
-                                <CtaFace opt={o} />
-                              </button>
-                            ))}
-                          </div>
+                        ever wiped. A hello and a short introduction; the
+                        offers live above the composer, not in the message. */}
+                    <div className={"agent-home" + (thread.length > 0 || promptBusy ? " is-started" : "")}>
+                      <div className="chat-msg is-ai">
+                        <span className="mono-xs">atlas</span>
+                        {boot === 0 && thread.length === 0 && !promptBusy ? (
+                          <p className="agent-home__think"><GlyphLoader size={15} working /></p>
+                        ) : (
+                          <p className="agent-home__say">{readOnly
+                            ? "Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and look through the connected museums for what it does not hold. This is the public copy, so I can look but not write. Type “/” to see every command, or just ask."
+                            : "Hi, I’m Atlas. One agent, four lenses: I find and filter the archive, sort what is showing, search the connected museums, and save what is worth keeping. Type “/” to see every command, or just ask."}</p>
                         )}
                       </div>
-                      );
-                    })()}
+                    </div>
                     {thread.map((m, i) => {
                       const lastAi = (() => {
                         for (let k = thread.length - 1; k >= 0; k--) {
@@ -4072,6 +4108,15 @@ export default function GraphView({
                         ))}
                       </div>
                     )}
+                    {/* the quick asks: one row above the composer, scrolling
+                        sideways, its edges fading where it runs on. They are
+                        the composer's presets and stay for every turn. */}
+                    <OfferStrip
+                      opts={readOnly ? READ_ONLY_CTAS : HOME_CTAS}
+                      reveal={thread.length === 0}
+                      busy={promptBusy}
+                      onPick={(o) => void dispatchCta(o.key, o.label)}
+                    />
                     <form className="graph-ci" onSubmit={(e) => { e.preventDefault(); sendPrompt(); }}>
                       <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickFile} />
                       <button

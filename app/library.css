@@ -2222,6 +2222,31 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 
 /* ---- the agent experience in the panel: conversational CTAs ---- */
 .agent-home { display: flex; flex-direction: column; gap: 14px; }
+
+/* ---- the offer strip: one row above the composer ----
+   The quick asks are the composer's presets, so they live with it and stay
+   for every turn. The row scrolls sideways; whichever edge has more beyond
+   it fades, a mask on the track so it holds over the panel's translucent
+   ground. The fade lengths are registered so they can ease. */
+@property --offers-fade-l { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --offers-fade-r { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.agent-offers { flex: none; margin: 10px calc(-1 * var(--space-2)) 0; }
+.agent-offers__track {
+  display: flex; gap: 7px; padding: 2px var(--space-2);
+  overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  cursor: grab; user-select: none; -webkit-user-select: none; touch-action: pan-x;
+  --offers-fade-l: 0px; --offers-fade-r: 0px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--offers-fade-l), #000 calc(100% - var(--offers-fade-r)), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 var(--offers-fade-l), #000 calc(100% - var(--offers-fade-r)), transparent 100%);
+  transition: --offers-fade-l var(--motion-duration) var(--motion-ease), --offers-fade-r var(--motion-duration) var(--motion-ease);
+}
+.agent-offers__track::-webkit-scrollbar { display: none; }
+.agent-offers__track:active { cursor: grabbing; }
+.agent-offers.has-left .agent-offers__track { --offers-fade-l: 44px; }
+.agent-offers.has-right .agent-offers__track { --offers-fade-r: 44px; }
+.agent-offers__cta { flex: none; white-space: nowrap; }
+.agent-offers__cta:disabled { opacity: 0.5; }
+.agent-offers .agent-cta__s { display: none; }
 .agent-ctas { display: flex; flex-wrap: wrap; gap: 7px; }
 .agent-cta {
   display: flex; flex-direction: row; align-items: flex-start; gap: 9px;

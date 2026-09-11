@@ -51,9 +51,13 @@ ok("Escape closes it", !(await drawerOpen()));
 console.log("\n═══ one conversation, then New");
 await say("/sort");
 ok("the first ask names the chat", (await title()).toLowerCase().includes("sort the canvas"), await title());
-ok("the opener stays as the first turn; its offers retire with the taken one marked",
-   (await page.locator(".agent-home__say").count()) === 1 && (await page.locator(".agent-home .agent-ctas.is-done").count()) === 1 && /Sort the canvas/.test(await page.locator(".agent-home .agent-cta.is-picked").textContent()) && (await page.locator(".agent-home .agent-cta").first().isDisabled()),
-   (await page.locator(".agent-home").textContent()).slice(0, 80));
+ok("the opener says hi and stays as the first turn, with no offers in it",
+   (await page.locator(".agent-home__say").count()) === 1 && /^Hi, I’m Atlas\./.test((await page.locator(".agent-home__say").textContent()).trim()) && /Type “\/” to see every command/.test(await page.locator(".agent-home__say").textContent()) && (await page.locator(".agent-home .agent-cta").count()) === 0,
+   (await page.locator(".agent-home__say").textContent()).slice(0, 60));
+ok("the offers are one row above the composer, five of them, none wrapping",
+   await page.evaluate(() => { const s = document.querySelector(".agent-offers"), ci = document.querySelector(".chatdock .graph-ci"); if (!s || !ci) return false; const b = s.getBoundingClientRect(), c = ci.getBoundingClientRect(); const tops = Array.from(s.querySelectorAll(".agent-cta")).map((x) => Math.round(x.getBoundingClientRect().top)); return b.bottom <= c.top + 1 && c.top - b.bottom < 24 && tops.length === 5 && new Set(tops).size === 1; }));
+ok("the row runs past the panel, so its right edge fades; scrolled to the end, the left edge fades instead",
+   await page.evaluate(async () => { const s = document.querySelector(".agent-offers"), t = s.querySelector(".agent-offers__track"); const a = s.classList.contains("has-right") && !s.classList.contains("has-left"); t.scrollLeft = t.scrollWidth; await new Promise((r) => setTimeout(r, 120)); const b = s.classList.contains("has-left") && !s.classList.contains("has-right"); t.scrollLeft = 0; return a && b; }));
 ok("New is offered, Clear is not", (await page.locator(".chathead button:has-text('New')").count()) === 1 && (await page.locator(".chathead button:has-text('Clear')").count()) === 0);
 await page.click(".histpill"); await page.waitForTimeout(500);
 ok("the list holds the open chat, with the dot", (await rows().count()) === 1 && (await page.locator(".chat-hist__row.is-on .chat-hist__dot").count()) === 1, "rows " + (await rows().count()));
