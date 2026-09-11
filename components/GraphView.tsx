@@ -3870,7 +3870,7 @@ export default function GraphView({
                           <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                         ) : (
                           <p className="agent-home__say">{readOnly
-                            ? <>Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and look through the connected museums for what it does not hold. This is the public copy, so I can look but not write — the <a href="https://github.com/amachinic/agentic-archive" target="_blank" rel="noreferrer">GitHub repo</a> has the full build with every feature. Type “/” to see every command, or just ask.</>
+                            ? <>Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and search the connected museums for more. Check the <a href="https://github.com/amachinic/agentic-archive" target="_blank" rel="noreferrer">GitHub repo</a> for full access to features. Type “/” to see every command, or just ask.</>
                             : "Hi, I’m Atlas. One agent, four lenses: I find and filter the archive, sort what is showing, search the connected museums, and save what is worth keeping. Type “/” to see every command, or just ask."}</p>
                         )}
                       </div>
