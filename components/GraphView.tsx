@@ -1119,6 +1119,33 @@ export default function GraphView({
 
   /* thinking (0) -> the greeting (1) -> the capabilities, in sequence (2) */
   const skipBootRef = useRef(false);
+  /* asleep: the panel empty, no opener at all. The film asks for it so a
+     take can open on an empty panel, hold, and then wake Atlas -- and so
+     the clear at the end lands on the same empty panel the take began on,
+     which is what lets the loop join. Never set by the app itself. */
+  const sleepRef = useRef(false);
+  /* the film's ask for the intro, as state so the boot effect below runs
+     on it; the ref remembers which ask has already played */
+  const [intro, setIntro] = useState<{ at: number; delay: number } | null>(null);
+  const introRanRef = useRef(0);
+  /* The listeners live outside the boot effect, which returns early until
+     the panel is in. The standby frame is asked to sleep the moment its
+     field is up -- before its panel has mounted -- and an ask that lands
+     then must still hold, so it is kept in refs and state and honoured
+     whenever the boot effect next runs. Nothing but the film sends these. */
+  useEffect(() => {
+    const onIntro = (e: Event) => {
+      sleepRef.current = false;
+      setIntro({ at: Date.now(), delay: Number((e as CustomEvent).detail?.delay) || 0 });
+    };
+    const onSleep = () => { sleepRef.current = true; setIntro(null); setBoot(-1); };
+    window.addEventListener("atlas:intro", onIntro);
+    window.addEventListener("atlas:sleep", onSleep);
+    return () => {
+      window.removeEventListener("atlas:intro", onIntro);
+      window.removeEventListener("atlas:sleep", onSleep);
+    };
+  }, []);
   /** the home block's own height, remembered so a drain can land ON it */
   const homeHRef = useRef(0);
   useEffect(() => {
@@ -1129,27 +1156,32 @@ export default function GraphView({
        after a drain it read as the window collapsing and then swelling back
        up over more than a second, which is not a greeting, it is a bounce.
        Seen once per visit is the point of it. */
-    let a = 0, b = 0;
+    let a = 0, b = 0, d = 0;
     const play = () => {
-      clearTimeout(a); clearTimeout(b);
       setBoot(0);
       a = window.setTimeout(() => setBoot(1), 900);
       b = window.setTimeout(() => setBoot(2), 1320);
     };
-    if (skipBootRef.current) {
+    /* The film's two asks. atlas:intro plays the intro again once the
+       recorder is rolling -- a take has to wait for the field to settle,
+       long after the intro played on its own -- and with a delay it first
+       empties the panel and holds, so the take opens on nothing and Atlas
+       wakes into it. atlas:sleep empties the panel and keeps it empty
+       through a clear, so the take can end on the frame it began on. */
+    if (intro && intro.at !== introRanRef.current) {
+      introRanRef.current = intro.at;
+      if (intro.delay > 0) { setBoot(-1); d = window.setTimeout(play, intro.delay); }
+      else play();
+    } else if (sleepRef.current) {
+      setBoot(-1);
+    } else if (skipBootRef.current) {
       skipBootRef.current = false;
       setBoot(2);
     } else {
       play();
     }
-    /* The film asks for the intro again once its recorder is rolling: a
-       take has to wait for the field to settle, which is long after the
-       intro has played on its own, and the opening of the card is Atlas
-       thinking, speaking, then offering -- not a panel already at rest.
-       Nothing else sends this event. */
-    window.addEventListener("atlas:intro", play);
-    return () => { clearTimeout(a); clearTimeout(b); window.removeEventListener("atlas:intro", play); };
-  }, [panel, thread.length, panelIn]);
+    return () => { clearTimeout(a); clearTimeout(b); clearTimeout(d); };
+  }, [panel, thread.length, panelIn, intro]);
 
   /* Remember what the resting panel measures, while it is resting.
 
@@ -2857,8 +2889,8 @@ export default function GraphView({
          After a 300px collapse, that flash read as the panel bouncing. */
       /* the home block arrives finished, and the drain below has already
          floored the panel at its height, so this settles rather than grows */
-      skipBootRef.current = true;
-      setBoot(2);
+      if (sleepRef.current) setBoot(-1);
+      else { skipBootRef.current = true; setBoot(2); }
       setThread([]);
       setPromptIds(null);
       setFieldSort(null);
@@ -3894,6 +3926,7 @@ export default function GraphView({
                         conversation reads from its first word, and nothing is
                         ever wiped. A hello and a short introduction; the
                         offers live above the composer, not in the message. */}
+                    {boot >= 0 && (
                     <div className={"agent-home" + (thread.length > 0 || promptBusy ? " is-started" : "")}>
                       <div className="chat-msg is-ai">
                         <span className="mono-xs">atlas</span>
@@ -3910,6 +3943,7 @@ export default function GraphView({
                         )}
                       </div>
                     </div>
+                    )}
                     {thread.map((m, i) => {
                       const lastAi = (() => {
                         for (let k = thread.length - 1; k >= 0; k--) {
