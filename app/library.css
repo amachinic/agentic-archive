@@ -1852,8 +1852,8 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 .refine-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .refine-chip:disabled { cursor: default; opacity: 0.6; }
 
-/* two lines for what the controls cannot say */
-.agent-refine__go { display: flex; flex-direction: column; gap: 7px; }
+/* two lines for what the controls cannot say; a little air above the label */
+.agent-refine__go { display: flex; flex-direction: column; gap: 7px; padding-top: 4px; }
 .agent-refine__go textarea {
   display: block; width: 100%; box-sizing: border-box; resize: none;
   background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md);

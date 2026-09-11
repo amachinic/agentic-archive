@@ -685,13 +685,13 @@ function RefineBlock({ item, busy, platforms, onGo }: {
       )}
 
       <div className="agent-refine__go">
-        <label className="refine-k" htmlFor={fieldId}>Describe the refinement</label>
+        <label className="refine-k" htmlFor={fieldId}>Your own words</label>
         <textarea
           id={fieldId}
           rows={2}
           value={custom}
           disabled={off}
-          placeholder="Anything the controls cannot say — smoky interiors, no portraits, nothing after 1950…"
+          placeholder="e.g. smoky interiors, no portraits, only works on paper"
           onChange={(e) => setCustom(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go(); } }}
         />
