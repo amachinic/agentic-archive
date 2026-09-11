@@ -54,8 +54,7 @@ ok("the first ask names the chat", (await title()).toLowerCase().includes("sort 
 ok("New is offered, Clear is not", (await page.locator(".chathead button:has-text('New')").count()) === 1 && (await page.locator(".chathead button:has-text('Clear')").count()) === 0);
 await page.click(".histpill"); await page.waitForTimeout(500);
 ok("the list holds the open chat, with the dot", (await rows().count()) === 1 && (await page.locator(".chat-hist__row.is-on .chat-hist__dot").count()) === 1, "rows " + (await rows().count()));
-ok("the sliver closes it", await (async () => { await page.click(".chat-hist__scrim"); await page.waitForTimeout(500); return !(await drawerOpen()); })());
-await page.click(".histpill"); await page.waitForTimeout(500);
+ok("the drawer spans the whole chat area", await page.evaluate(() => { const d = document.querySelector(".chat-hist").getBoundingClientRect(), s = document.querySelector(".chatstage").getBoundingClientRect(); return Math.abs(d.width - s.width) < 2 && Math.abs(d.left - s.left) < 2; }));
 ok("New conversation is the grey pill on the bar, with the X at the far right",
    await page.evaluate(() => { const bar = document.querySelector(".chat-hist__bar"); if (!bar) return false; const n = bar.querySelector(".chat-hist__new"), x = bar.querySelector(".chat-hist__close"); if (!n || !x) return false; const nb = n.getBoundingClientRect(), xb = x.getBoundingClientRect(), bb = bar.getBoundingClientRect(); return n.classList.contains("closebtn") && getComputedStyle(n).backgroundColor !== "rgba(0, 0, 0, 0)" && xb.left > nb.right && bb.right - xb.right < 30; }));
 ok("the X closes it", await (async () => { await page.click(".chat-hist__close"); await page.waitForTimeout(500); return !(await drawerOpen()); })());
