@@ -730,6 +730,14 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   white-space: nowrap;
 }
 .topbar__spacer { flex: 1; }
+.gh-link {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; margin-right: 10px;
+  border-radius: var(--radius-md); color: var(--text-secondary);
+  transition: color var(--motion-duration) var(--motion-ease), background var(--motion-duration) var(--motion-ease);
+}
+.gh-link svg { display: block; }
+.gh-link:hover { color: var(--text-primary); background: color-mix(in srgb, var(--text-primary) 7%, var(--surface)); }
+.gh-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .viewswitch { display: flex; gap: 2px; padding: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); }
 .viewswitch a,

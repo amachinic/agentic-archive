@@ -2230,7 +2230,7 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
    ground. The fade lengths are registered so they can ease. */
 @property --offers-fade-l { syntax: "<length>"; inherits: false; initial-value: 0px; }
 @property --offers-fade-r { syntax: "<length>"; inherits: false; initial-value: 0px; }
-.agent-offers { flex: none; margin: 10px calc(-1 * var(--space-2)) 0; }
+.agent-offers { flex: none; margin: 10px calc(-1 * var(--space-2)) 16px; }
 .agent-offers__track {
   display: flex; gap: 7px; padding: 2px var(--space-2);
   overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
@@ -2503,6 +2503,7 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 /* Atlas thinks before it speaks, then the sentence arrives */
 .agent-home__think { margin: 0; display: flex; align-items: center; min-height: 21px; }
 .agent-home__say { animation: content-in 260ms var(--motion-ease) both; }
+.agent-home__say a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
 
 /* the capabilities arrive in sequence, left to right */
 @keyframes cta-reveal {
