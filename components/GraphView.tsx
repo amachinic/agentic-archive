@@ -1129,15 +1129,26 @@ export default function GraphView({
        after a drain it read as the window collapsing and then swelling back
        up over more than a second, which is not a greeting, it is a bounce.
        Seen once per visit is the point of it. */
+    let a = 0, b = 0;
+    const play = () => {
+      clearTimeout(a); clearTimeout(b);
+      setBoot(0);
+      a = window.setTimeout(() => setBoot(1), 900);
+      b = window.setTimeout(() => setBoot(2), 1320);
+    };
     if (skipBootRef.current) {
       skipBootRef.current = false;
       setBoot(2);
-      return;
+    } else {
+      play();
     }
-    setBoot(0);
-    const a = setTimeout(() => setBoot(1), 900);
-    const b = setTimeout(() => setBoot(2), 1320);
-    return () => { clearTimeout(a); clearTimeout(b); };
+    /* The film asks for the intro again once its recorder is rolling: a
+       take has to wait for the field to settle, which is long after the
+       intro has played on its own, and the opening of the card is Atlas
+       thinking, speaking, then offering -- not a panel already at rest.
+       Nothing else sends this event. */
+    window.addEventListener("atlas:intro", play);
+    return () => { clearTimeout(a); clearTimeout(b); window.removeEventListener("atlas:intro", play); };
   }, [panel, thread.length, panelIn]);
 
   /* Remember what the resting panel measures, while it is resting.
@@ -4139,12 +4150,16 @@ export default function GraphView({
                     {/* the quick asks: one row above the composer, scrolling
                         sideways, its edges fading where it runs on. They are
                         the composer's presets and stay for every turn. */}
-                    <OfferStrip
-                      opts={readOnly ? READ_ONLY_CTAS : HOME_CTAS}
-                      reveal={thread.length === 0}
-                      busy={promptBusy}
-                      onPick={(o) => void dispatchCta(o.key, o.label)}
-                    />
+                    {/* the intro's last stage: Atlas thinks, speaks, and then
+                        its offers arrive, staggered */}
+                    {(boot >= 2 || thread.length > 0) && (
+                      <OfferStrip
+                        opts={readOnly ? READ_ONLY_CTAS : HOME_CTAS}
+                        reveal={thread.length === 0}
+                        busy={promptBusy}
+                        onPick={(o) => void dispatchCta(o.key, o.label)}
+                      />
+                    )}
                     <form className="graph-ci" onSubmit={(e) => { e.preventDefault(); sendPrompt(); }}>
                       <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickFile} />
                       <button
