@@ -47,7 +47,7 @@ flowchart LR
 |---|---|---|---|
 | **Archivist** | Names what an image is | controlled keyterms, searchable descriptions, creator attribution, duplicate checks, history | Proposes |
 | **Curator** | Decides what belongs together | find, filter, expand similar, sort the canvas, build working sets and collections | Acts on the canvas |
-| **Historian** | Searches beyond the archive | plans probes the way art history files a mood (synonyms, iconography, movements, named artists), sweeps connected sources, facets by medium, reads licences | Read-only |
+| **Historian** | Searches beyond the archive | plans probes the way art history files a mood (synonyms, iconography, movements, named artists), sweeps the connected museums, Are.na and more, facets by kind, period and platform, reads licences | Read-only |
 | **Media Manager** | Puts images where they live | create or append collections, keep sets in Atlas, export copies to disk | Proposes |
 
 The Curator may change what is visible without changing the archive. The Historian may only look: its candidates open at their source and enter the library through no door but your accept. Folder and library changes are committed only after human acceptance.
@@ -110,6 +110,49 @@ Atlas follows six visible rules in the dashboard:
 4. **Agent writes have one door.** A staged folder proposal becomes persistent only after acceptance.
 5. **Local tools first.** Fingerprints, palettes, OCR, similarity, sorting, and collection operations run locally.
 6. **Everything is visible.** Conversation, CTAs, `/` commands, and contextual triggers route to the same actions, with tool activity rendered in the thread.
+
+## The agentic experience
+
+Atlas lives in one panel docked to the Network stage, full height from the first message, with the field showing through behind it. Everything below is what a session actually feels like.
+
+### The panel
+
+- **An opener that stays.** Atlas says hello and names its four lenses in a sentence; that line is the first turn of every conversation, not a splash screen that gets wiped.
+- **Quick asks above the field.** Find something, sort the canvas, save a folder, tag new images, other skills: one row of presets above the composer, scrolling sideways with fading edges, there on every turn.
+- **`/` for everything.** Type `/` in the composer and every command is listed with the archetype that owns it; `/ledger` shows the session's own activity beside the archive's recent history.
+- **Turns you can read.** Each reply is nested under a turn head that says which lens is working and on what, with every tool call rendered as a row: what was searched, how many came back, how many are keepable.
+
+### Conversations
+
+- **One open chat.** Typing continues the conversation you are in and lifts it to the top of the list. **New** starts an empty one and keeps the last.
+- **History** rises over the chat area as a sheet: every kept conversation by its first ask, a dot on the open one, remove on hover, clear the rest with one link. Pick a row and that chat comes back with its title, its field and its light table. Conversations persist in the browser, capped by count and size, so a reload forgets nothing.
+
+### Searching beyond the archive
+
+- **Probes, not a query.** Ask for a mood and the Historian plans three to five probes in different registers, synonyms first, then the iconography, then the movements and named artists, because catalogues only match their own words. One probe sweeps every connected source at once.
+- **A preview that ends.** A search with no number is a look, not a delivery: a few probes, then Atlas stops, says what is on the light table and about how much exists behind it, and offers the fork in one sentence: refine, pull more, or leave it. Name a number and it gathers toward it; say `more` and it continues past everything already delivered, never re-reading page one.
+- **The light table.** Outside finds dock beside the panel on a temporary canvas, licence read, nothing written. They open at their source and enter the library through no door but your accept.
+- **The refine card.** After a search, the controls are the card: colour, light and period as ramps, nine kinds of work, every connected platform (several at once), two lines in your own words, one verb. It composes a single sentence Atlas acts on, and the plumbing honours all of it: kinds and periods become facets at the museums that have them (the Met, the Art Institute, Cleveland, Europeana; the Rijksmuseum facets kind but not period), a kind a source cannot facet rides the query as a word, and a source that cannot narrow at all is named beside its results rather than silently unfiltered. A refinement that missed costs one click to undo.
+
+### Connections
+
+| Source | Reach | Facets |
+|---|---|---|
+| The Met, Art Institute of Chicago, Cleveland Museum of Art | open collections, keepable where the licence allows | kind and period |
+| Rijksmuseum | open collection | kind |
+| Europeana | aggregated European collections (needs a key) | kind and period |
+| Are.na | public channels, walked as a person would name them | none: channels are curated, not catalogued |
+| Pinterest | your own pins, once authorised | none |
+
+Any source can be switched off under Agents, and a switched-off source is never reached, however the sweep is worded.
+
+### What writes, and what only looks
+
+The Curator changes what you see; the Historian only looks; the Archivist and the Media Manager propose. A folder is staged as a visible proposal and becomes persistent only when you accept it, and the ledger records who did what. On the public copy Atlas can search, filter, widen and re-form the field, and says so itself when asked to write.
+
+### Kept honest
+
+The behaviour above is checked, not assumed: the refine card and its plumbing against real museums and a real model on a disposable copy of the archive, the panel's memory by driving the real panel ([`scripts/history-drawer-test.mjs`](scripts/history-drawer-test.mjs)), the search's manners against a real model ([`scripts/agent-behaviour-test.mjs`](scripts/agent-behaviour-test.mjs)), and the record itself by the audit below.
 
 ## The Archivist agent
 
