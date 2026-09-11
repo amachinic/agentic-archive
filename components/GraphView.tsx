@@ -3794,7 +3794,6 @@ export default function GraphView({
                         {histRows.length > 1 && <button type="button" onClick={clearHistory}>clear history</button>}
                       </div>
                     </div>
-                    {histOpen && <button type="button" className="chat-hist__scrim" aria-label="Close history" onClick={() => setHistOpen(false)} />}
                     <div className="chatscroll">
                     {thread.length === 0 && !promptBusy && (
                       <div className="agent-home">

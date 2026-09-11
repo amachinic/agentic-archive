@@ -2383,8 +2383,8 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
   padding: 14px var(--space-2);
   transition: opacity 360ms var(--motion-ease);
 }
-/* while the drawer is out the thread stands back, a sliver of it showing
-   at the right, and takes no clicks: the sliver is the way to close */
+/* while the drawer is out the thread stands back beneath it and takes no
+   clicks; the X, Escape and the History pill are the ways to close */
 .chatstage.is-hist .chatscroll { opacity: 0.35; pointer-events: none; }
 .chathead .closebtn:disabled { opacity: 0.45; cursor: default; }
 
@@ -2399,10 +2399,9 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 .histpill[aria-expanded="true"] { background: var(--accent); color: var(--on-accent); }
 .histpill[aria-expanded="true"]:hover { background: var(--accent); color: var(--on-accent); }
 .chat-hist {
-  position: absolute; top: 0; bottom: 0; left: 0; width: 82%; z-index: 2;
+  position: absolute; inset: 0; z-index: 2;
   display: flex; flex-direction: column; min-height: 0;
   background: var(--surface);
-  border-right: 1px solid var(--border);
   transform: translateX(-100%); visibility: hidden;
   transition: transform 360ms var(--motion-ease), visibility 0s linear 360ms;
 }
@@ -2458,8 +2457,6 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 }
 .chat-hist__foot button:hover { color: var(--text-primary); }
 .chat-hist__empty { padding: 14px var(--space-2); font-size: var(--font-body-xs); color: var(--text-muted); }
-/* the sliver of thread the drawer leaves: clicking it closes the drawer */
-.chat-hist__scrim { position: absolute; top: 0; bottom: 0; right: 0; width: 18%; z-index: 1; background: transparent; border: 0; padding: 0; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .chat-hist, .chat-hist.is-open, .chatscroll { transition: none; }
 }
