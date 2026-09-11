@@ -51,6 +51,9 @@ ok("Escape closes it", !(await drawerOpen()));
 console.log("\n═══ one conversation, then New");
 await say("/sort");
 ok("the first ask names the chat", (await title()).toLowerCase().includes("sort the canvas"), await title());
+ok("the opener stays as the first turn; its offers retire with the taken one marked",
+   (await page.locator(".agent-home__say").count()) === 1 && (await page.locator(".agent-home .agent-ctas.is-done").count()) === 1 && /Sort the canvas/.test(await page.locator(".agent-home .agent-cta.is-picked").textContent()) && (await page.locator(".agent-home .agent-cta").first().isDisabled()),
+   (await page.locator(".agent-home").textContent()).slice(0, 80));
 ok("New is offered, Clear is not", (await page.locator(".chathead button:has-text('New')").count()) === 1 && (await page.locator(".chathead button:has-text('Clear')").count()) === 0);
 await page.click(".histpill"); await page.waitForTimeout(500);
 ok("the list holds the open chat, with the dot", (await rows().count()) === 1 && (await page.locator(".chat-hist__row.is-on .chat-hist__dot").count()) === 1, "rows " + (await rows().count()));

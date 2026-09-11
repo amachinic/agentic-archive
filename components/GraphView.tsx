@@ -3794,11 +3794,22 @@ export default function GraphView({
                       </div>
                     </div>
                     <div className="chatscroll">
-                    {thread.length === 0 && !promptBusy && (
-                      <div className="agent-home">
+                    {/* The opener is the agent's first turn, and it stays: the
+                        conversation reads from its first word, and nothing is
+                        ever wiped. Its offers retire once anything is said —
+                        like every other row of offers — with the taken one
+                        marked; the mark is read off the thread itself, so a
+                        kept conversation reopens with it. */}
+                    {(() => {
+                      const started = thread.length > 0 || promptBusy;
+                      const opts = readOnly ? READ_ONLY_CTAS : HOME_CTAS;
+                      const first = thread.find((x): x is Extract<ThreadItem, { type: "msg" }> => x.type === "msg" && x.role === "user");
+                      const pick = first ? opts.find((o) => o.label === first.content)?.key ?? null : null;
+                      return (
+                      <div className={"agent-home" + (started ? " is-started" : "")}>
                         <div className="chat-msg is-ai">
                           <span className="mono-xs">atlas</span>
-                          {boot === 0 ? (
+                          {boot === 0 && !started ? (
                             <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                           ) : (
                             <p className="agent-home__say">{readOnly
@@ -3806,13 +3817,14 @@ export default function GraphView({
                               : "One agent, four lenses. Find or filter to narrow the field, sort what is showing, search the connected museums, save what is worth keeping. Type “/” for every command, or just ask."}</p>
                           )}
                         </div>
-                        {boot >= 2 && (
-                          <div className="agent-ctas">
-                            {(readOnly ? READ_ONLY_CTAS : HOME_CTAS).map((o, i) => (
+                        {(boot >= 2 || started) && (
+                          <div className={"agent-ctas" + (started ? " is-done" : "")}>
+                            {opts.map((o, i) => (
                               <button
                                 key={o.key}
-                                className="agent-cta agent-cta--reveal"
-                                style={{ animationDelay: i * 80 + "ms" }}
+                                className={"agent-cta" + (started ? "" : " agent-cta--reveal") + (pick === o.key ? " is-picked" : "")}
+                                style={started ? undefined : { animationDelay: i * 80 + "ms" }}
+                                disabled={started}
                                 onClick={() => void dispatchCta(o.key, o.label)}
                               >
                                 <CtaFace opt={o} />
@@ -3821,7 +3833,8 @@ export default function GraphView({
                           </div>
                         )}
                       </div>
-                    )}
+                      );
+                    })()}
                     {thread.map((m, i) => {
                       const lastAi = (() => {
                         for (let k = thread.length - 1; k >= 0; k--) {
