@@ -1,11 +1,11 @@
 /*
   What the panel's memory PROMISES, checked by driving the real panel.
 
-  One open chat, the rest in a drawer from the panel's left edge. The
+  One open chat, the rest in a sheet that rises over the chat area. The
   promises are the ones a person would notice breaking: the open chat is
   the one with the dot; New keeps the last one; picking a row brings that
-  chat back with its title; a reload forgets nothing; remove removes; the
-  sliver and Escape close. None of it needs a model -- the "/" commands
+  chat back with its title; a reload forgets nothing; remove removes; the X
+  and Escape close. None of it needs a model -- the "/" commands
   make conversations without one.
 
   Needs the dev server up:  npm run dev
@@ -54,10 +54,12 @@ ok("the first ask names the chat", (await title()).toLowerCase().includes("sort 
 ok("New is offered, Clear is not", (await page.locator(".chathead button:has-text('New')").count()) === 1 && (await page.locator(".chathead button:has-text('Clear')").count()) === 0);
 await page.click(".histpill"); await page.waitForTimeout(500);
 ok("the list holds the open chat, with the dot", (await rows().count()) === 1 && (await page.locator(".chat-hist__row.is-on .chat-hist__dot").count()) === 1, "rows " + (await rows().count()));
+ok("the rows carry no time label", (await page.locator(".chat-hist__w").count()) === 0);
 ok("the drawer spans the whole chat area", await page.evaluate(() => { const d = document.querySelector(".chat-hist").getBoundingClientRect(), s = document.querySelector(".chatstage").getBoundingClientRect(); return Math.abs(d.width - s.width) < 2 && Math.abs(d.left - s.left) < 2; }));
 ok("New conversation is the grey pill on the bar, with the X at the far right",
    await page.evaluate(() => { const bar = document.querySelector(".chat-hist__bar"); if (!bar) return false; const n = bar.querySelector(".chat-hist__new"), x = bar.querySelector(".chat-hist__close"); if (!n || !x) return false; const nb = n.getBoundingClientRect(), xb = x.getBoundingClientRect(), bb = bar.getBoundingClientRect(); return n.classList.contains("closebtn") && getComputedStyle(n).backgroundColor !== "rgba(0, 0, 0, 0)" && xb.left > nb.right && bb.right - xb.right < 30; }));
-ok("the X closes it", await (async () => { await page.click(".chat-hist__close"); await page.waitForTimeout(500); return !(await drawerOpen()); })());
+ok("the X closes it", await (async () => { await page.click(".chat-hist__close"); await page.waitForTimeout(700); return !(await drawerOpen()); })());
+ok("closed, the drawer waits below the chat area, not beside it", await page.evaluate(() => { const m = new DOMMatrixReadOnly(getComputedStyle(document.querySelector(".chat-hist")).transform); return m.f > 100 && Math.abs(m.e) < 1; }));
 await page.click(".chathead button:has-text('New')"); await page.waitForTimeout(1600);
 ok("New empties the panel", (await title()) === "Agent" && (await page.locator(".agent-home").count()) === 1, await title());
 await page.click(".histpill"); await page.waitForTimeout(500);
@@ -79,7 +81,7 @@ await page.keyboard.press("Escape"); await page.waitForTimeout(300);
 console.log("\n═══ typing continues the open chat and lifts it");
 await say("/ledger");
 await page.click(".histpill"); await page.waitForTimeout(500);
-ok("the continued chat is first now", (await rows().first().locator(".chat-hist__t").textContent()).trim().toLowerCase() === firstTopic.toLowerCase() && (await rows().first().locator(".chat-hist__w").textContent()).trim() === "now", (await rows().allTextContents()).join(" | "));
+ok("the continued chat is first now", (await rows().first().locator(".chat-hist__t").textContent()).trim().toLowerCase() === firstTopic.toLowerCase(), (await rows().allTextContents()).join(" | "));
 await page.keyboard.press("Escape"); await page.waitForTimeout(300);
 
 console.log("\n═══ a reload forgets nothing");

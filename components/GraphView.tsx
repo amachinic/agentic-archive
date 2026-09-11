@@ -25,7 +25,7 @@ import { write } from "@/lib/write";
 import GlyphLoader from "./GlyphLoader";
 import Select from "./Select";
 import { IconX, IconPlus, IconCheck, IconCaret, IconChevronDown, IconArrowLeft, IconTag, IconSearch, IconSave, IconSort, IconClock, IconDrive, IconPalette, IconRefresh, IconFolder, IconSparkle, IconUndo, IconCopy, IconTrash, IconAgent } from "./icons";
-import { loadConvos, saveConvos, newConvoId, whenLabel, type Convo } from "@/lib/conversations";
+import { loadConvos, saveConvos, newConvoId, type Convo } from "@/lib/conversations";
 import ThemeToggle from "./ThemeToggle";
 import ToolCheck from "./ToolCheck";
 import type { PixMode } from "./ArchetypePix";
@@ -3773,7 +3773,6 @@ export default function GraphView({
                           >
                             {c.id === currentId && <span className="chat-hist__dot" aria-hidden />}
                             <span className="chat-hist__t">{c.topic || "Untitled"}</span>
-                            <span className="chat-hist__w">{whenLabel(c.at)}</span>
                             <span
                               className="chat-hist__x"
                               role="button"
