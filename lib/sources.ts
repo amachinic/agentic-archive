@@ -34,8 +34,26 @@ export type Probe = { detail: string; account?: string | null };
    find what catalogue text says; a facet narrows to what the thing IS, which
    is how "paintings about sorrow" stops returning terracotta vases whose
    descriptions mention grief. */
-export type Medium = "painting" | "print" | "photograph" | "sculpture";
-export const MEDIUMS: Medium[] = ["painting", "print", "photograph", "sculpture"];
+export type Medium = "painting" | "print" | "drawing" | "photograph" | "sculpture" | "textile" | "ceramic" | "poster" | "book";
+export const MEDIUMS: Medium[] = ["painting", "print", "drawing", "photograph", "sculpture", "textile", "ceramic", "poster", "book"];
+/** a period of creation, in years; either end may be open */
+export type Years = { from?: number | null; to?: number | null };
+/* the period as the museum APIs take it: a closed pair. An open end closes
+   at year 1 or at this year, and a pair the wrong way round is turned. */
+export function bounds(y?: Years | null): { from: number; to: number } | null {
+  if (!y || (y.from == null && y.to == null)) return null;
+  const now = new Date().getFullYear();
+  let from = Math.trunc(y.from ?? 1), to = Math.trunc(y.to ?? now);
+  if (from > to) [from, to] = [to, from];
+  return { from: Math.max(1, from), to: Math.min(now, to) };
+}
+/* a kind the source cannot facet becomes a word in the query: "solitude
+   poster" is a weaker filter than a facet, but it is a filter, and it is
+   honest about being one. Measured before choosing: the Met has ONE poster
+   under its facet, the Art Institute and Cleveland none, so the word is the
+   only way posters are ever found. */
+const withWord = (q: string, medium: Medium | undefined, facet: string | undefined) =>
+  medium && !facet ? q + " " + medium : q;
 
 export type Adapter = {
   id: SourceId;
@@ -61,7 +79,7 @@ export type Adapter = {
      those IDs on the next chunk — measured, 2 repeats in 10. Each adapter
      reports its own unit; the caller never guesses. Defaults to items.length
      for the sources where the two genuinely coincide. */
-  search(q: string, limit: number, medium?: Medium, offset?: number): Promise<{ items: Candidate[]; total: number | null; exhausted?: boolean; consumed?: number }>;
+  search(q: string, limit: number, medium?: Medium, offset?: number, years?: Years): Promise<{ items: Candidate[]; total: number | null; exhausted?: boolean; consumed?: number }>;
 };
 
 /** Every outbound call is bounded. A slow source must not hold a request open. */
@@ -149,15 +167,20 @@ const met: Adapter = {
       "https://collectionapi.metmuseum.org/public/collection/v1/objects");
     return { detail: n(d.total) + " objects catalogued" };
   },
-  async search(q, limit, medium, offset = 0) {
+  async search(q, limit, medium, offset = 0, years) {
     /* medium=Paintings cut a "sorrow" probe from 337 hits to 113, measured:
-       the difference between works about sorrow and works that mention it */
-    const facet: Record<Medium, string> = {
-      painting: "Paintings", print: "Prints", photograph: "Photographs", sculpture: "Sculpture",
+       the difference between works about sorrow and works that mention it.
+       dateBegin/dateEnd cut "landscape" from 11,570 to 779 for 1920-1959. */
+    const facet: Partial<Record<Medium, string>> = {
+      painting: "Paintings", print: "Prints", drawing: "Drawings", photograph: "Photographs",
+      sculpture: "Sculpture", textile: "Textiles", ceramic: "Ceramics", book: "Books",
     };
+    const f = medium ? facet[medium] : undefined;
+    const span = bounds(years);
     const s = await getJson<{ objectIDs?: number[] | null }>(
       "https://collectionapi.metmuseum.org/public/collection/v1/search?hasImages=true" +
-      (medium ? "&medium=" + facet[medium] : "") + "&q=" + encodeURIComponent(q));
+      (f ? "&medium=" + f : "") + (span ? "&dateBegin=" + span.from + "&dateEnd=" + span.to : "") +
+      "&q=" + encodeURIComponent(withWord(q, medium, f)));
     /* the full ID list IS the true match count — keep it before slicing.
        It also makes the Met the one source whose continuation is EXACT:
        chunk N is literally ids[offset .. offset+limit). */
@@ -202,13 +225,26 @@ const artic: Adapter = {
       "https://api.artic.edu/api/v1/artworks?limit=1");
     return { detail: n(d.pagination?.total) + " artworks catalogued" };
   },
-  async search(q, limit, medium, offset = 0) {
+  async search(q, limit, medium, offset = 0, years) {
     const fields = "id,title,artist_title,image_id,is_public_domain";
     /* the .keyword suffix matters: the analysed field matches nothing for an
        exact term, and "The Old Guitarist" only surfaces with it — measured */
-    const facet: Record<Medium, string> = {
-      painting: "Painting", print: "Print", photograph: "Photograph", sculpture: "Sculpture",
+    const facet: Partial<Record<Medium, string>> = {
+      painting: "Painting", print: "Print", drawing: "Drawing and Watercolor", photograph: "Photograph",
+      sculpture: "Sculpture", textile: "Textile", ceramic: "Ceramics", book: "Book",
     };
+    const f = medium ? facet[medium] : undefined;
+    const span = bounds(years);
+    /* the facet and the date range are clauses of ONE bool query: two bare
+       query[...] params overwrite each other. Measured: landscape paintings
+       1920-1959 = 563 of 3,912 paintings. */
+    const must: string[] = [];
+    if (f) must.push("%5Bterm%5D%5Bartwork_type_title.keyword%5D=" + encodeURIComponent(f));
+    if (span) {
+      must.push("%5Brange%5D%5Bdate_start%5D%5Bgte%5D=" + span.from);
+      must.push("%5Brange%5D%5Bdate_end%5D%5Blte%5D=" + span.to);
+    }
+    const clauses = must.map((m, i) => "&query%5Bbool%5D%5Bmust%5D%5B" + i + "%5D" + m).join("");
     /* the API pages rather than seeks, so a continuation rounds itself to
        the page the offset falls in — chunk edges can shear by a few items,
        and the caller's dedupe is what trues them up */
@@ -217,8 +253,7 @@ const artic: Adapter = {
       id: number; title?: string; artist_title?: string | null;
       image_id?: string | null; is_public_domain?: boolean;
     }>; config?: { iiif_url?: string }; pagination?: { total?: number } }>(
-      "https://api.artic.edu/api/v1/artworks/search?q=" + encodeURIComponent(q) +
-      (medium ? "&query%5Bterm%5D%5Bartwork_type_title.keyword%5D=" + facet[medium] : "") +
+      "https://api.artic.edu/api/v1/artworks/search?q=" + encodeURIComponent(withWord(q, medium, f)) + clauses +
       "&limit=" + limit + (page > 1 ? "&page=" + page : "") + "&fields=" + fields);
     const iiif = d.config?.iiif_url || "https://www.artic.edu/iiif/2";
     const items = (d.data ?? []).filter((a) => a.image_id).map((a) => ({
@@ -256,19 +291,24 @@ const cleveland: Adapter = {
       "https://openaccess-api.clevelandart.org/api/artworks/?cc0=1&has_image=1&limit=1");
     return { detail: n(cc0.info?.total) + " CC0 images of " + n(all.info?.total) + " records" };
   },
-  async search(q, limit, medium, offset = 0) {
+  async search(q, limit, medium, offset = 0, years) {
     /* cc0=1 and has_image=1 at the query, so nothing unkeepable is ever even
        offered as a candidate. skip is the API's own seek, so continuation is
-       exact here too. */
-    const facet: Record<Medium, string> = {
-      painting: "Painting", print: "Print", photograph: "Photograph", sculpture: "Sculpture",
+       exact here too. created_after/created_before is the date facet. */
+    const facet: Partial<Record<Medium, string>> = {
+      painting: "Painting", print: "Print", drawing: "Drawing", photograph: "Photograph",
+      sculpture: "Sculpture", textile: "Textile", ceramic: "Ceramic",
     };
+    const f = medium ? facet[medium] : undefined;
+    const span = bounds(years);
     const d = await getJson<{ data?: Array<{
       id: number; title?: string; creators?: Array<{ description?: string }>;
       url?: string; images?: { web?: { url?: string }; print?: { url?: string } };
       share_license_status?: string;
     }>; info?: { total?: number } }>("https://openaccess-api.clevelandart.org/api/artworks/?cc0=1&has_image=1&limit=" +
-      limit + (offset > 0 ? "&skip=" + offset : "") + (medium ? "&type=" + facet[medium] : "") + "&q=" + encodeURIComponent(q));
+      limit + (offset > 0 ? "&skip=" + offset : "") + (f ? "&type=" + f : "") +
+      (span ? "&created_after=" + span.from + "&created_before=" + span.to : "") +
+      "&q=" + encodeURIComponent(withWord(q, medium, f)));
     const items = (d.data ?? []).map((a) => ({
       source: "cleveland" as const, remoteId: String(a.id),
       title: a.title || "Untitled",
@@ -295,6 +335,11 @@ const cleveland: Adapter = {
    candidate, so this connector returns metadata and a page link and no
    thumbnail. It is a catalogue to search, not a source to acquire from. */
 const RIJKS_SEARCH = "https://data.rijksmuseum.nl/search/collection";
+/* the kinds this endpoint facets; the rest ride the title query. It has no
+   date RANGE: creationDate takes one exact year and every range spelling
+   answers "Unsupported query parameter" (probed), so a period is not
+   applied here and searchConnected says so. */
+const RIJKS_TYPES = new Set<Medium>(["painting", "print", "drawing", "photograph", "sculpture"]);
 
 const rijks: Adapter = {
   id: "rijks",
@@ -308,9 +353,10 @@ const rijks: Adapter = {
        honest continuation, so offset answers empty-and-exhausted rather
        than repeats dressed as depth */
     if (offset > 0) return { items: [], total: null, exhausted: true };
+    const rf = medium && RIJKS_TYPES.has(medium) ? medium : undefined;
     const d = await getJson<{ orderedItems?: Array<{ id: string }>; partOf?: { totalItems?: number } }>(
-      RIJKS_SEARCH + "?imageAvailable=True" + (medium ? "&type=" + medium : "") +
-      "&title=" + encodeURIComponent(q));
+      RIJKS_SEARCH + "?imageAvailable=True" + (rf ? "&type=" + rf : "") +
+      "&title=" + encodeURIComponent(withWord(q, medium, rf)));
     const ids = (d.orderedItems ?? []).slice(0, Math.min(limit, 8));
     const out: Candidate[] = [];
     for (const it of ids) {
@@ -348,13 +394,16 @@ const europeana: Adapter = {
     if (d.success === false) throw new SourceError(d.error || "Europeana refused the key");
     return { detail: n(d.totalResults) + " records with media" };
   },
-  async search(q, limit, _medium, offset = 0) {
+  async search(q, limit, medium, offset = 0, years) {
     const key = process.env.ATLAS_EUROPEANA_KEY?.trim() ?? "";
+    const span = bounds(years);
     const d = await getJson<{ totalResults?: number; items?: Array<{
       id: string; title?: string[]; dcCreator?: string[];
       guid?: string; edmPreview?: string[]; rights?: string[];
     }> }>(EUROPEANA_BASE + "/record/v2/search.json?wskey=" + encodeURIComponent(key) +
-      "&rows=" + limit + (offset > 0 ? "&start=" + (offset + 1) : "") + "&media=true&query=" + encodeURIComponent(q));
+      "&rows=" + limit + (offset > 0 ? "&start=" + (offset + 1) : "") + "&media=true" +
+      (span ? "&qf=" + encodeURIComponent("YEAR:[" + span.from + " TO " + span.to + "]") : "") +
+      "&query=" + encodeURIComponent(withWord(q, medium, undefined)));
     const items = (d.items ?? []).map((i) => {
       const rights = i.rights?.[0] ?? null;
       /* only the genuinely open rights statements count as keepable; anything
@@ -537,6 +586,20 @@ export const ADAPTERS: Record<SourceId, Adapter> = {
 };
 
 /** The message a human should see when a source refuses. */
+/* What each source can actually narrow by. A refinement a source cannot
+   honour is not dropped in silence: searchConnected names the source beside
+   its results, and the agent is told. Are.na is channels and Pinterest is
+   your own pins; neither has a kind or a date to facet on. */
+export const FACETS: Record<SourceId, { medium: boolean; years: boolean }> = {
+  met: { medium: true, years: true },
+  artic: { medium: true, years: true },
+  cleveland: { medium: true, years: true },
+  rijks: { medium: true, years: false },
+  europeana: { medium: true, years: true },
+  arena: { medium: false, years: false },
+  pinterest: { medium: false, years: false },
+};
+
 export function reason(e: unknown): string {
   if (e instanceof SourceError) return e.message;
   if (e instanceof Error) return e.message;
@@ -554,6 +617,9 @@ export type OutsideSearch = {
      they were asked to continue from — how a pull knows the well is dry
      rather than merely guessing from a thin page */
   exhausted: SourceId[];
+  /* sources that were asked for a kind or a period they cannot facet on:
+     their results are unfiltered, and the caller should say so */
+  unfaceted: SourceId[];
   /* how far each source's own cursor advanced — the amount to add to its
      offset to continue past what this call read. See Adapter.search. */
   consumed: { source: SourceId; consumed: number }[];
@@ -570,6 +636,8 @@ export async function searchConnected(
   q: string,
   opts: {
     limit?: number; only?: SourceId | null; medium?: Medium | null; allow?: SourceId[] | null;
+    /* a period of creation; applied where the source has a date facet */
+    years?: Years | null;
     /* per-source continuation: how many of this query each source has
        already delivered, so a pull resumes where delivery stopped instead
        of re-reading page one. Sources absent from the map start fresh. */
@@ -590,7 +658,7 @@ export async function searchConnected(
     try {
       /* each source resumes from ITS OWN mark: a sweep where one source has
          given up 90 and another 12 must not restart them together */
-      const r = await ADAPTERS[id].search(q, limit, opts.medium ?? undefined, opts.offsets?.[id] ?? 0);
+      const r = await ADAPTERS[id].search(q, limit, opts.medium ?? undefined, opts.offsets?.[id] ?? 0, opts.years ?? undefined);
       return {
         id, items: r.items, total: r.total, exhausted: r.exhausted === true,
         consumed: typeof r.consumed === "number" ? r.consumed : r.items.length,
@@ -601,12 +669,15 @@ export async function searchConnected(
     }
   }));
 
+  const wantYears = !!bounds(opts.years);
+  const unfaceted = targets.filter((id) => (opts.medium && !FACETS[id].medium) || (wantYears && !FACETS[id].years));
   return {
     results: settled.flatMap((s) => s.items),
     searched: targets,
     failed: settled.filter((s) => s.error).map((s) => ({ source: s.id, error: s.error! })),
     totals: settled.map((s) => ({ source: s.id, total: s.total })),
     exhausted: settled.filter((s) => s.exhausted).map((s) => s.id),
+    unfaceted,
     consumed: settled.map((s) => ({ source: s.id, consumed: s.consumed })),
   };
 }

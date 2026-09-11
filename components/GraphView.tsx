@@ -16,7 +16,7 @@
   creates a manual link.
 */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { TAXONOMY } from "@/lib/taxonomy";
 import { useRouter, useSearchParams } from "next/navigation";
 import Inspector from "./Inspector";
@@ -90,11 +90,15 @@ type ThreadItem =
   /* what search_outside found: outside the library, so shown here in the
      conversation rather than on the canvas, which draws by image id */
   | { type: "candidates"; query: string; items: Candidate[]; totals?: Record<string, number> }
-  /* the follow-up surface after an outside search: checkable narrows, a
-     source to go deeper into, and a line of the human's own words — all
-     layered into ONE refined search. sent: null = live, a string = the
-     refinement that went, "-" = passed over by a newer prompt. */
+  /* the follow-up surface after an outside search: a mood × light pad, a
+     colour ramp, a period range, the kinds of work, the platforms, and two
+     lines of the human's own words — all layered into ONE refined search.
+     sent: null = live, a string = the refinement that went, "-" = passed
+     over by a newer prompt. */
   | { type: "refine"; base: string; sources: { id: string; total: number | null }[]; sent: string | null;
+      /* the words THIS search ran (the probes, joined) — distinct from base,
+         which is the subject a chain of refinements keeps opening with */
+      query?: string;
       /* what the strip holds and roughly what is still out there, so the
          fork can state the stakes instead of asking blind */
       held?: number; remaining?: number | null;
@@ -430,21 +434,42 @@ function folderNameFrom(q: string): string {
 const ARCH_NAMES = new Set(["archivist", "curator", "media manager", "atlas"]);
 
 /* ---- the refine surface: an outside search's follow-up --------------------
-   Checkable narrows (tones + a medium), a source to go deeper into — shown
-   with the population it reported, so "go deeper" is a navigable fact — and
-   a free line for the human's own words. Everything checked layers into ONE
-   sentence that goes back through the agent as the next search. */
-/* every narrow group is MULTI-select — tones, colours and mediums layer
-   freely ("dark + blue + paintings + prints"). Only the source stays
-   single: going deeper means going deeper into ONE place. */
-const REFINE_TONES = ["dark", "muted", "warm", "monochrome", "night"];
-const REFINE_COLOURS = ["blue", "red", "green", "gold"];
-const REFINE_MEDIUMS = ["painting", "print", "photograph", "sculpture"];
+   The controls are the card. Mood and light on one pad, a colour ramp, a
+   period range, the kinds of work and the platforms to search (both
+   multi-select), and two lines for what those cannot say. Everything set
+   composes into ONE sentence that goes back through the agent as the next
+   search — the words become probes, the kinds, period and platforms become
+   the tool's facets — and one verb sends it. */
+/* ---- the refine card's vocabulary ----
+   Mood across and light up on one pad, a colour ramp, fourteen period stops
+   (everything before 1900, then a decade a stop), the nine kinds the sources
+   can facet or at least name, and the platforms in the order they are
+   listed under Agents. */
+const REFINE_MOODS = ["serene", "calm", "contemplative", "any", "mysterious", "intense", "chaotic"];
+const REFINE_MOODS_SHORT = ["serene", "calm", "contempl.", "any", "myster.", "intense", "chaotic"];
+const REFINE_LIGHTS = ["bright", "high contrast", "any", "low contrast", "dark"];
+const REFINE_HUES = ["any", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "monochrome"];
+const REFINE_PERIODS = ["pre-1900", "1900s", "1910s", "1920s", "1930s", "1940s", "1950s", "1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
+const REFINE_LAST = REFINE_PERIODS.length - 1;
+const REFINE_MEDIUMS = ["painting", "print", "drawing", "photograph", "sculpture", "textile", "ceramic", "poster", "book"];
+const REFINE_PLATFORMS = ["met", "artic", "cleveland", "rijks", "europeana", "arena", "pinterest"];
+/* a stop pair in years: pre-1900 is open at the start, the last decade runs
+   to now, and the whole range is no period at all */
+const periodYears = (p0: number, p1: number): { from: number | null; to: number | null } | null => {
+  if (p0 === 0 && p1 === REFINE_LAST) return null;
+  return { from: p0 === 0 ? null : 1900 + (p0 - 1) * 10, to: p1 === REFINE_LAST ? null : 1900 + (p1 - 1) * 10 + 9 };
+};
+const periodLabel = (p0: number, p1: number) =>
+  p0 === 0 && p1 === REFINE_LAST ? "any" : p0 === p1 ? REFINE_PERIODS[p0] : REFINE_PERIODS[p0] + " – " + REFINE_PERIODS[p1];
+const yearsPhrase = (y: { from: number | null; to: number | null }) =>
+  y.from != null && y.to != null ? "made between " + y.from + " and " + y.to
+    : y.from != null ? "made in " + y.from + " or later"
+      : "made before " + ((y.to ?? 0) + 1);
+const listWords = (a: string[]) => (a.length < 2 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]);
 const SOURCE_NAME: Record<string, string> = {
   met: "the Met", artic: "Art Institute", cleveland: "Cleveland",
   rijks: "Rijksmuseum", europeana: "Europeana", arena: "Are.na", pinterest: "Pinterest",
 };
-const fmtPop = (t: number) => "~" + t.toLocaleString("en-GB");
 
 /* The light table's ceiling. A pull can run to a thousand across turns;
    past that it is a warehouse, and nobody is looking at image 900. */
@@ -481,31 +506,51 @@ function mergeCandidates(
   return { query: label, items, totals };
 }
 
-function RefineBlock({ item, busy, onGo }: {
+function RefineBlock({ item, busy, platforms, onGo }: {
   item: Extract<ThreadItem, { type: "refine" }>;
   busy: boolean;
+  /* every source switched on, so the platform row offers the whole reach and
+     not only where the last search happened to land; null until known */
+  platforms: string[] | null;
   onGo: (text: string) => void;
 }) {
-  const [tones, setTones] = useState<string[]>([]);
-  const [colours, setColours] = useState<string[]>([]);
+  const [cell, setCell] = useState<{ c: number; r: number } | null>(null);
+  const [hue, setHue] = useState(0);
+  const [p0, setP0] = useState(0);
+  const [p1, setP1] = useState(REFINE_LAST);
   const [mediums, setMediums] = useState<string[]>([]);
-  const [source, setSource] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
   const [custom, setCustom] = useState("");
+  const fieldId = useId();
 
   const spent = item.sent !== null;
-  const chosen = tones.length > 0 || colours.length > 0 || mediums.length > 0 || source !== null || custom.trim().length > 0;
+  const off = spent || busy;
   const flip = (set: React.Dispatch<React.SetStateAction<string[]>>, v: string) =>
     set((a) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]));
+  const known = new Set(platforms ?? item.sources.map((s) => s.id));
+  const avail = REFINE_PLATFORMS.filter((id) => known.has(id)).concat([...known].filter((id) => !REFINE_PLATFORMS.includes(id)));
+
+  /* what the controls say, as words for the probes and facets for the tools.
+     "any" is silence: it adds nothing to the sentence. */
+  const mood = cell ? REFINE_MOODS[cell.c] : "any";
+  const light = cell ? REFINE_LIGHTS[cell.r] : "any";
+  const years = periodYears(p0, p1);
+  const words = [mood, light, REFINE_HUES[hue]].filter((w) => w !== "any");
+  const kinds = mediums.map((m) => m + "s");
+  const said = custom.trim();
+  const chosen = words.length > 0 || kinds.length > 0 || years !== null || said.length > 0 || picked.length > 0;
 
   const compose = () => {
-    const narrow = [...tones, ...colours, ...mediums.map((mm) => mm + "s")];
     let s = "Refine the outside search for " + item.base;
-    if (narrow.length) s += ": narrow to " + narrow.join(", ");
-    if (custom.trim()) s += (narrow.length ? " — " : ": ") + custom.trim();
-    if (source) s += ". Search only " + (SOURCE_NAME[source] ?? source) + ".";
+    const narrow = [...words, ...kinds];
+    if (narrow.length) s += ": narrow to " + listWords(narrow);
+    if (years) s += (narrow.length ? ", " : ": ") + yearsPhrase(years);
+    if (said) s += (narrow.length || years ? " — " : ": ") + said;
+    if (picked.length) s += ". Search only " + listWords(picked.map((id) => SOURCE_NAME[id] ?? id)) + ".";
     else if (!s.endsWith(".")) s += ".";
     return s;
   };
+  const go = () => { if (chosen && !off) onGo(compose()); };
 
   if (spent && item.sent !== "-") {
     /* The refinement that went, kept as the block's receipt — and, while the
@@ -533,97 +578,128 @@ function RefineBlock({ item, busy, onGo }: {
     <div className={"agent-refine" + (item.sent === "-" ? " is-passed" : "")}>
       <div className="agent-refine__head">
         <span className="mono-label">Refine the search</span>
-        {/* The stakes, stated once. Without this the fork asks the human to
-            choose between narrowing and pulling with no idea how much is
-            behind either — which is how "we only found 8" happened. */}
+        {/* The stakes, stated once: what is on the table against what is
+            still out there. */}
         {typeof item.held === "number" && (
           <span className="agent-refine__scale mono-xs">
             {item.held} on the table
-            {remaining && remaining > 0 ? " · about " + remaining.toLocaleString("en-GB") + " more out there" : ""}
+            {remaining && remaining > 0 ? " · about " + remaining.toLocaleString("en-GB") + " more" : ""}
           </span>
         )}
       </div>
-      <div className="agent-refine__row">
-        <span className="agent-refine__k">tone</span>
-        {REFINE_TONES.map((t) => (
-          <button
-            key={t}
-            className={"refine-chip" + (tones.includes(t) ? " is-on" : "")}
-            aria-pressed={tones.includes(t)}
-            disabled={spent || busy}
-            onClick={() => flip(setTones, t)}
-          ><i />{t}</button>
-        ))}
+
+      {/* the pad: mood across, light up, one click says both; clicking the
+          chosen cell again says nothing */}
+      <div className="refine-matrix" role="group" aria-label="Mood across, light up">
+        <div className="refine-matrix__ylab" aria-hidden="true">
+          {REFINE_LIGHTS.map((w, r) => <span key={w} className={"refine-k" + (cell?.r === r ? " is-on" : "")}>{w}</span>)}
+        </div>
+        <div className="refine-matrix__box">
+          {REFINE_LIGHTS.map((l, r) => REFINE_MOODS.map((m, c) => {
+            const on = !!cell && cell.c === c && cell.r === r;
+            return (
+              <button
+                type="button"
+                key={r + "-" + c}
+                className={"refine-matrix__cell" + (on ? " is-on" : "")}
+                aria-label={m + " · " + l}
+                aria-pressed={on}
+                title={m + " · " + l}
+                disabled={off}
+                onClick={() => setCell(on ? null : { c, r })}
+              />
+            );
+          }))}
+          {cell && (
+            <span
+              className="refine-matrix__dot"
+              style={{ left: ((cell.c + 0.5) / REFINE_MOODS.length) * 100 + "%", top: ((cell.r + 0.5) / REFINE_LIGHTS.length) * 100 + "%" }}
+            />
+          )}
+        </div>
+        <div className="refine-matrix__xlab" aria-hidden="true">
+          {REFINE_MOODS_SHORT.map((w, c) => <span key={w} className={"refine-k" + (cell?.c === c ? " is-on" : "")}>{w}</span>)}
+        </div>
       </div>
-      <div className="agent-refine__row">
-        <span className="agent-refine__k">colour</span>
-        {REFINE_COLOURS.map((t) => (
-          <button
-            key={t}
-            className={"refine-chip" + (colours.includes(t) ? " is-on" : "")}
-            aria-pressed={colours.includes(t)}
-            disabled={spent || busy}
-            onClick={() => flip(setColours, t)}
-          ><i />{t}</button>
-        ))}
+
+      <div className="refine-scale">
+        <span className="refine-k">colour</span>
+        <div className="refine-track is-hue">
+          <input
+            type="range" min={0} max={REFINE_HUES.length - 1} value={hue} disabled={off}
+            aria-label="Colour" aria-valuetext={REFINE_HUES[hue]}
+            onChange={(e) => setHue(Number(e.target.value))}
+          />
+        </div>
+        <span className={"refine-v" + (hue === 0 ? " is-any" : "")}>{REFINE_HUES[hue]}</span>
       </div>
-      <div className="agent-refine__row">
-        <span className="agent-refine__k">medium</span>
-        {REFINE_MEDIUMS.map((mm) => (
-          <button
-            key={mm}
-            className={"refine-chip" + (mediums.includes(mm) ? " is-on" : "")}
-            aria-pressed={mediums.includes(mm)}
-            disabled={spent || busy}
-            onClick={() => flip(setMediums, mm)}
-          ><i />{mm}</button>
-        ))}
+      <div className="refine-scale">
+        <span className="refine-k">period</span>
+        <div className="refine-track is-range">
+          <span className="refine-rail" />
+          <span
+            className="refine-fill"
+            style={{ left: "calc(5px + (100% - 10px) * " + p0 / REFINE_LAST + ")", width: "calc((100% - 10px) * " + (p1 - p0) / REFINE_LAST + ")" }}
+          />
+          <input
+            type="range" min={0} max={REFINE_LAST} value={p0} disabled={off}
+            aria-label="Period from" aria-valuetext={REFINE_PERIODS[p0]}
+            onChange={(e) => setP0(Math.min(Number(e.target.value), p1))}
+          />
+          <input
+            type="range" min={0} max={REFINE_LAST} value={p1} disabled={off}
+            aria-label="Period to" aria-valuetext={REFINE_PERIODS[p1]}
+            onChange={(e) => setP1(Math.max(Number(e.target.value), p0))}
+          />
+        </div>
+        <span className={"refine-v" + (years ? "" : " is-any")}>{periodLabel(p0, p1)}</span>
       </div>
-      <div className="agent-refine__row">
-        <span className="agent-refine__k">only from</span>
-        {item.sources.map((s) => (
-          <button
-            key={s.id}
-            className={"refine-chip" + (source === s.id ? " is-on" : "")}
-            aria-pressed={source === s.id}
-            disabled={spent || busy}
-            title={s.total != null ? fmtPop(s.total) + " matched there" : undefined}
-            onClick={() => setSource((v) => (v === s.id ? null : s.id))}
-          ><i />{SOURCE_NAME[s.id] ?? s.id}{s.total != null && <em>{fmtPop(s.total)}</em>}</button>
-        ))}
+
+      <div className="refine-row">
+        <span className="refine-k">medium</span>
+        <div className="refine-chips">
+          {REFINE_MEDIUMS.map((m) => (
+            <button
+              key={m} type="button"
+              className={"refine-chip" + (mediums.includes(m) ? " is-on" : "")}
+              aria-pressed={mediums.includes(m)} disabled={off}
+              onClick={() => flip(setMediums, m)}
+            >{m}</button>
+          ))}
+        </div>
       </div>
-      <div className="agent-refine__go">
-        <input
-          value={custom}
-          disabled={spent || busy}
-          placeholder="or say it your way — smoky interiors, no portraits…"
-          onChange={(e) => setCustom(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && chosen && !busy) onGo(compose()); }}
-          aria-label="Your own refinement"
-        />
-        <button className="agent-refine__send" disabled={spent || busy || !chosen} title="Search again, narrowed to what you chose" onClick={() => onGo(compose())}>
-          go deeper
-        </button>
-      </div>
-      {/* The other half of the fork, and the reason this block is not a
-          questionnaire: the search as it stands is already an answer. Pull
-          more brings the next chunk of it EXACTLY as it stands and ignores
-          the card; go deeper sends what the card composed. Two verbs that
-          never change their names -- the old "narrow, then pull more" tried
-          to do both at once and read as neither. Leaving it alone is simply
-          not pressing either. */}
-      {(remaining === null || remaining > 0) && (
-        <div className="agent-refine__pull">
-          <button
-            className="agent-refine__more"
-            disabled={spent || busy}
-            title="The next of the same search, exactly as it stands"
-            onClick={() => onGo("Pull the next chunk for " + item.base + " — more of the same search, no narrowing.")}
-          >
-            pull more
-          </button>
+      {avail.length > 0 && (
+        <div className="refine-row">
+          <span className="refine-k">platforms</span>
+          <div className="refine-chips">
+            {avail.map((id) => (
+              <button
+                key={id} type="button"
+                className={"refine-chip" + (picked.includes(id) ? " is-on" : "")}
+                aria-pressed={picked.includes(id)} disabled={off}
+                onClick={() => flip(setPicked, id)}
+              >{SOURCE_NAME[id] ?? id}</button>
+            ))}
+          </div>
         </div>
       )}
+
+      <div className="agent-refine__go">
+        <label className="refine-k" htmlFor={fieldId}>Describe the refinement</label>
+        <textarea
+          id={fieldId}
+          rows={2}
+          value={custom}
+          disabled={off}
+          placeholder="Anything the controls cannot say — smoky interiors, no portraits, nothing after 1950…"
+          onChange={(e) => setCustom(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go(); } }}
+        />
+      </div>
+      {/* one verb. With nothing chosen there is nothing to press. */}
+      <div className="agent-refine__acts">
+        <button className="agent-refine__send" disabled={off || !chosen} onClick={go}>search</button>
+      </div>
     </div>
   );
 }
@@ -717,6 +793,17 @@ export default function GraphView({
   const [ltOpen, setLtOpen] = useState(false);
   /* the drawer of earlier conversations, out from the panel's left edge */
   const [histOpen, setHistOpen] = useState(false);
+  /* which outside sources are switched on, for the refine card's platform
+     row: every connected one, not only those the last search returned */
+  const [connected, setConnected] = useState<string[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/connections").then((r) => r.json()).then((d: { connections?: { id: string; status?: string }[] }) => {
+      if (!alive || !Array.isArray(d?.connections)) return;
+      setConnected(d.connections.filter((c) => c.status !== "off").map((c) => c.id));
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const toggleFilterTag = useCallback((name: string) => {
     setFilterTags((current) => current.includes(name)
@@ -2452,7 +2539,7 @@ export default function GraphView({
       setThread((it) => [...it, { type: "msg", role: "assistant", content: d.reply }]);
       if (d.candidates && Array.isArray(d.candidates.items) && d.candidates.items.length) {
         /* an outside search's follow-up is a REFINE surface, not generic
-           chips: narrows to check, a source to go deeper into, and the
+           chips: mood, light, colour, period, kinds and platforms, plus the
            human's own words — layered into the next search */
         const srcs = [...new Set((d.candidates.items as Candidate[]).map((c) => c.source))];
         const totals: Record<string, number> = d.candidates.totals ?? {};
@@ -2460,7 +2547,7 @@ export default function GraphView({
            everything already handed over for these words — the same
            arithmetic the agent is given, so the block and the sentence
            beside it can never quote different numbers */
-        const base = String(d.candidates.query ?? "");
+        const query = String(d.candidates.query ?? "");
         const pop = Object.values(totals).reduce((a, b) => a + b, 0);
         const taken = Object.values(continuationRef.current)
           .reduce((a, per) => a + Object.values(per ?? {}).reduce((x, y) => x + (y ?? 0), 0), 0);
@@ -2468,14 +2555,21 @@ export default function GraphView({
            offer one step back */
         const prev = [...thread].reverse().find((x) => x.type === "refine") as
           Extract<ThreadItem, { type: "refine" }> | undefined;
+        /* down a chain of refinements the subject stays the human's subject;
+           the probes' own words (three qualities glued to three synonyms)
+           are not what the next sentence should open with */
+        const chained = !!prev && /^Refine the outside search for /.test(text);
+        const base = chained ? prev.base : query;
+        const prevWords = prev ? (prev.query ?? prev.base) : null;
         setThread((it) => [...it, {
           type: "refine",
           base,
+          query,
           sources: srcs.map((id) => ({ id, total: totals[id] ?? null })),
           sent: null,
           held: (d.candidates.items as Candidate[]).length,
           remaining: pop ? Math.max(0, pop - taken) : null,
-          prev: prev && prev.base !== base ? prev.base : null,
+          prev: prevWords && prevWords !== query ? prevWords : null,
         }]);
       } else if (Array.isArray(d.ids) && d.ids.length) {
         pushCtas([
@@ -3907,6 +4001,7 @@ export default function GraphView({
                             key={i}
                             item={m}
                             busy={promptBusy}
+                            platforms={connected}
                             onGo={(text) => {
                               setThread((it) => it.map((x, j) => (j === i && x.type === "refine" ? { ...x, sent: text } : x)));
                               void sendPrompt(text);

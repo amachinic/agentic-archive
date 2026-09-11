@@ -31,10 +31,14 @@ export async function GET(req: Request) {
     return Response.json({ error: "no sources are connected yet" }, { status: 400 });
   }
 
-  const { results, searched, failed } = await searchConnected(q, { limit, only, medium });
+  /* a period of creation in years, either end open: ?from=1920&to=1959 */
+  const yr = (k: string) => { const n = Math.trunc(Number(url.searchParams.get(k))); return Number.isFinite(n) && n > 0 ? n : null; };
+  const years = yr("from") != null || yr("to") != null ? { from: yr("from"), to: yr("to") } : null;
+  const { results, searched, failed, unfaceted } = await searchConnected(q, { limit, only, medium, years });
 
   return Response.json({
     query: q,
+    ...(unfaceted.length ? { filters_not_applied_at: unfaceted } : {}),
     searched: searched.length,
     found: results.length,
     keepable: results.filter((r) => r.keepable).length,

@@ -179,8 +179,10 @@ const TOOLS = [
         type: "object",
         properties: {
           query: { type: "string", description: "ONE concrete probe: words a museum catalogue would actually contain" },
-          medium: { type: "string", enum: ["painting", "print", "photograph", "sculpture"], description: "facet filter on what the work IS; set it whenever the human names a kind" },
-          source: { type: "string", description: "ONLY to re-check a single source id (met, artic, cleveland, rijks, arena…); omit to sweep all — the default and almost always right" },
+          medium: { type: "string", enum: MEDIUMS, description: "facet filter on what the work IS; set it whenever the human names a kind. Several kinds = one probe per kind" },
+          sources: { type: "array", items: { type: "string" }, description: "restrict the sweep to these source ids (met, artic, cleveland, rijks, europeana, arena, pinterest) when the human names where to search — one or several; omit to sweep every connected source, the default and almost always right" },
+          from: { type: "integer", description: "earliest year of creation, when the human names a period: the 1920s = 1920, after 1950 = 1950" },
+          to: { type: "integer", description: "latest year of creation: the 1950s = 1959, before 1900 = 1899" },
           count: { type: "integer", minimum: 1, maximum: 240, description: "set ONLY when the human named a number of images: the TOTAL they asked for this turn. Repeat the SAME total on every probe of the turn — never the remainder still missing" },
           more: { type: "boolean", description: "continue this query past everything it has already delivered — this turn or any earlier one. The server keeps the per-source odometer; sources report exhausted when their well is dry. Use when the human asks for more / the next chunk / to pull everything." },
         },
@@ -693,8 +695,21 @@ export async function POST(req: Request) {
         }
         const q = String(args.query ?? "").slice(0, 200).trim();
         if (!q) return JSON.stringify({ error: "a query is required" });
-        const only = outsideSources.find((id) => id === args.source) ?? null;
+        /* where to search: the ids the human named, kept to those actually
+           allowed this turn. `source` (singular) is accepted for the older
+           wording. Naming only sources that are off is an answer, not a
+           silent sweep of everything else. */
+        const named = (Array.isArray(args.sources) ? args.sources : args.source ? [args.source] : [])
+          .map((s: unknown) => String(s).trim().toLowerCase()).filter(Boolean);
+        const picked = named.length ? outsideSources.filter((id) => named.includes(id)) : null;
+        if (picked && picked.length === 0) {
+          return JSON.stringify({ error: "none of the named sources is connected: " + named.join(", ") + ". Connected: " + outsideSources.join(", ") + ". Search those or tell the human." });
+        }
+        const only = picked && picked.length === 1 ? picked[0] : null;
         const medium = MEDIUMS.find((m) => m === args.medium) ?? null;
+        /* a period of creation in years; either end may be open */
+        const yr = (v: unknown) => { const n = Math.trunc(Number(v)); return Number.isFinite(n) && n > 0 ? n : null; };
+        const years = yr(args.from) != null || yr(args.to) != null ? { from: yr(args.from), to: yr(args.to) } : null;
         /* "i want 100 images" is a legitimate ask: count raises both the
            per-probe depth and the turn's cap toward the number the human
            actually named, bounded at 240 so a typo cannot order a museum. */
@@ -721,7 +736,7 @@ export async function POST(req: Request) {
            Met: all nine top-ranked "sad" paintings, gone, silently, and not
            recoverable by pulling further. A different facet is a different
            well; it starts at the top. */
-        const odo = q + " " + (medium ?? "");
+        const odo = q + " " + (medium ?? "") + (years ? " " + (years.from ?? "") + "-" + (years.to ?? "") : "");
         const offsets = isMore ? (consumed[odo] ?? {}) : {};
         if (isMore && !wantThisTurn) {
           /* a chunk on top of this turn's own take, and never past the
@@ -736,17 +751,18 @@ export async function POST(req: Request) {
         const per = only
           ? Math.min(40, wantThisTurn || (isMore ? OUTSIDE_PULL_LIMIT : OUTSIDE_SINGLE_LIMIT))
           : Math.min(40, wantThisTurn
-              ? Math.ceil(wantThisTurn / Math.max(1, outsideSources.length))
+              ? Math.ceil(wantThisTurn / Math.max(1, (picked ?? outsideSources).length))
               : isMore ? OUTSIDE_PULL_LIMIT : OUTSIDE_PROBE_TARGET);
 
-        const { results: fetched, searched, failed, totals, exhausted, consumed: advanced } = await searchConnected(q, {
+        const { results: fetched, searched, failed, totals, exhausted, unfaceted, consumed: advanced } = await searchConnected(q, {
           limit: per,
           only,
           medium,
+          years,
           offsets,
           /* the turn's own gate, not the database's: a source the reader
              switched off must not be reached by re-deriving the live list */
-          allow: outsideSources,
+          allow: picked ?? outsideSources,
         });
 
         /* the round-robin trim: every source that answered is represented,
@@ -921,6 +937,12 @@ export async function POST(req: Request) {
           /* the turn's own ledger, probe by probe: yield is the teacher */
           probes_this_turn: probeLog.map((p) => p.q + " → +" + p.added),
           ...(failed.length ? { failed } : {}),
+          /* a kind or a period a source cannot facet on: its results are
+             unfiltered, and the reply must not pretend otherwise */
+          ...(unfaceted.length ? {
+            filters_not_applied_at: unfaceted,
+            filters_note: "these sources cannot narrow by " + [medium ? "kind" : "", years ? "period" : ""].filter(Boolean).join(" or ") + "; what they returned is unfiltered — say so if you report their finds",
+          } : {}),
           /* the loop contract, spoken AT the decision point: a system rule
              asking for persistence was followed 1 time in 5 (measured); an
              instruction inside the tool result is read when it matters */
@@ -969,12 +991,13 @@ export async function POST(req: Request) {
       "The library always comes first for anything it can answer. Candidates are not in the library: never file, sort or count them as if they were." +
       "\n- Outside searches for a MOOD or THEME are a plan of 3 to 5 DIFFERENT probes, because catalogues only match their own words. Probe the synonyms, the iconography (vanitas, lamentation, elegy), and the movements and artists art history files under that mood — a search for melancholy that never probes Munch, the Symbolists or Picasso's blue period has only searched the word, not the subject." +
       "\n- One probe sweeps every source at once. Never issue the same query twice, and never once-per-source." +
-      "\n- When the human names a kind of work (paintings, prints, photographs), set medium on every probe." +
+      "\n- When the human names a kind of work (paintings, prints, drawings, photographs, sculptures, textiles, ceramics, posters, books), set medium on every probe; several kinds means one probe PER kind, never a list in the words." +
+      "\n- When the human names a period (the 1920s, before 1900, 1950 to 1979), set from and to in YEARS on every probe — the 1920s is 1920 to 1929, before 1900 is to 1899, a decade to now is from only. Never put decades into the query words; catalogues do not match them." +
       "\n- When the human asks to PULL from, SEE, or SHOW the outside sources, SEARCH — immediately, with the conversation's current theme if they named none. Never describe what a search could do instead of running one." +
-      "\n- Probes are catalogue queries, not sentences: two or three words each. Fold a refinement's tones and colours into SEPARATE short probes ('dark melancholy', 'blue grief'), never one long string — a compound string matches nothing anywhere." +
+      "\n- Probes are catalogue queries, not sentences: two or three words each. Fold a refinement's mood, light and colour words into SEPARATE short probes — ONE quality plus the subject each ('calm solitude', 'teal solitude'), never every quality glued to every synonym ('solitude calm high contrast teal' matches nothing anywhere). Its kinds, period and sources are facets, not words." +
       "\n- Are.na's wealth for a mood is its CHANNELS — human-curated collections someone already spent an evening filling ('sad' surfaces channels holding ~1,600 blocks). A probe walks the matched channels for you; probe with the short evocative words a person would NAME a channel (sad, melancholy, grief, longing, blue), not catalogue phrases. matched_at_sources now reports Are.na's real population — when it dwarfs found, the search has only skimmed and should probe again." +
       "\n- A zero-result probe is information — loosen the words and try once more before concluding a source holds nothing." +
-      "\n- When the human names ONE source (are.na, the Met), set source on every probe so the search goes only there — never sweep everything and report a subset." +
+      "\n- When the human names where to search (are.na, the Met, or several at once), set sources to those ids on every probe so the search goes only there — never sweep everything and report a subset." +
       "\n- When the human names a NUMBER of images, set count to it on every probe and keep probing with DIFFERENT words until gathered_this_turn approaches it or the probes run dry. Never refuse a number; gather toward it." +
       "\n- A search with no number is a PREVIEW, not a delivery. Two or three probes, then STOP and hand back: say what is on the light table, about how much exists behind it, and offer in ONE sentence to refine, pull more, or leave it. The preview is already there when you ask — so ask once, lightly, and never re-ask. If they say nothing about it, the preview was the answer." +
       "\n- \"More\", \"keep going\", \"pull the rest\", \"all of them\" = the SAME query again with more:true. That continues past everything already delivered; it never re-reads what they have seen. Never answer a request for more by inventing new words — that is a different search, and it loses their place." +
