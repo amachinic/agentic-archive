@@ -1730,8 +1730,8 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
    Checkable narrows, a source to go deeper into (with the population it
    reported), and a line of the human's own words — layered into one search. */
 /* ---- the refine card ----
-   The controls ARE the card: a mood × light pad, a colour ramp, a period
-   range, the kinds of work, the platforms, two lines for the rest, one verb.
+   The controls ARE the card: three ramps (colour, light, period), the kinds
+   of work, the platforms, two lines for the rest, one verb.
    No sentence explains it and nothing previews what will be sent; what you
    set is what goes. */
 .agent-refine {
@@ -1768,45 +1768,6 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 }
 .refine-v.is-any { color: var(--text-muted); }
 
-/* the pad: mood across, light up; one click says both. The grid sits on
-   the card's left edge; the row words stand to its right, left-aligned, in a
-   column as wide as the sliders' value column, so the grid ends where the
-   tracks end and the words start where the values start. */
-.refine-matrix { display: grid; grid-template-columns: 1fr 104px; grid-template-rows: auto auto; gap: 4px 12px; }
-.refine-matrix__ylab {
-  grid-column: 2; grid-row: 1; display: grid; grid-template-rows: repeat(5, 1fr);
-  align-items: center; height: 120px; text-align: left;
-}
-.refine-matrix__ylab .refine-k { line-height: 1; white-space: nowrap; }
-.refine-matrix__box {
-  grid-column: 1; grid-row: 1; position: relative; height: 120px;
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-  display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(5, 1fr);
-  overflow: hidden;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--text-primary) 9%, transparent), transparent 55%);
-}
-.refine-matrix__cell {
-  appearance: none; margin: 0; padding: 0; background: transparent; border: 0;
-  border-right: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  cursor: crosshair;
-  transition: background var(--motion-duration) var(--motion-ease);
-}
-/* the dot comes after the cells, so these counts are cells only */
-.refine-matrix__cell:nth-child(7n) { border-right: 0; }
-.refine-matrix__cell:nth-child(n+29) { border-bottom: 0; }
-.refine-matrix__cell:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
-.refine-matrix__cell.is-on { background: color-mix(in srgb, var(--accent) 18%, transparent); }
-.refine-matrix__cell:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
-.refine-matrix__cell:disabled { cursor: default; }
-.refine-matrix__dot {
-  position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
-  background: var(--accent); pointer-events: none;
-  transition: left var(--motion-duration) var(--motion-ease), top var(--motion-duration) var(--motion-ease);
-}
-.refine-matrix__xlab { grid-column: 1; grid-row: 2; display: grid; grid-template-columns: repeat(7, 1fr); }
-.refine-matrix__xlab .refine-k { text-align: center; font-size: 7px; letter-spacing: 0.04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 /* the ramps: label, track, and the value left-aligned right after the
    track ends */
 .refine-scale { display: grid; grid-template-columns: 56px 1fr 104px; align-items: center; gap: 12px; min-height: 30px; }
@@ -1827,6 +1788,9 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 .refine-track.is-hue input[type=range]::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(90deg, #7b7b7b 0 8%, #c5322c 12%, #d97b2a 22%, #d6b83a 33%, #4f9a4a 47%, #2f9e93 58%, #2d6fc4 70%, #7a4bb5 82%, #c95c9a 92%, #b0b0b0 100%); opacity: 0.85; }
 .refine-track.is-hue input[type=range]::-moz-range-track { height: 2px; background: linear-gradient(90deg, #7b7b7b 0 8%, #c5322c 12%, #d97b2a 22%, #d6b83a 33%, #4f9a4a 47%, #2f9e93 58%, #2d6fc4 70%, #7a4bb5 82%, #c95c9a 92%, #b0b0b0 100%); }
 .refine-track.is-hue input[type=range]::-webkit-slider-thumb { margin-top: -4px; }
+.refine-track.is-light input[type=range]::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(90deg, #151515, #ededed); }
+.refine-track.is-light input[type=range]::-moz-range-track { height: 2px; background: linear-gradient(90deg, #151515, #ededed); }
+.refine-track.is-light input[type=range]::-webkit-slider-thumb { margin-top: -4px; box-shadow: 0 0 0 1px var(--surface); }
 /* the two-thumb range: two inputs on one rail, only the thumbs take the pointer */
 .refine-track.is-range input[type=range] { position: absolute; left: 0; right: 0; top: 0; pointer-events: none; }
 .refine-track.is-range input[type=range]::-webkit-slider-thumb { pointer-events: auto; }

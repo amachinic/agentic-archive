@@ -90,9 +90,9 @@ type ThreadItem =
   /* what search_outside found: outside the library, so shown here in the
      conversation rather than on the canvas, which draws by image id */
   | { type: "candidates"; query: string; items: Candidate[]; totals?: Record<string, number> }
-  /* the follow-up surface after an outside search: a mood × light pad, a
-     colour ramp, a period range, the kinds of work, the platforms, and two
-     lines of the human's own words — all layered into ONE refined search.
+  /* the follow-up surface after an outside search: colour, light and period
+     ramps, the kinds of work, the platforms, and two lines of the human's
+     own words — all layered into ONE refined search.
      sent: null = live, a string = the refinement that went, "-" = passed
      over by a newer prompt. */
   | { type: "refine"; base: string; sources: { id: string; total: number | null }[]; sent: string | null;
@@ -434,20 +434,18 @@ function folderNameFrom(q: string): string {
 const ARCH_NAMES = new Set(["archivist", "curator", "media manager", "atlas"]);
 
 /* ---- the refine surface: an outside search's follow-up --------------------
-   The controls are the card. Mood and light on one pad, a colour ramp, a
-   period range, the kinds of work and the platforms to search (both
-   multi-select), and two lines for what those cannot say. Everything set
+   The controls are the card. Three ramps (colour, light, period), the kinds
+   of work and the platforms to search (both multi-select), and two lines
+   for what those cannot say. Everything set
    composes into ONE sentence that goes back through the agent as the next
    search — the words become probes, the kinds, period and platforms become
    the tool's facets — and one verb sends it. */
 /* ---- the refine card's vocabulary ----
-   Mood across and light up on one pad, a colour ramp, fourteen period stops
-   (everything before 1900, then a decade a stop), the nine kinds the sources
-   can facet or at least name, and the platforms in the order they are
-   listed under Agents. */
-const REFINE_MOODS = ["serene", "calm", "contemplative", "any", "mysterious", "intense", "chaotic"];
-const REFINE_MOODS_SHORT = ["serene", "calm", "contempl.", "any", "myster.", "intense", "chaotic"];
-const REFINE_LIGHTS = ["bright", "high contrast", "any", "low contrast", "dark"];
+   Three ramps — colour, light, and fourteen period stops (everything before
+   1900, then a decade a stop) — the nine kinds the sources can facet or at
+   least name, and the platforms in the order they are listed under Agents. */
+const REFINE_LIGHTS = ["dark", "low contrast", "any", "high contrast", "bright"];
+const REFINE_LIGHT_ANY = 2;
 const REFINE_HUES = ["any", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "monochrome"];
 const REFINE_PERIODS = ["pre-1900", "1900s", "1910s", "1920s", "1930s", "1940s", "1950s", "1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
 const REFINE_LAST = REFINE_PERIODS.length - 1;
@@ -514,8 +512,8 @@ function RefineBlock({ item, busy, platforms, onGo }: {
   platforms: string[] | null;
   onGo: (text: string) => void;
 }) {
-  const [cell, setCell] = useState<{ c: number; r: number } | null>(null);
   const [hue, setHue] = useState(0);
+  const [light, setLight] = useState(REFINE_LIGHT_ANY);
   const [p0, setP0] = useState(0);
   const [p1, setP1] = useState(REFINE_LAST);
   const [mediums, setMediums] = useState<string[]>([]);
@@ -532,10 +530,8 @@ function RefineBlock({ item, busy, platforms, onGo }: {
 
   /* what the controls say, as words for the probes and facets for the tools.
      "any" is silence: it adds nothing to the sentence. */
-  const mood = cell ? REFINE_MOODS[cell.c] : "any";
-  const light = cell ? REFINE_LIGHTS[cell.r] : "any";
   const years = periodYears(p0, p1);
-  const words = [mood, light, REFINE_HUES[hue]].filter((w) => w !== "any");
+  const words = [REFINE_HUES[hue], REFINE_LIGHTS[light]].filter((w) => w !== "any");
   const kinds = mediums.map((m) => m + "s");
   const said = custom.trim();
   const chosen = words.length > 0 || kinds.length > 0 || years !== null || said.length > 0 || picked.length > 0;
@@ -588,40 +584,6 @@ function RefineBlock({ item, busy, platforms, onGo }: {
         )}
       </div>
 
-      {/* the pad: mood across, light up, one click says both; clicking the
-          chosen cell again says nothing */}
-      <div className="refine-matrix" role="group" aria-label="Mood across, light up">
-        <div className="refine-matrix__ylab" aria-hidden="true">
-          {REFINE_LIGHTS.map((w, r) => <span key={w} className={"refine-k" + (cell?.r === r ? " is-on" : "")}>{w}</span>)}
-        </div>
-        <div className="refine-matrix__box">
-          {REFINE_LIGHTS.map((l, r) => REFINE_MOODS.map((m, c) => {
-            const on = !!cell && cell.c === c && cell.r === r;
-            return (
-              <button
-                type="button"
-                key={r + "-" + c}
-                className={"refine-matrix__cell" + (on ? " is-on" : "")}
-                aria-label={m + " · " + l}
-                aria-pressed={on}
-                title={m + " · " + l}
-                disabled={off}
-                onClick={() => setCell(on ? null : { c, r })}
-              />
-            );
-          }))}
-          {cell && (
-            <span
-              className="refine-matrix__dot"
-              style={{ left: ((cell.c + 0.5) / REFINE_MOODS.length) * 100 + "%", top: ((cell.r + 0.5) / REFINE_LIGHTS.length) * 100 + "%" }}
-            />
-          )}
-        </div>
-        <div className="refine-matrix__xlab" aria-hidden="true">
-          {REFINE_MOODS_SHORT.map((w, c) => <span key={w} className={"refine-k" + (cell?.c === c ? " is-on" : "")}>{w}</span>)}
-        </div>
-      </div>
-
       <div className="refine-scale">
         <span className="refine-k">colour</span>
         <div className="refine-track is-hue">
@@ -632,6 +594,17 @@ function RefineBlock({ item, busy, platforms, onGo }: {
           />
         </div>
         <span className={"refine-v" + (hue === 0 ? " is-any" : "")}>{REFINE_HUES[hue]}</span>
+      </div>
+      <div className="refine-scale">
+        <span className="refine-k">light</span>
+        <div className="refine-track is-light">
+          <input
+            type="range" min={0} max={REFINE_LIGHTS.length - 1} value={light} disabled={off}
+            aria-label="Light" aria-valuetext={REFINE_LIGHTS[light]}
+            onChange={(e) => setLight(Number(e.target.value))}
+          />
+        </div>
+        <span className={"refine-v" + (light === REFINE_LIGHT_ANY ? " is-any" : "")}>{REFINE_LIGHTS[light]}</span>
       </div>
       <div className="refine-scale">
         <span className="refine-k">period</span>
@@ -2539,7 +2512,7 @@ export default function GraphView({
       setThread((it) => [...it, { type: "msg", role: "assistant", content: d.reply }]);
       if (d.candidates && Array.isArray(d.candidates.items) && d.candidates.items.length) {
         /* an outside search's follow-up is a REFINE surface, not generic
-           chips: mood, light, colour, period, kinds and platforms, plus the
+           chips: colour, light, period, kinds and platforms, plus the
            human's own words — layered into the next search */
         const srcs = [...new Set((d.candidates.items as Candidate[]).map((c) => c.source))];
         const totals: Record<string, number> = d.candidates.totals ?? {};
