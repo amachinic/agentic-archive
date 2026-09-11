@@ -54,9 +54,10 @@ ok("Escape closes it", !(await drawerOpen()));
 console.log("\n═══ one conversation, then New");
 await say("/sort");
 ok("the first ask names the chat", (await title()).toLowerCase().includes("sort the canvas"), await title());
-ok("the opener says hi and stays as the first turn, with no offers in it",
-   (await page.locator(".agent-home__say").count()) === 1 && /^Hi, I’m Atlas\./.test((await page.locator(".agent-home__say").textContent()).trim()) && /Type “\/” to see every command/.test(await page.locator(".agent-home__say").textContent()) && (await page.locator(".agent-home .agent-cta").count()) === 0,
-   (await page.locator(".agent-home__say").textContent()).slice(0, 60));
+ok("the opener says hi and stays as the first turn, the command hint on its own line, no offers in it",
+   (await page.locator(".agent-home__say").count()) === 2 && /^Hi, I’m Atlas\./.test((await page.locator(".agent-home__say").first().textContent()).trim()) && /^Type “\/” to see every command\.$/.test((await page.locator(".agent-home__cmd").textContent()).trim()) && (await page.locator(".agent-home .agent-cta").count()) === 0
+   && await page.evaluate(() => { const a = document.querySelector(".agent-home__say"), c = document.querySelector(".agent-home__cmd"); return c.getBoundingClientRect().top - a.getBoundingClientRect().bottom >= 4; }),
+   (await page.locator(".agent-home__cmd").textContent()).slice(0, 60));
 ok("the offers are one row above the composer, five of them, none wrapping",
    await page.evaluate(() => { const s = document.querySelector(".agent-offers"), ci = document.querySelector(".chatdock .graph-ci"); if (!s || !ci) return false; const b = s.getBoundingClientRect(), c = ci.getBoundingClientRect(); const tops = Array.from(s.querySelectorAll(".agent-cta")).map((x) => Math.round(x.getBoundingClientRect().top)); return b.bottom <= c.top + 1 && c.top - b.bottom < 24 && tops.length === 5 && new Set(tops).size === 1; }));
 ok("the row runs past the panel, so its right edge fades; scrolled to the end, the left edge fades instead",

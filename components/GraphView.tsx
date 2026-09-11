@@ -3889,9 +3889,13 @@ export default function GraphView({
                         {boot === 0 && thread.length === 0 && !promptBusy ? (
                           <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                         ) : (
-                          <p className="agent-home__say">{readOnly
-                            ? <>Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and search through the connected museums, Are.na and more. Type “/” to see every command.</>
-                            : "Hi, I’m Atlas. One agent, four lenses: I find and filter the archive, sort what is showing, search through the connected museums, Are.na and more, and save what is worth keeping. Type “/” to see every command."}</p>
+                          <>
+                            <p className="agent-home__say">{readOnly
+                              ? "Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and search through the connected museums, Are.na and more."
+                              : "Hi, I’m Atlas. One agent, four lenses: I find and filter the archive, sort what is showing, search through the connected museums, Are.na and more, and save what is worth keeping."}</p>
+                            {/* the one instruction, on its own line so it stands a little apart */}
+                            <p className="agent-home__say agent-home__cmd">Type “/” to see every command.</p>
+                          </>
                         )}
                       </div>
                     </div>
