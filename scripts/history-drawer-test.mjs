@@ -40,6 +40,9 @@ await page.reload({ waitUntil: "domcontentloaded" });
 await ready();
 
 console.log("═══ the head");
+ok("the GitHub mark sits left of the theme switch and points at the repo",
+   await page.evaluate(() => { const a = document.querySelector(".topbar .gh-link"), t = document.querySelector(".topbar .theme-switch"); if (!a || !t) return false; const ab = a.getBoundingClientRect(), tb = t.getBoundingClientRect(); return a.href === "https://github.com/amachinic/agentic-archive" && a.target === "_blank" && ab.right <= tb.left && Math.abs((ab.top + ab.height / 2) - (tb.top + tb.height / 2)) < 3; }));
+ok("the offers have air above the field", await page.evaluate(() => { const s = document.querySelector(".agent-offers").getBoundingClientRect(), c = document.querySelector(".chatdock .graph-ci").getBoundingClientRect(); return c.top - s.bottom >= 16 && c.top - s.bottom <= 24; }));
 ok("Copy log is gone", (await page.locator(".chathead button:has-text('Copy log')").count()) === 0);
 ok("the History pill sits left of the collapse chevron, with no chevron of its own",
    await page.evaluate(() => { const acts = document.querySelector(".chathead .filtersheet__actions"); const kids = Array.from(acts.children); const i = kids.findIndex((k) => k.classList.contains("histpill")); return i >= 0 && kids[i + 1]?.classList.contains("chathead__toggle") && !kids[i].querySelector(".chathead__chevron"); }));

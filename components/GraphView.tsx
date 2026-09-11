@@ -24,7 +24,7 @@ import { useDialogs } from "./DialogProvider";
 import { write } from "@/lib/write";
 import GlyphLoader from "./GlyphLoader";
 import Select from "./Select";
-import { IconX, IconPlus, IconCheck, IconCaret, IconChevronDown, IconArrowLeft, IconTag, IconSearch, IconSave, IconSort, IconClock, IconDrive, IconPalette, IconRefresh, IconFolder, IconSparkle, IconUndo, IconCopy, IconTrash, IconAgent } from "./icons";
+import { IconGitHub, IconX, IconPlus, IconCheck, IconCaret, IconChevronDown, IconArrowLeft, IconTag, IconSearch, IconSave, IconSort, IconClock, IconDrive, IconPalette, IconRefresh, IconFolder, IconSparkle, IconUndo, IconCopy, IconTrash, IconAgent } from "./icons";
 import { loadConvos, saveConvos, newConvoId, type Convo } from "@/lib/conversations";
 import ThemeToggle from "./ThemeToggle";
 import ToolCheck from "./ToolCheck";
@@ -3237,6 +3237,10 @@ export default function GraphView({
           {linking && <span className="pill pill--static"><span className="spin" style={{ width: 10, height: 10 }} /> linking</span>}
         </div>
         <div className="topbar__spacer" />
+        {/* the repo, beside the theme switch: the full build lives there */}
+        <a className="gh-link" href="https://github.com/amachinic/agentic-archive" target="_blank" rel="noreferrer" title="Atlas on GitHub" aria-label="Atlas on GitHub">
+          <IconGitHub width={16} height={16} />
+        </a>
         <ThemeToggle />
       </header>
       <div className="work">
@@ -3866,7 +3870,7 @@ export default function GraphView({
                           <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                         ) : (
                           <p className="agent-home__say">{readOnly
-                            ? "Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and look through the connected museums for what it does not hold. This is the public copy, so I can look but not write. Type “/” to see every command, or just ask."
+                            ? <>Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and look through the connected museums for what it does not hold. This is the public copy, so I can look but not write — the <a href="https://github.com/amachinic/agentic-archive" target="_blank" rel="noreferrer">GitHub repo</a> has the full build with every feature. Type “/” to see every command, or just ask.</>
                             : "Hi, I’m Atlas. One agent, four lenses: I find and filter the archive, sort what is showing, search the connected museums, and save what is worth keeping. Type “/” to see every command, or just ask."}</p>
                         )}
                       </div>
