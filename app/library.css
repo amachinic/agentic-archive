@@ -1901,6 +1901,14 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 .chatdock {
   align-self: flex-end; display: flex; flex-direction: row-reverse;
   align-items: stretch; min-height: 0;
+  /* The dock takes the whole of the stage below the rail from the first
+     message, rather than growing reply by reply until it happens to reach
+     the floor. A panel that is sized by its conversation walks its own
+     composer down the screen and jumps whenever a tall card lands; a panel
+     of one height keeps the input, the head, the light table beside it and
+     the history sheet inside it all in one place. Collapsed, it is the
+     head alone again. */
+  flex: 1;
   /* Below about 1160px the inspector leaves the stage narrower than the
      panel's 520px, and the surplus has to go somewhere. Hanging left it
      went off the stage's right edge and cost a hairline; hanging right it
@@ -1910,6 +1918,7 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
   max-width: 100%;
 }
 .chatdock > .graph-below { min-width: 0; }
+.chatdock:has(.graph-below--chat.is-collapsed) { flex: none; }
 /* .graph-below carries align-self: flex-start from its life as a DIRECT
    child of the column-flex graph-top, where it meant "hug the left". Inside
    the row-flex chatdock the same words mean "refuse the height cap": the
