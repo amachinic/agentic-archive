@@ -189,6 +189,18 @@ async function main() {
       : "the field is still moving -- rolling anyway");
   }
 
+  /* The take opens on an EMPTY panel and Atlas wakes into it, and the head
+     of the clip is the frame the loop lands on. The run empties the panel
+     as its first act, but the recorder is already rolling by then, and
+     the greeting sat in the first frames kept -- so the join dissolved an
+     empty ending into a greeting that then vanished. The app is put to
+     sleep here, before a single frame is kept. */
+  await page.evaluate(() => {
+    const f = document.getElementById("rframe");
+    try { f.contentWindow.dispatchEvent(new Event("atlas:sleep")); } catch (e) { /* the frame is up; belt and braces */ }
+  });
+  await page.waitForTimeout(400);
+
   /* ---- roll ---- */
   const client = await ctx.newCDPSession(page);
   const stamps = [];
@@ -347,7 +359,11 @@ async function main() {
      the first thing a mis-tagged colour space flattens. Decode it back and
      insist the two planes still differ. */
   const sample = (x, y) => new Promise((resolve) => {
-    const p = spawn("ffmpeg", ["-v", "error", "-ss", "12", "-i", OUT, "-frames:v", "1",
+    /* sampled at 1s, inside the opening hold, which is always wide; 12s
+       once was, and then the intro grew the opening and 12s fell inside
+       the first push, where (60,300) is field, not sidebar -- the check
+       read 2 and failed a good encode */
+    const p = spawn("ffmpeg", ["-v", "error", "-ss", "1", "-i", OUT, "-frames:v", "1",
       "-filter:v", "crop=1:1:" + x + ":" + y + ",format=rgb24", "-f", "rawvideo", "-"],
       { stdio: ["ignore", "pipe", "ignore"] });
     const chunks = [];
