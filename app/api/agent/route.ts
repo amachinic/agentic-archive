@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { canonical } from "@/lib/taxonomy";
 import { db } from "@/lib/db";
 import { listImages } from "@/lib/queries";
-import { IS_HOSTED_READ_ONLY } from "@/lib/runtime";
+import { IS_HOSTED_READ_ONLY, REPO_URL } from "@/lib/runtime";
 import { listConnections } from "@/lib/connections";
 import { searchConnected, MEDIUMS, type Candidate } from "@/lib/sources";
 import { recordEvent, probeMemory } from "@/lib/events";
@@ -979,7 +979,7 @@ export async function POST(req: Request) {
   /* On the hosted archive it can look but not write, and it should say so
      itself rather than leave the interface apologising afterwards. */
   const hosted = IS_HOSTED_READ_ONLY
-    ? "\n\nThis is the public, read-only archive. You can search, filter, widen and re-form the field, and that is genuinely useful. You CANNOT file a folder, tag anything, or change the archive in any way, and you have no tool for it. If the human asks you to file, save, tag or organise into folders, say plainly that the hosted archive is read-only and that running the project locally is where those work. Do not apologise at length, and do not offer it as a next step."
+    ? "\n\nThis is the public, read-only archive. You can search, filter, widen and re-form the field, and that is genuinely useful. You CANNOT file a folder, tag anything, or change the archive in any way, and you have no tool for it. If the human asks you to file, save, tag, upload, export or organise into folders — or runs into any other limit of this copy — say plainly, in one friendly sentence, that this is the public copy and that the full build, downloaded from the GitHub repo (" + REPO_URL + "), is where that works. Then carry on with what you can do here. Do not apologise at length, and do not keep offering the download."
     : "";
 
   /* The outside tool is spoken about only when it exists. A model told about

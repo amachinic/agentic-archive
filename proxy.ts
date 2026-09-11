@@ -1,3 +1,4 @@
+import { HOSTED_LIMIT } from "@/lib/runtime";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
@@ -51,7 +52,7 @@ export function proxy(request: NextRequest) {
 
   return NextResponse.json(
     {
-      error: "the hosted Agentic Archive is read-only: the agent can look, but nothing here can be written. Run it locally to file, tag or export",
+      error: HOSTED_LIMIT,
       code: "SHOWCASE_READ_ONLY",
     },
     { status: 403, headers: { "Cache-Control": "no-store" } },

@@ -6,6 +6,7 @@
   conversation below: materials, lighting, lineage, history, whatever.
 */
 
+import { REPO_URL } from "@/lib/runtime";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Analysis, ChatMsg } from "@/lib/vision";
@@ -327,6 +328,7 @@ export default function AnalyzeView({
                         <p>This copy is read-only</p>
                         <span className="mono-xs">{error}</span>
                       </div>
+                      <a className="btn" href={REPO_URL} target="_blank" rel="noreferrer">Get the full build</a>
                     </div>
                   )}
                   {error && !analyzing && !/read.?only/i.test(error) && (

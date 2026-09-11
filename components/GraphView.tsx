@@ -16,6 +16,7 @@
   creates a manual link.
 */
 
+import { REPO_URL } from "@/lib/runtime";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { TAXONOMY } from "@/lib/taxonomy";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -3257,7 +3258,7 @@ export default function GraphView({
         </div>
         <div className="topbar__spacer" />
         {/* the repo, beside the theme switch: the full build lives there */}
-        <a className="gh-link" href="https://github.com/amachinic/agentic-archive" target="_blank" rel="noreferrer" title="Atlas on GitHub" aria-label="Atlas on GitHub">
+        <a className="gh-link" href={REPO_URL} target="_blank" rel="noreferrer" title="Atlas on GitHub — the full build" aria-label="Atlas on GitHub">
           <IconGitHub width={16} height={16} />
         </a>
         <ThemeToggle />
@@ -3889,7 +3890,7 @@ export default function GraphView({
                           <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                         ) : (
                           <p className="agent-home__say">{readOnly
-                            ? <>Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and search through the connected museums, Are.na and more. Check the <a href="https://github.com/amachinic/agentic-archive" target="_blank" rel="noreferrer">GitHub repo</a> for full access to features. Type “/” to see every command.</>
+                            ? <>Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and search through the connected museums, Are.na and more. Type “/” to see every command.</>
                             : "Hi, I’m Atlas. One agent, four lenses: I find and filter the archive, sort what is showing, search through the connected museums, Are.na and more, and save what is worth keeping. Type “/” to see every command."}</p>
                         )}
                       </div>
@@ -4148,7 +4149,7 @@ export default function GraphView({
                         onClick={() => fileRef.current?.click()}
                         disabled={promptBusy || simBusy || readOnly}
                         title={readOnly
-                          ? "Matching an upload needs the local build"
+                          ? "Matching an upload needs the full build — download it from the GitHub repo"
                           : "Upload an image to find similar in the library"}
                         aria-label="Upload an image to find similar"
                       >
@@ -4162,7 +4163,7 @@ export default function GraphView({
                            model call, and a composer that takes a question and answers it with a
                            403 is worse than one that says so before you type. */
                         placeholder={readOnly
-                          ? "Ask me to find something. Filing needs the local build."
+                          ? "Ask me to find something. Filing needs the full build."
                           : "Describe what you are searching for..."}
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
