@@ -3749,12 +3749,18 @@ export default function GraphView({
                       hidden={conversationCollapsed}
                     >
                     <div className={"chatstage" + (histOpen ? " is-hist" : "")}>
-                    <div id="graph-history" className={"chat-hist" + (histOpen ? " is-open" : "")} role="listbox" aria-label="Conversations" aria-hidden={!histOpen}>
-                      <div className="chat-hist__list">
-                        <button type="button" className="chat-hist__row chat-hist__new" role="option" aria-selected={false} onClick={() => { setHistOpen(false); clearPrompt(); }}>
-                          <IconPlus width={12} height={12} />
-                          <span className="chat-hist__t">New conversation</span>
+                    <div id="graph-history" className={"chat-hist" + (histOpen ? " is-open" : "")} aria-hidden={!histOpen}>
+                      {/* the bar: a new conversation as the same grey pill the
+                          head uses, and the way out at the far right */}
+                      <div className="chat-hist__bar">
+                        <button type="button" className="closebtn chat-hist__new" onClick={() => { setHistOpen(false); clearPrompt(); }}>
+                          <IconPlus width={11} height={11} />New conversation
                         </button>
+                        <button type="button" className="chat-hist__close" aria-label="Close history" title="Close history" onClick={() => setHistOpen(false)}>
+                          <IconX width={11} height={11} />
+                        </button>
+                      </div>
+                      <div className="chat-hist__list" role="listbox" aria-label="Conversations">
                         {histRows.map((c) => (
                           <button
                             key={c.id}
