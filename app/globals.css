@@ -39,6 +39,9 @@
   /* ease-out: leaves at once, decelerates into place. Interactions should
      feel answered, not administered. */
   --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* the sheet's curve: a longer tail than the house ease, for things that
+     rise into place and should be seen settling */
+  --motion-ease-sheet: cubic-bezier(0.16, 1, 0.3, 1);
   /* A LOOP is the exception. A breathing pulse runs 0 -> 1 -> 0 forever, and
      an ease-out makes each half lopsided — rushing to the peak, crawling
      back, then rushing again. Symmetric motion wants a symmetric curve. */

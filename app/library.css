@@ -2381,7 +2381,7 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
   flex: 1; min-height: 0; overflow-y: auto;
   display: flex; flex-direction: column; gap: 14px;
   padding: 14px var(--space-2);
-  transition: opacity 360ms var(--motion-ease);
+  transition: opacity 520ms var(--motion-ease-sheet);
 }
 /* while the drawer is out the thread stands back beneath it and takes no
    clicks; the X, Escape and the History pill are the ways to close */
@@ -2398,14 +2398,18 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 .histpill svg { display: block; flex: none; }
 .histpill[aria-expanded="true"] { background: var(--accent); color: var(--on-accent); }
 .histpill[aria-expanded="true"]:hover { background: var(--accent); color: var(--on-accent); }
+/* the list rises from the bottom of the chat area like a sheet and settles
+   on a long ease-out (expo): fast off the floor, slow to land. Leaving is
+   the same curve, a little quicker. */
 .chat-hist {
   position: absolute; inset: 0; z-index: 2;
   display: flex; flex-direction: column; min-height: 0;
   background: var(--surface);
-  transform: translateX(-100%); visibility: hidden;
-  transition: transform 360ms var(--motion-ease), visibility 0s linear 360ms;
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.18);
+  transform: translateY(100%); visibility: hidden;
+  transition: transform 380ms var(--motion-ease-sheet), visibility 0s linear 380ms;
 }
-.chat-hist.is-open { transform: none; visibility: visible; transition: transform 360ms var(--motion-ease), visibility 0s; }
+.chat-hist.is-open { transform: none; visibility: visible; transition: transform 520ms var(--motion-ease-sheet), visibility 0s; }
 .chat-hist__list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 .chat-hist__row {
   position: relative; display: flex; align-items: center; gap: 10px;
@@ -2436,7 +2440,6 @@ button.drill__bar:focus-visible { outline: 2px solid var(--accent); outline-offs
 .chat-hist__close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chat-hist__dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--green-500, #7ebb1c); }
 .chat-hist__t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-body-sm); }
-.chat-hist__w { flex: none; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.04em; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .chat-hist__x {
   flex: none; width: 18px; height: 18px; display: grid; place-items: center;
   color: var(--text-muted); opacity: 0; border-radius: var(--radius-sm); font-size: 13px; line-height: 1;
