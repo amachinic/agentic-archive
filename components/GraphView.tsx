@@ -165,6 +165,7 @@ type OutRow = { icon: "folder" | "foldercheck" | "drive" | "check"; text: string
    can never drift apart */
 const COMMANDS = [
   { cmd: "/find", key: "find", label: "Find something", hint: "search the library, re-form the field", arch: "curator" },
+  { cmd: "/filter", key: "filter", label: "Filter by keyterm", hint: "a category, then a keyterm in it", arch: "curator" },
   { cmd: "/sort", key: "sort", label: "Sort the canvas", hint: "re-order the spiral by colour or light", arch: "curator" },
   { cmd: "/tag", key: "tag", label: "Tag my new images", hint: "keyterms for the un-analyzed", arch: "archivist" },
   { cmd: "/save", key: "save", label: "Save a folder", hint: "keep digital, mirror to disk, or both", arch: "media manager" },
@@ -2365,11 +2366,29 @@ export default function GraphView({
 
     /* the Curator's filter, driven from the conversation */
     if (key === "filter") {
-      const top = kinds.flatMap((g) => g.items.slice(0, 3).map((t) => ({ ...t, kind: g.kind })))
-        .sort((a, b) => b.count - a.count).slice(0, 6);
-      if (!top.length) { pushAtlas("No keyterms yet."); return; }
-      pushAtlas("Which keyterm should narrow the field? I can stack more than one.");
-      pushCtas([...top.map((t) => ({ key: "term:" + t.name, label: t.name, sub: t.kind + " · " + t.count })), CTA_META.skills]);
+      /* the categories first, in the order the Filters menu lists them, so
+         the ask reads like the menu: pick a category, then a keyterm in it.
+         A flat top-six across every kind put "poster" beside "melancholy"
+         beside "1960s" with nothing saying which was which. */
+      const cats = kinds.filter((g) => g.items.length > 0);
+      if (!cats.length) { pushAtlas("No keyterms yet."); return; }
+      pushAtlas("Which category should narrow the field? Pick one, then a keyterm in it; I can stack more than one.");
+      pushCtas([
+        ...cats.map((g) => ({ key: "filter-kind:" + g.kind, label: KIND_LABEL[g.kind] ?? g.kind, sub: g.items.length + " keyterm" + (g.items.length === 1 ? "" : "s") })),
+        CTA_META.skills,
+      ]);
+      return;
+    }
+    if (key.startsWith("filter-kind:")) {
+      const kind = key.slice(12);
+      const g = kinds.find((x) => x.kind === kind);
+      const top = (g?.items ?? []).slice().sort((a, b) => b.count - a.count).slice(0, 8);
+      if (!top.length) { pushAtlas("Nothing under " + (KIND_LABEL[kind] ?? kind) + " yet."); return; }
+      pushAtlas((KIND_LABEL[kind] ?? kind) + ": the keyterms carrying the most images. Pick one to narrow the field.");
+      pushCtas([
+        ...top.map((x) => ({ key: "term:" + x.name, label: x.name, sub: x.count + " image" + (x.count === 1 ? "" : "s") })),
+        { key: "filter", label: "Other categories" },
+      ]);
       return;
     }
     if (key.startsWith("term:")) {
@@ -3870,8 +3889,8 @@ export default function GraphView({
                           <p className="agent-home__think"><GlyphLoader size={15} working /></p>
                         ) : (
                           <p className="agent-home__say">{readOnly
-                            ? <>Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and search through the connected museums, Are.na and more. Check the <a href="https://github.com/amachinic/agentic-archive" target="_blank" rel="noreferrer">GitHub repo</a> for full access to features. Type “/” to see every command, or just ask.</>
-                            : "Hi, I’m Atlas. One agent, four lenses: I find and filter the archive, sort what is showing, search through the connected museums, Are.na and more, and save what is worth keeping. Type “/” to see every command, or just ask."}</p>
+                            ? <>Hi, I’m Atlas. I can search this archive, filter it by keyterm, sort what is showing, and search through the connected museums, Are.na and more. Check the <a href="https://github.com/amachinic/agentic-archive" target="_blank" rel="noreferrer">GitHub repo</a> for full access to features. Type “/” to see every command.</>
+                            : "Hi, I’m Atlas. One agent, four lenses: I find and filter the archive, sort what is showing, search through the connected museums, Are.na and more, and save what is worth keeping. Type “/” to see every command."}</p>
                         )}
                       </div>
                     </div>
