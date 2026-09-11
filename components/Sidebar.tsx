@@ -1,5 +1,6 @@
 "use client";
 
+import { REPO_URL } from "@/lib/runtime";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -224,7 +225,7 @@ export default function Sidebar({
         {hostedDemo && (
           <a
             className="sidebar__demo"
-            href="https://github.com/amachinic/agentic-archive"
+            href={REPO_URL}
             target="_blank"
             rel="noreferrer noopener"
             aria-describedby="sidebar-demo-tip"
